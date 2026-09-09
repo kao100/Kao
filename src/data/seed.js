@@ -10,16 +10,15 @@
 import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
 import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
-import { isoDate } from '../core/format.js';
 
 export const SEED_VERSION = 2;
 
 export const DEFAULT_PROFILE = {
-  name: 'Atleta',
-  weightKg: 79,
-  heightM: 1.77,
+  name: '',
+  weightKg: null,
+  heightM: null,
   birthDate: null,
-  experienceMonths: 3,
+  experienceMonths: null,
   approach: 'natural',
   goals: [
     'Hipertrofia natural',
@@ -33,19 +32,12 @@ export const DEFAULT_PROFILE = {
   football: {
     thursdayFixed: true,
     sundayOptional: true,
-    note: 'Quinta é praticamente fixo; domingo depende.',
+    note: '',
   },
-  conditions: [
-    {
-      id: 'knee-left-patellar',
-      label: 'Joelho esquerdo — tendão patelar',
-      status: 'em acompanhamento médico',
-      note: 'Inflamação/tendinopatia identificada pelo ortopedista. Uso de medicação conforme prescrição já encerrado. Melhora durante o tratamento e retorno de dor leve em alguns exercícios e ocasionalmente após o futebol.',
-      followUp: 'Retorno com o ortopedista marcado.',
-    },
-  ],
+  conditions: [],
   promiseMinutes: 30,
   promiseText: 'Pelo menos 30 minutos de exercício todos os dias.',
+  onboarded: false,
 };
 
 export const DEFAULT_SETTINGS = {
@@ -61,35 +53,28 @@ export const DEFAULT_SETTINGS = {
   weightIncrementKg: 2.5,
   smallIncrementKg: 1,
   cardioPlans: CARDIO_PLANS,
-  nextAppointment: nextSixteenth(),
-  appointmentNote: 'Retorno com o ortopedista (joelho esquerdo).',
+  nextAppointment: null,
+  appointmentNote: '',
 };
 
-function nextSixteenth() {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), 16, 12);
-  if (now.getDate() > 16) d.setMonth(d.getMonth() + 1);
-  return isoDate(d);
-}
-
-export const DEFAULT_SUPPLEMENTS = [
+/**
+ * Sugestões de suplementos oferecidas no cadastro inicial (nada é gravado
+ * automaticamente — você escolhe o que usa e a marca).
+ */
+export const SUPPLEMENT_SUGGESTIONS = [
   {
     id: 'sup-creatina',
     name: 'Creatina monohidratada',
-    brand: 'Vitafor',
     dose: '5 g',
-    schedule: 'Diariamente pela manhã',
+    schedule: 'Diariamente, no horário que for mais fácil de manter',
     notes: 'Uso contínuo. O horário exato não é determinante — o que importa é a constância diária.',
-    active: true,
   },
   {
     id: 'sup-whey',
     name: 'Whey protein',
-    brand: 'DUX',
     dose: '1 dose',
-    schedule: 'Normalmente após o treino',
-    notes: 'Usado para ajudar a atingir a meta diária de proteína. Não é obrigatório tomar imediatamente após o treino.',
-    active: true,
+    schedule: 'Quando ajudar a fechar a meta diária de proteína',
+    notes: 'Serve para atingir a proteína do dia. Não é obrigatório tomar logo após o treino.',
   },
 ];
 
@@ -119,10 +104,6 @@ export async function seedIfNeeded() {
 
   // Migrações de campos novos em itens já existentes (sem apagar suas edições).
   if (current > 0 && current < SEED_VERSION) await migrate(current, existingEx, existingTpl);
-
-  // Suplementos.
-  const existingSup = await store.supplements.all();
-  if (!existingSup.length) await store.supplements.saveMany(DEFAULT_SUPPLEMENTS.map((s) => ({ ...s, createdAt: Date.now() })));
 
   if (current < SEED_VERSION) await store.setKV(store.KV.SEED_VERSION, SEED_VERSION);
 

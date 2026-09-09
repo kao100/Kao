@@ -1,13 +1,28 @@
 # Kao Training
 
 Aplicativo pessoal de treino — personal training digital e diário de treinamento.
-Feito para **uma pessoa só**, com prioridade em praticidade dentro da academia:
-musculação + condicionamento + futebol + recuperação, com acompanhamento do
-joelho esquerdo (tendão patelar) e da promessa de **30 minutos de exercício todos os dias**.
+Feito para uso individual, com prioridade em praticidade dentro da academia:
+musculação + condicionamento + futebol + recuperação, com acompanhamento de dor
+articular e de uma promessa diária de exercício.
 
 PWA instalável, funciona offline, dados 100% locais no aparelho.
 
+## Privacidade
+
+**Nenhum dado pessoal fica no código.** Peso, altura, condição de saúde,
+suplementos, cargas, dor, medidas e fotos são digitados no cadastro de primeiro
+uso e gravados apenas no IndexedDB do seu aparelho. Não há servidor, não há
+conta, não há telemetria — por isso o repositório pode ser público sem expor
+nada de quem usa o app.
+
 ---
+
+## Primeiro uso
+
+Ao abrir pela primeira vez, o app faz um cadastro rápido em 5 telas: perfil
+(peso, altura, tempo de treino), promessa diária, dias de futebol, alguma
+limitação em acompanhamento e suplementos. Tudo pode ser alterado depois em
+Ajustes → Perfil.
 
 ## Como rodar
 
@@ -30,8 +45,13 @@ Requisitos: HTTPS (ou `localhost`) para o service worker funcionar.
 
 ### Publicar no GitHub Pages
 
-`Settings → Pages → Deploy from a branch` apontando para a branch e a pasta raiz.
-Todos os caminhos do app são relativos (`./`), então funciona em subdiretório.
+`Settings → Pages → Source: Deploy from a branch`, apontando para a branch do
+app e a pasta `/ (root)`. Todos os caminhos são relativos (`./`), então funciona
+normalmente em subdiretório (`usuario.github.io/repositorio/`).
+
+Como os dados moram no navegador, eles ficam presos ao endereço onde o app foi
+aberto. Escolha a URL definitiva antes de começar a registrar treino de verdade;
+para migrar de endereço, use Ajustes → Exportar backup (JSON) e importe no novo.
 
 ---
 
@@ -57,7 +77,7 @@ src/
     program.js        programa semanal inicial + planos de cardio
     illustrations.js  ilustrações SVG próprias de cada exercício
     media.js          resolução de imagem (foto da academia > externa > SVG)
-    seed.js           primeira execução (perfil, programa, suplementos)
+    seed.js           primeira execução (programa, exercícios, migrações)
   logic/              regras de negócio, sem DOM
     planner.js        que treino aparece em cada dia (futebol, sábado, joelho)
     progression.js    progressão dupla
@@ -68,7 +88,7 @@ src/
   ui/
     shell.js          layout, topbar, tab bar, blocos comuns
     components/       sheet, toast, gráficos SVG, inputs grandes, figuras
-    views/            uma tela por arquivo
+    views/            uma tela por arquivo (inclui o cadastro de primeiro uso)
   styles/             tokens, base, componentes, telas
 tools/make-icons.py   gera os PNGs dos ícones (sem dependências)
 ```

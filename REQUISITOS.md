@@ -6,7 +6,7 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | # | Requisito | Status | Onde / observação |
 |---|---|---|---|
 | 1 | Objetivo geral (plano, dia certo, execução visual, registro, progressão, cardio, futebol, frequência, corpo, dor, futebol adapta plano, joelho, híbrido, evolução) | ✅ | app inteiro |
-| 2 | Perfil permanente (79 kg, 1,77 m, 3 meses, objetivos, natural) | ✅ | `data/seed.js`, Ajustes → Perfil |
+| 2 | Perfil permanente (peso, altura, tempo de treino, objetivos, treino natural) | ✅ | cadastro de primeiro uso (`ui/views/onboarding.js`) e Ajustes → Perfil |
 | 3 | Promessa de 30 min/dia + streak 🔥 | ✅ | `store.recomputeDay`, `promiseStreak`, hero do Início |
 | 4 | Futebol: quinta fixo, domingo pergunta, sábado ajusta | ✅ | `logic/planner.js` (testado) |
 | 5 | Joelho: registro 0–10, dor no movimento, inchaço, instabilidade, gráfico, comparação com treino/futebol/volume, área de orientações médicas com prioridade | ✅ | `logic/knee.js`, telas `/joelho` e `/medico` |
@@ -31,7 +31,7 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 24 | Dashboard (treino de hoje, 30 min, streak, semana, peso) | ✅ | `/` |
 | 25 | Meu físico: medidas, fotos, antes × agora, sem estimativa de %G por foto | ✅ | `/fisico` |
 | 26 | Recomposição: acompanhar peso, cintura, medidas, fotos, força, volume, condicionamento | ✅ | `/fisico` + `/progresso` + resumo semanal |
-| 27 | Suplementação (creatina Vitafor, whey DUX; sem substâncias proibidas) | ✅ | `/suplementos` |
+| 27 | Suplementação (creatina, whey, marca a escolher; sem substâncias proibidas) | ✅ | `/suplementos` + cadastro inicial |
 | 28 | Espaço de nutrição (kcal, macros, água) sem virar app de dieta | ✅ | `/nutricao` |
 | 29 | Alerta de recuperação 🟢🟡🔴 | ✅ | `logic/readiness.js`, sheet antes do treino |
 | 30 | Calendário mensal com ícones e detalhe do dia | ✅ | `/calendario`, `/dia/:date` |
@@ -48,7 +48,7 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 41 | Estrutura pronta para fotos reais das máquinas | ✅ | store `equipment`, sem refatoração futura |
 | 42 | Segurança: sem "ignore a dor", dor articular ≠ muscular | ✅ | textos revisados em todas as telas |
 | 43 | Aplicação funcional (não mockup), componentes reutilizáveis, sem monólito | ✅ | ~30 módulos, camadas core/logic/ui |
-| 44 | Dados iniciais (peso, altura, suplementos, futebol, objetivos, restrição, programa) | ✅ | `data/seed.js` |
+| 44 | Dados iniciais (peso, altura, suplementos, futebol, objetivos, restrição, programa) | ✅ | perguntados no primeiro uso e gravados só no aparelho — o repositório é público, então nenhum dado pessoal fica no código |
 | 45 | Lower A/B editáveis e provisórios, sem inventar tratamento | ✅ | flag `provisional` + avisos |
 | 46 | Experiência final desejada (chegar, ver "Hoje — Upper B", registrar série, descansar, cardio guiado, treino concluído) | ✅ | fluxo testado ponta a ponta |
 | 47 | Modularidade para receber fotos, cargas, orientações, dor, medidas | ✅ | tudo por store, nada hardcoded na UI |

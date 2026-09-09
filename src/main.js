@@ -76,6 +76,13 @@ async function boot() {
     return;
   }
 
+  // Primeiro uso: os dados pessoais são digitados aqui, nunca ficam no código.
+  const profile = await store.profile.get();
+  if (!profile?.onboarded) {
+    const { runOnboarding } = await import('./ui/views/onboarding.js');
+    await runOnboarding(root);
+  }
+
   const main = h('main.app__main');
   const tabbar = buildTabBar();
   const app = h('div.app', main, tabbar);

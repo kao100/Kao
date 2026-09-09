@@ -30,13 +30,17 @@ export async function settingsView() {
         h('button.btn.btn--sm.btn--ghost', { onClick: () => editProfile(profile) }, 'Editar'),
       ),
       h('div.stack.stack--sm', { style: { marginTop: '10px' } },
-        row('Peso', `${num(profile?.weightKg, 1)} kg`),
-        row('Altura', `${num(profile?.heightM, 2)} m`),
-        row('Experiência', `${profile?.experienceMonths || 0} meses de treino consistente`),
+        row('Nome', profile?.name || '—'),
+        row('Peso', profile?.weightKg ? `${num(profile.weightKg, 1)} kg` : '—'),
+        row('Altura', profile?.heightM ? `${num(profile.heightM, 2)} m` : '—'),
+        row('Experiência', profile?.experienceMonths != null ? `${profile.experienceMonths} meses de treino consistente` : '—'),
         row('Abordagem', '100% natural — sem esteroides ou similares'),
         row('Promessa diária', `${profile?.promiseMinutes || 30} minutos`),
-        row('Futebol', 'Quinta fixo · domingo opcional'),
-        row('Condição', profile?.conditions?.[0]?.label || '—'),
+        row('Futebol', [
+          profile?.football?.thursdayFixed ? 'quinta fixo' : null,
+          profile?.football?.sundayOptional ? 'domingo opcional' : null,
+        ].filter(Boolean).join(' · ') || 'sem futebol programado'),
+        row('Condição em acompanhamento', profile?.conditions?.[0]?.label || 'nenhuma'),
       ),
     ),
 
@@ -164,10 +168,22 @@ async function editProfile(profile) {
       { key: 'heightM', label: 'Altura (m)', type: 'number', value: profile?.heightM ?? '', step: '0.01' },
       { key: 'experienceMonths', label: 'Meses de treino', type: 'number', value: profile?.experienceMonths ?? '', step: '1' },
       { key: 'promiseMinutes', label: 'Minutos da promessa diária', type: 'number', value: profile?.promiseMinutes ?? 30, step: '5' },
+      {
+        key: 'conditionLabel',
+        label: 'Condição em acompanhamento',
+        value: profile?.conditions?.[0]?.label || '',
+        placeholder: 'Ex.: joelho esquerdo — tendão patelar',
+        hint: 'Deixe em branco se não houver nenhuma.',
+      },
     ],
   });
   if (!data) return;
-  await store.profile.save(data);
+  const { conditionLabel, ...rest } = data;
+  const current = profile?.conditions?.[0];
+  const conditions = conditionLabel?.trim()
+    ? [{ ...(current || { id: 'cond-1', status: 'em acompanhamento', note: '', followUp: '' }), label: conditionLabel.trim() }]
+    : [];
+  await store.profile.save({ ...rest, conditions });
   toastOk('Perfil atualizado');
   refresh();
 }

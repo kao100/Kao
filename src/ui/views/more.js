@@ -7,12 +7,13 @@ import { kneeStatus } from '../../logic/knee.js';
 import { page, topbar, menuRow, sectionTitle, safetyNote } from '../shell.js';
 
 export async function moreView() {
-  const [knee, settings, guidance, equipment, photos] = await Promise.all([
+  const [knee, settings, guidance, equipment, photos, supplements] = await Promise.all([
     kneeStatus(),
     store.settings.get(),
     store.activeMedicalGuidance(),
     store.equipment.all(),
     store.photos.all(),
+    store.supplements.all(),
   ]);
 
   const kneeSub = {
@@ -51,7 +52,14 @@ export async function moreView() {
     h('div.stack.stack--sm',
       sectionTitle('Rotina'),
       menuRow({ icon: '📊', title: 'Resumo da semana', sub: 'Treinos, minutos, progressão e joelho', to: '/semana' }),
-      menuRow({ icon: '💊', title: 'Suplementação', sub: 'Creatina Vitafor · Whey DUX', to: '/suplementos' }),
+      menuRow({
+        icon: '💊',
+        title: 'Suplementação',
+        sub: supplements.length
+          ? supplements.filter((x) => x.active !== false).map((x) => x.name).join(' · ') || 'nenhum em uso'
+          : 'Cadastre o que você usa',
+        to: '/suplementos',
+      }),
       menuRow({ icon: '🍽️', title: 'Nutrição', sub: 'Registro opcional de calorias e macros', to: '/nutricao' }),
       menuRow({ icon: '⚙️', title: 'Ajustes e backup', sub: 'Perfil, descansos, exportar dados', to: '/ajustes' }),
     ),

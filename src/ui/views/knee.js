@@ -110,7 +110,7 @@ export async function kneeView() {
 
     h('div.card',
       h('div.row.row--between',
-        h('div.card__title', condition?.label || 'Joelho esquerdo — tendão patelar'),
+        h('div.card__title', condition?.label || 'Acompanhamento de dor'),
         levelPill,
       ),
       h('p.muted', { style: { marginTop: '8px', fontSize: '13.5px' } }, status.reason),
