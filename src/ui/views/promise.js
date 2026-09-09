@@ -5,6 +5,7 @@ import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { today, formatDate, formatMinutes, relativeDay } from '../../core/format.js';
 import { planForDate, answerFootball, blockSummary } from '../../logic/planner.js';
+import { locationSwitch } from './dashboard.js';
 import { page, topbar, sectionTitle, emptyState, safetyNote } from '../shell.js';
 import { openSheet, confirmSheet } from '../components/sheet.js';
 import { stepper, textInput, segmented } from '../components/inputs.js';
@@ -93,6 +94,7 @@ export async function dayView({ params }) {
     /* programado */
     h('div.stack.stack--sm',
       sectionTitle('Programado para este dia'),
+      isToday ? locationSwitch(plan, date) : null,
       ...plan.blocks.map((b) => h('div.list-item',
         h('div.list-item__thumb', { style: { fontSize: '20px' } }, b.icon),
         h('div.grow',

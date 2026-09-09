@@ -54,6 +54,19 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 47 | Modularidade para receber fotos, cargas, orientações, dor, medidas | ✅ | tudo por store, nada hardcoded na UI |
 | 48 | Revisão final e pendências declaradas | ✅ | este arquivo |
 
+## Adições posteriores ao pedido original
+
+| Requisito | Status | Onde |
+|---|---|---|
+| Alternativa para o leg press (e para todo exercício) | ✅ | mapa `ALTERNATIVES` em `data/exercises.js`; seção "Alternativas" na ficha; alternativas no topo da troca do modo treino e do editor do programa |
+| Treino alternativo para os dias sem academia (calistenia / peso do corpo) | ✅ | `HOME_TEMPLATES` em `data/program.js` (Upper A/B/C e Lower A/B em casa), planos `cardio-casa-30` e `cardio-casa-20`, alternador 🏋️/🏠 no card de hoje e na tela do dia |
+
+Como funciona a progressão em casa: sem placas para adicionar, a progressão
+dupla continua valendo pelas repetições — ao chegar no topo da faixa em todas as
+séries, o próximo passo é a variação mais difícil (mãos mais baixas, pés
+elevados, corpo mais horizontal, mochila mais pesada), registrada como um novo
+exercício ou anotada na observação da série.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

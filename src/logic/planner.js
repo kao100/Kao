@@ -46,6 +46,15 @@ export async function planForDate(date) {
   let question = null;
   let footballConfirmed = null;
 
+  /* ---------- academia ou casa ---------- */
+  const location = plan?.location === 'home' ? 'home' : 'gym';
+  const hasHomeVersion = templates.some((t) => t.mode === 'home');
+  // templates sem `mode` (futebol, recuperação) valem para os dois lugares
+  const templatesHere = templates.filter((t) => !t.mode || t.mode === location);
+  if (location === 'home') {
+    notes.push('Modo "em casa": treino com peso do corpo, sem depender da academia.');
+  }
+
   /* ---------- decisão sobre futebol ---------- */
   if (key === 'thu') {
     footballConfirmed = plan?.football ?? true; // padrão: tem futebol
@@ -81,26 +90,26 @@ export async function planForDate(date) {
   if (key === 'sat') {
     const footballTomorrow = sundayPlan?.football ?? null;
     if (footballTomorrow === true) {
-      chosen = templates.filter((t) => t.condition === 'football-sunday');
+      chosen = templatesHere.filter((t) => t.condition === 'football-sunday');
       notes.push('Futebol confirmado para amanhã: o treino pesado de pernas foi substituído por recuperação ativa para preservar as pernas.');
     } else if (footballTomorrow === false) {
-      chosen = templates.filter((t) => t.condition === 'no-football-sunday');
+      chosen = templatesHere.filter((t) => t.condition === 'no-football-sunday');
     } else {
       // sem resposta ainda: mostra o padrão (Lower B), mas avisa
-      chosen = templates.filter((t) => t.condition === 'no-football-sunday');
+      chosen = templatesHere.filter((t) => t.condition === 'no-football-sunday');
       notes.push('Responda sobre o futebol de amanhã para o app ajustar o treino de hoje.');
     }
   } else if (key === 'sun') {
-    if (footballConfirmed === true) chosen = templates.filter((t) => t.condition === 'football-sunday');
-    else if (footballConfirmed === false) chosen = templates.filter((t) => t.condition === 'no-football-sunday');
+    if (footballConfirmed === true) chosen = templatesHere.filter((t) => t.condition === 'football-sunday');
+    else if (footballConfirmed === false) chosen = templatesHere.filter((t) => t.condition === 'no-football-sunday');
     else chosen = [];
   } else if (key === 'thu') {
-    chosen = footballConfirmed === false ? [] : templates.filter((t) => t.kind === 'football' || !t.condition);
+    chosen = footballConfirmed === false ? [] : templatesHere.filter((t) => t.kind === 'football' || !t.condition);
   } else {
-    chosen = templates.filter((t) => !t.condition);
+    chosen = templatesHere.filter((t) => !t.condition);
   }
 
-  if (!chosen.length) chosen = templates.filter((t) => !t.condition && t.kind !== 'football');
+  if (!chosen.length) chosen = templatesHere.filter((t) => !t.condition && t.kind !== 'football');
 
   /* ---------- blocos ---------- */
   const [exMap, guidance] = await Promise.all([store.exercises.map(), store.activeMedicalGuidance()]);
@@ -136,8 +145,9 @@ export async function planForDate(date) {
         provisional: Boolean(tpl.provisional),
       });
     }
-    if (tpl.cardioPlanId) {
-      const cardioPlan = cardioPlans.find((p) => p.id === tpl.cardioPlanId);
+    const cardioPlanId = (location === 'home' && tpl.homeCardioPlanId) || tpl.cardioPlanId;
+    if (cardioPlanId) {
+      const cardioPlan = cardioPlans.find((p) => p.id === cardioPlanId);
       if (cardioPlan) {
         blocks.push({
           type: tpl.kind === 'recovery' ? 'recovery' : 'cardio',
@@ -194,6 +204,8 @@ export async function planForDate(date) {
     notes,
     footballConfirmed,
     needsKneeCheck,
+    location,
+    hasHomeVersion,
   };
 }
 
@@ -228,6 +240,15 @@ export function blockSummary(block) {
 /** Marca a resposta sobre futebol de uma data. */
 export async function answerFootball(date, willPlay) {
   return store.dayPlan.set(date, { football: willPlay, answeredAt: Date.now() });
+}
+
+/**
+ * Define onde o treino do dia vai acontecer.
+ * 'gym'  → programa normal
+ * 'home' → versão em casa (peso do corpo), sem perder o dia nem a promessa
+ */
+export async function setLocation(date, location) {
+  return store.dayPlan.set(date, { location, locationSetAt: Date.now() });
 }
 
 /** Texto de equipamento legível. */

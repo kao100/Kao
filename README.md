@@ -120,6 +120,15 @@ Sessões guardam uma **cópia** do treino: editar o programa depois não reescre
   instabilidade fazem o app parar de sugerir aumento de carga e sinalizar cautela.
 - **Orientações médicas** cadastradas têm prioridade: exercício marcado como não
   liberado aparece sinalizado no treino, na ficha e no editor do programa.
+- **Alternativas por exercício**: todo exercício tem substitutos equivalentes
+  (aparelho ocupado, máquina inexistente, exercício desconfortável). O leg press,
+  por exemplo, oferece agachamento até a caixa, hip thrust, step-up, stiff, ponte
+  de glúteo e afundo — com o grau de exigência do joelho sinalizado em cada um.
+  A troca pode ser só para a sessão do dia (modo treino) ou definitiva (programa).
+- **Modo "em casa"**: cada dia da semana tem uma versão de calistenia, com peso
+  do corpo e improviso (mesa, cadeira, degrau, mochila carregada). O botão
+  🏠 no card do treino de hoje troca o dia inteiro — inclusive o cardio, que vira
+  caminhada/escada na rua. Nenhum dia é perdido e a promessa continua de pé.
 
 ---
 

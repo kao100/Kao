@@ -52,24 +52,35 @@ export async function programView() {
     ),
 
     h('div.stack.stack--sm',
-      sectionTitle('Treinos (editáveis)'),
-      ...templates
-        .sort((a, b) => DAY_KEYS.indexOf(a.dayKey) - DAY_KEYS.indexOf(b.dayKey) || (a.order || 0) - (b.order || 0))
-        .map((tpl) => h('div.list-item.clickable', { onClick: () => navigate(`/programa/${tpl.id}`) },
-          h('div.list-item__thumb', { style: { fontSize: '20px' } }, tpl.icon || '🏋️'),
-          h('div.grow',
-            h('div.list-item__title', tpl.name),
-            h('div.list-item__sub', `${DAY_LABEL[tpl.dayKey]} · ${tpl.items?.length || 0} exercícios${tpl.cardioPlanId ? ' + cardio' : ''}`),
-          ),
-          tpl.provisional ? h('span.pill.pill--warn', 'provisório') : null,
-          h('span.muted', '›'),
-        )),
+      sectionTitle('Treinos na academia (editáveis)'),
+      ...templateRows(templates.filter((t) => t.mode !== 'home')),
+    ),
+
+    h('div.stack.stack--sm',
+      sectionTitle('Treinos em casa (sem equipamento)'),
+      h('p.muted', { style: { fontSize: '13px' } },
+        'Versão de cada dia para quando não der para ir à academia: calistenia e peso do corpo, mantendo a mesma lógica de progressão. Ative pelo botão "🏠 Em casa" no card do treino de hoje.'),
+      ...templateRows(templates.filter((t) => t.mode === 'home')),
     ),
 
     menuRow({ icon: '❤️', title: 'Planos de cardio', sub: 'Fases da esteira, velocidade e inclinação', to: '/cardio-planos' }),
 
     safetyNote('Lower A e Lower B são estruturas provisórias enquanto houver acompanhamento do joelho. Depois da consulta, cadastre as orientações em "Orientações médicas" e ajuste os exercícios aqui.'),
   );
+}
+
+function templateRows(list) {
+  return list
+    .sort((a, b) => DAY_KEYS.indexOf(a.dayKey) - DAY_KEYS.indexOf(b.dayKey) || (a.order || 0) - (b.order || 0))
+    .map((tpl) => h('div.list-item.clickable', { onClick: () => navigate(`/programa/${tpl.id}`) },
+      h('div.list-item__thumb', { style: { fontSize: '20px' } }, tpl.icon || '🏋️'),
+      h('div.grow',
+        h('div.list-item__title', tpl.name),
+        h('div.list-item__sub', `${DAY_LABEL[tpl.dayKey]} · ${tpl.items?.length || 0} exercícios${tpl.cardioPlanId ? ' + cardio' : ''}`),
+      ),
+      tpl.provisional ? h('span.pill.pill--warn', 'provisório') : null,
+      h('span.muted', '›'),
+    ));
 }
 
 async function createTemplate() {
@@ -267,28 +278,40 @@ async function addExercise(tpl) {
 
 async function swapItem(tpl, index) {
   const all = await store.exercises.all();
+  const map = new Map(all.map((e) => [e.id, e]));
   const current = tpl.items[index];
+  const currentEx = map.get(current.exerciseId);
+  const altIds = currentEx?.alternatives || [];
+  const alternatives = altIds.map((id) => map.get(id)).filter(Boolean);
+
   openSheet({
     title: 'Trocar exercício',
     content: (close) => {
-      const list = h('div.list',
-        ...all.filter((e) => e.id !== current.exerciseId).slice(0, 60).map((ex) => h('button.list-item.clickable', {
-          style: { width: '100%', textAlign: 'left' },
-          onClick: async () => {
-            current.exerciseId = ex.id;
-            current.provisional = Boolean(ex.needsMedicalReview);
-            await store.templates.save(tpl);
-            close();
-            toastOk(`Trocado para ${ex.namePt}`);
-            refresh();
-          },
-        },
-        h('div.grow',
-          h('div.list-item__title', ex.namePt),
-          h('div.list-item__sub', `${ex.muscleGroup} · ${ex.nameEn}`),
-        ))),
+      const apply = async (ex) => {
+        current.exerciseId = ex.id;
+        current.provisional = Boolean(ex.needsMedicalReview);
+        await store.templates.save(tpl);
+        close();
+        toastOk(`Trocado para ${ex.namePt}`);
+        refresh();
+      };
+      const row = (ex, highlight = false) => h('button.list-item.clickable', {
+        style: { width: '100%', textAlign: 'left', borderColor: highlight ? 'var(--volt-dim)' : undefined },
+        onClick: () => apply(ex),
+      },
+      h('div.grow',
+        h('div.list-item__title', ex.namePt),
+        h('div.list-item__sub', `${ex.muscleGroup} · ${ex.atHome ? 'sem equipamento' : ex.nameEn}`),
+      ),
+      ex.kneeRisk === 'high' ? h('span.pill.pill--warn', 'joelho') : null);
+
+      return h('div.stack.stack--sm',
+        h('p.muted', 'A troca vale para todas as próximas sessões deste treino.'),
+        alternatives.length ? h('div.field__label', 'Alternativas equivalentes') : null,
+        ...alternatives.map((ex) => row(ex, true)),
+        h('div.field__label', { style: { marginTop: '10px' } }, 'Todos os exercícios'),
+        ...all.filter((e) => e.id !== current.exerciseId && !altIds.includes(e.id)).slice(0, 60).map((ex) => row(ex)),
       );
-      return h('div.stack', h('p.muted', 'A troca vale para todas as próximas sessões deste treino.'), list);
     },
   });
 }

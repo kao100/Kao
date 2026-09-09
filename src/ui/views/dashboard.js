@@ -2,7 +2,7 @@ import { h } from '../../core/dom.js';
 import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { today, formatDate, formatMinutes, weekDates, kg, dayLabel } from '../../core/format.js';
-import { planForDate, planForWeek, answerFootball, blockSummary } from '../../logic/planner.js';
+import { planForDate, planForWeek, answerFootball, blockSummary, setLocation } from '../../logic/planner.js';
 import { kneeStatus } from '../../logic/knee.js';
 import { page, topbar, iconAction, sectionTitle, safetyNote } from '../shell.js';
 import { startWorkoutFlow } from './workout.js';
@@ -134,6 +134,7 @@ export function todayCard(plan, date) {
       )
       : null,
     plan.notes.length ? safetyNote(plan.notes[0], 'info') : null,
+    locationSwitch(plan, date),
     h('div.btn-row', { style: { marginTop: '14px' } },
       h('button.btn.btn--primary.btn--lg.grow', {
         onClick: () => startWorkoutFlow(plan, date),
@@ -145,6 +146,21 @@ export function todayCard(plan, date) {
 
 function itemName(template, index) {
   return template.items[index]?.exerciseName || template.items[index]?.exerciseId || '';
+}
+
+/** Alternador academia × casa — para o dia em que não dá para ir treinar fora. */
+export function locationSwitch(plan, date) {
+  if (!plan.hasHomeVersion) return null;
+  const set = async (location) => {
+    await setLocation(date, location);
+    refresh();
+  };
+  return h('div.segmented', { style: { marginTop: '12px' } },
+    h(`button.segmented__opt${plan.location === 'gym' ? '.segmented__opt--active' : ''}`,
+      { onClick: () => set('gym') }, '🏋️ Na academia'),
+    h(`button.segmented__opt${plan.location === 'home' ? '.segmented__opt--active' : ''}`,
+      { onClick: () => set('home') }, '🏠 Em casa'),
+  );
 }
 
 /* ---------------------------- joelho ---------------------------- */

@@ -78,6 +78,34 @@ export const CARDIO_PLANS = [
     ],
   },
   {
+    id: 'cardio-casa-30',
+    name: 'Cardio em casa / na rua — 30 min',
+    context: 'Sem academia: caminhada, ladeira ou escada',
+    totalMin: 30,
+    rpe: '3–4 / 10',
+    talkTest: 'Frases completas o tempo todo. Se começar a faltar ar, diminua o ritmo.',
+    home: true,
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 5, speedMin: null, speedMax: null, incline: null, note: 'Caminhada leve, soltando o corpo.' },
+      { label: 'Bloco principal', fromMin: 5, toMin: 25, speedMin: null, speedMax: null, incline: null, note: 'Caminhada firme. Se tiver ladeira ou escada por perto, use — é o equivalente à inclinação da esteira.' },
+      { label: 'Volta à calma', fromMin: 25, toMin: 30, speedMin: null, speedMax: null, incline: null, note: 'Reduza o ritmo e respire.' },
+    ],
+  },
+  {
+    id: 'cardio-casa-20',
+    name: 'Cardio leve em casa — 20 min',
+    context: 'Complemento do treino em casa',
+    totalMin: 20,
+    rpe: '3 / 10',
+    talkTest: 'Conversa tranquila do começo ao fim.',
+    home: true,
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 4, speedMin: null, speedMax: null, incline: null, note: 'Caminhada leve.' },
+      { label: 'Bloco principal', fromMin: 4, toMin: 16, speedMin: null, speedMax: null, incline: null, note: 'Caminhada firme, escada ou pedalada leve.' },
+      { label: 'Volta à calma', fromMin: 16, toMin: 20, speedMin: null, speedMax: null, incline: null, note: 'Desacelere.' },
+    ],
+  },
+  {
     id: 'cardio-promessa-30',
     name: 'Promessa do dia — 30 min',
     context: 'Dia livre / recuperação',
@@ -98,6 +126,8 @@ export const CARDIO_PLANS = [
 export const TEMPLATES = [
   {
     id: 'tpl-upper-a',
+    mode: 'gym',
+    homeTemplateId: 'tpl-upper-a-casa',
     name: 'Upper A',
     subtitle: 'Força + hipertrofia de tronco',
     dayKey: 'mon',
@@ -119,6 +149,8 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-lower-a',
+    mode: 'gym',
+    homeTemplateId: 'tpl-lower-a-casa',
     name: 'Lower A',
     subtitle: 'Treino principal de pernas (provisório)',
     dayKey: 'tue',
@@ -140,6 +172,8 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-upper-b',
+    mode: 'gym',
+    homeTemplateId: 'tpl-upper-b-casa',
     name: 'Upper B',
     subtitle: 'Ênfase em costas + cardio Zona 2',
     dayKey: 'wed',
@@ -172,6 +206,8 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-upper-c',
+    mode: 'gym',
+    homeTemplateId: 'tpl-upper-c-casa',
     name: 'Upper C',
     subtitle: 'Hipertrofia e estética',
     dayKey: 'fri',
@@ -192,6 +228,8 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-lower-b',
+    mode: 'gym',
+    homeTemplateId: 'tpl-lower-b-casa',
     name: 'Lower B',
     subtitle: 'Pernas — versão de sábado (provisório)',
     dayKey: 'sat',
@@ -214,6 +252,7 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-recuperacao',
+    homeCardioPlanId: 'cardio-casa-30',
     name: 'Recuperação ativa',
     subtitle: 'Pernas preservadas para o futebol',
     dayKey: 'sat',
@@ -232,6 +271,7 @@ export const TEMPLATES = [
   },
   {
     id: 'tpl-domingo-cardio',
+    homeCardioPlanId: 'cardio-casa-30',
     name: 'Zona 2 de domingo',
     subtitle: 'Condicionamento sem impacto alto',
     dayKey: 'sun',
@@ -258,6 +298,128 @@ export const TEMPLATES = [
     items: [],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Versões "em casa" (calistenia / peso do corpo)                       */
+/*                                                                      */
+/* Para os dias em que não dá para ir à academia — sem perder o treino  */
+/* nem a promessa dos 30 minutos. Mesma lógica de progressão: quando as */
+/* repetições chegam ao topo da faixa, você progride para a variação    */
+/* mais difícil (pés elevados, corpo mais horizontal, mochila mais      */
+/* pesada) em vez de aumentar a placa.                                  */
+/* ------------------------------------------------------------------ */
+
+export const HOME_TEMPLATES = [
+  {
+    id: 'tpl-upper-a-casa',
+    mode: 'home',
+    name: 'Upper A — em casa',
+    subtitle: 'Empurrar e puxar com peso do corpo',
+    dayKey: 'mon',
+    kind: 'strength',
+    accent: 'volt',
+    icon: '🏠',
+    order: 1,
+    notes: 'Versão caseira do Upper A. Progrida pela dificuldade da variação (mãos mais baixas, pés elevados, corpo mais horizontal) e pelo peso da mochila.',
+    items: [
+      item('push-up', 4, 6, 12, { rir: 2, restSec: 120, notes: 'Se ainda estiver difícil, apoie as mãos na bancada.' }),
+      item('inverted-row', 4, 6, 12, { rir: 2, restSec: 120, notes: 'Mesa firme ou barra baixa. Corpo mais horizontal = mais difícil.' }),
+      item('incline-push-up', 3, 8, 15, { rir: 1, restSec: 90 }),
+      item('backpack-row', 3, 8, 12, { rir: 2, restSec: 90 }),
+      item('pike-push-up', 3, 5, 10, { rir: 2, restSec: 120 }),
+      item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Em casa: garrafas de água de 1,5 L ou mochila pequena em cada mão.' }),
+      item('biceps-curl', 2, 10, 15, { rir: 1, restSec: 60, notes: 'Mochila carregada ou galão de água.' }),
+      item('bench-dip', 2, 8, 15, { rir: 1, restSec: 60 }),
+    ],
+  },
+  {
+    id: 'tpl-lower-a-casa',
+    mode: 'home',
+    name: 'Lower A — em casa',
+    subtitle: 'Pernas sem máquina, dominante de quadril',
+    dayKey: 'tue',
+    kind: 'strength',
+    accent: 'volt',
+    icon: '🏠',
+    order: 1,
+    provisional: true,
+    notes: 'Ênfase em quadril (glúteo e posterior), que exige menos do tendão patelar. O agachamento até a cadeira é opcional e controla a amplitude pela altura do assento.',
+    items: [
+      item('glute-bridge', 4, 10, 20, { rir: 1, restSec: 90 }),
+      item('single-leg-rdl', 3, 8, 12, { rir: 2, restSec: 90, notes: 'Cada perna. Segure uma mochila para aumentar a dificuldade.' }),
+      item('single-leg-glute-bridge', 3, 8, 15, { rir: 1, restSec: 75, notes: 'Cada lado.' }),
+      item('box-squat', 3, 8, 15, { rir: 2, restSec: 120, provisional: true, notes: 'Opcional e só sem dor: a altura da cadeira limita a amplitude.' }),
+      item('calf-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Em casa: no degrau da escada, com apoio na parede.' }),
+      item('plank', 3, 0, 0, { timeBased: true, durationSec: 40, restSec: 45, rir: null }),
+    ],
+  },
+  {
+    id: 'tpl-upper-b-casa',
+    mode: 'home',
+    name: 'Upper B — em casa',
+    subtitle: 'Ênfase em costas + cardio na rua',
+    dayKey: 'wed',
+    kind: 'strength',
+    accent: 'volt',
+    icon: '🏠',
+    order: 1,
+    cardioPlanId: 'cardio-casa-30',
+    notes: 'Mesma ideia do Upper B da academia: puxar mais do que empurrar. Capriche na sensação das costas trabalhando.',
+    items: [
+      item('inverted-row', 4, 6, 12, { rir: 2, restSec: 120 }),
+      item('backpack-row', 3, 8, 12, { rir: 2, restSec: 120 }),
+      item('superman', 3, 10, 15, { rir: 1, restSec: 60 }),
+      item('pike-push-up', 3, 5, 10, { rir: 2, restSec: 120 }),
+      item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Garrafas ou mochila.' }),
+      item('hammer-curl', 2, 10, 15, { rir: 1, restSec: 60, notes: 'Mochila ou galão.' }),
+    ],
+  },
+  {
+    id: 'tpl-upper-c-casa',
+    mode: 'home',
+    name: 'Upper C — em casa',
+    subtitle: 'Hipertrofia com peso do corpo',
+    dayKey: 'fri',
+    kind: 'strength',
+    accent: 'volt',
+    icon: '🏠',
+    order: 1,
+    notes: 'Foco em amplitude e controle. Séries mais longas, RIR 1–2, sem buscar falha absoluta.',
+    items: [
+      item('incline-push-up', 3, 10, 15, { rir: 2, restSec: 90 }),
+      item('inverted-row', 3, 8, 12, { rir: 2, restSec: 120 }),
+      item('push-up', 3, 8, 15, { rir: 1, restSec: 90, notes: 'Pés elevados quando ficar fácil.' }),
+      item('backpack-row', 2, 10, 15, { rir: 1, restSec: 90 }),
+      item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60 }),
+      item('biceps-curl', 3, 10, 15, { rir: 1, restSec: 60, notes: 'Mochila carregada.' }),
+      item('bench-dip', 3, 8, 15, { rir: 1, restSec: 60 }),
+    ],
+  },
+  {
+    id: 'tpl-lower-b-casa',
+    mode: 'home',
+    name: 'Lower B — em casa',
+    subtitle: 'Pernas leves + cardio curto',
+    dayKey: 'sat',
+    kind: 'strength',
+    accent: 'volt',
+    icon: '🏠',
+    order: 1,
+    provisional: true,
+    condition: 'no-football-sunday',
+    cardioPlanId: 'cardio-casa-20',
+    notes: 'Só aparece quando NÃO há futebol no domingo. Volume menor que o de terça.',
+    items: [
+      item('single-leg-glute-bridge', 3, 10, 15, { rir: 1, restSec: 75 }),
+      item('single-leg-rdl', 3, 8, 12, { rir: 2, restSec: 90 }),
+      item('glute-bridge', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Com mochila sobre o quadril, se quiser mais dificuldade.' }),
+      item('calf-raise', 3, 12, 20, { rir: 1, restSec: 60 }),
+      item('dead-bug', 3, 8, 10, { rir: null, restSec: 45 }),
+    ],
+  },
+];
+
+export const ALL_TEMPLATES = [...TEMPLATES, ...HOME_TEMPLATES];
 
 export const DEFAULT_WEEK_SUMMARY = [
   { dayKey: 'mon', label: 'Upper A — força + hipertrofia' },

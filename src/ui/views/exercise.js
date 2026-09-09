@@ -132,6 +132,9 @@ export async function exerciseCardContent(exercise, { item = null, compact = fal
 
     exercise.safety ? safetyNote(exercise.safety) : null,
 
+    /* alternativas */
+    await alternativesCard(exercise),
+
     exercise.variations?.length ? h('div.card.card--tight',
       h('div.card__title', 'Variações / máquinas equivalentes'),
       h('div.row.row--wrap', { style: { gap: '6px', marginTop: '8px' } },
@@ -158,6 +161,50 @@ export async function exerciseCardContent(exercise, { item = null, compact = fal
 function kvRow(k, v) {
   if (!v) return null;
   return h('div.kv__row', h('div.kv__k', k), h('div.kv__v', v));
+}
+
+/**
+ * Alternativas equivalentes — para quando o aparelho está ocupado, não existe
+ * na sua academia, você está treinando em casa ou o exercício simplesmente não
+ * é confortável para você (caso clássico do leg press).
+ */
+export async function alternativesCard(exercise) {
+  const ids = exercise.alternatives || [];
+  if (!ids.length) return null;
+
+  const [exMap, guidance] = await Promise.all([store.exercises.map(), store.activeMedicalGuidance()]);
+  const list = ids.map((id) => exMap.get(id)).filter(Boolean);
+  if (!list.length) return null;
+
+  const gym = list.filter((e) => !e.atHome);
+  const home = list.filter((e) => e.atHome);
+
+  const row = (ex) => {
+    const permission = exercisePermission(ex, guidance);
+    return h('div.list-item.clickable', { onClick: () => navigate(`/exercicio/${ex.id}`) },
+      h('div.grow',
+        h('div.list-item__title', ex.namePt),
+        h('div.list-item__sub', `${ex.muscleGroup} · ${EQUIP_LABEL[ex.type] || ex.type}`),
+      ),
+      permission.state === 'forbidden' ? h('span.pill.pill--danger', 'não liberado') : null,
+      ex.kneeRisk === 'high' ? h('span.pill.pill--warn', 'exige joelho') : null,
+      h('span.muted', '›'),
+    );
+  };
+
+  return h('div.card.card--tight',
+    h('div.card__title', 'Alternativas para este exercício'),
+    h('p.muted', { style: { fontSize: '13px', marginTop: '4px' } },
+      'Use quando o aparelho estiver ocupado, não existir na sua academia ou este exercício não for confortável para você. Dá para trocar na hora, dentro do modo treino.'),
+    gym.length ? h('div.stack.stack--sm', { style: { marginTop: '10px' } },
+      h('div.field__label', 'Na academia'), ...gym.map(row)) : null,
+    home.length ? h('div.stack.stack--sm', { style: { marginTop: '10px' } },
+      h('div.field__label', 'Sem equipamento / em casa'), ...home.map(row)) : null,
+    exercise.kneeRisk === 'moderate' || exercise.kneeRisk === 'high'
+      ? h('p.muted', { style: { fontSize: '12.5px', marginTop: '10px' } },
+        'As alternativas também exigem do joelho em graus diferentes — as marcadas como dominantes de quadril (ponte, stiff, elevação de quadril) costumam ser as mais leves para o tendão patelar. Confirme com seu ortopedista/fisioterapeuta.')
+      : null,
+  );
 }
 
 /**

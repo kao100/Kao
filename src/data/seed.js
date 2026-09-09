@@ -9,10 +9,10 @@
 
 import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
-import { TEMPLATES, CARDIO_PLANS } from './program.js';
+import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 import { isoDate } from '../core/format.js';
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
 
 export const DEFAULT_PROFILE = {
   name: 'Atleta',
@@ -113,9 +113,12 @@ export async function seedIfNeeded() {
   // Templates: mesma regra.
   const existingTpl = await store.templates.all();
   const tplIds = new Set(existingTpl.map((t) => t.id));
-  const newTpl = TEMPLATES.filter((t) => !tplIds.has(t.id))
+  const newTpl = ALL_TEMPLATES.filter((t) => !tplIds.has(t.id))
     .map((t) => ({ ...t, createdAt: Date.now(), updatedAt: Date.now(), builtin: true }));
   if (newTpl.length) await store.templates.saveMany(newTpl);
+
+  // Migrações de campos novos em itens já existentes (sem apagar suas edições).
+  if (current > 0 && current < SEED_VERSION) await migrate(current, existingEx, existingTpl);
 
   // Suplementos.
   const existingSup = await store.supplements.all();
@@ -124,4 +127,40 @@ export async function seedIfNeeded() {
   if (current < SEED_VERSION) await store.setKV(store.KV.SEED_VERSION, SEED_VERSION);
 
   return { seeded: !profile, addedExercises: newEx.length, addedTemplates: newTpl.length };
+}
+
+/**
+ * Atualiza apenas campos estruturais novos nos registros que já existiam.
+ * Nunca sobrescreve séries, repetições, descanso ou observações editados por você.
+ */
+async function migrate(fromVersion, existingEx, existingTpl) {
+  if (fromVersion < 2) {
+    // v2: alternativas de exercício + modo academia/casa nos treinos
+    const catalog = new Map(EXERCISES.map((e) => [e.id, e]));
+    const exPatch = existingEx
+      .filter((ex) => catalog.has(ex.id))
+      .map((ex) => ({
+        ...ex,
+        alternatives: ex.alternatives?.length ? ex.alternatives : catalog.get(ex.id).alternatives,
+        atHome: ex.atHome ?? catalog.get(ex.id).atHome,
+      }));
+    if (exPatch.length) await store.exercises.saveMany(exPatch);
+
+    const tplCatalog = new Map(ALL_TEMPLATES.map((t) => [t.id, t]));
+    const tplPatch = existingTpl
+      .filter((t) => tplCatalog.has(t.id))
+      .map((t) => ({
+        ...t,
+        mode: t.mode || tplCatalog.get(t.id).mode,
+        homeTemplateId: t.homeTemplateId || tplCatalog.get(t.id).homeTemplateId,
+        homeCardioPlanId: t.homeCardioPlanId || tplCatalog.get(t.id).homeCardioPlanId,
+      }));
+    if (tplPatch.length) await store.templates.saveMany(tplPatch);
+
+    // planos de cardio caseiros para quem já tinha as configurações salvas
+    const settings = await store.settings.get();
+    const plans = settings?.cardioPlans || [];
+    const missing = CARDIO_PLANS.filter((p) => !plans.some((x) => x.id === p.id));
+    if (missing.length) await store.settings.save({ cardioPlans: [...plans, ...missing] });
+  }
 }

@@ -411,30 +411,47 @@ function openNotesSheet(state) {
 async function openSwapSheet(state, ctx) {
   const all = await store.exercises.all();
   const current = state.session.items[state.itemIndex];
-  const group = ctx.exMap.get(current.exerciseId)?.muscleGroup;
-  const candidates = all
-    .filter((e) => e.id !== current.exerciseId)
+  const currentEx = ctx.exMap.get(current.exerciseId);
+  const group = currentEx?.muscleGroup;
+
+  const altIds = currentEx?.alternatives || [];
+  const alternatives = altIds.map((id) => ctx.exMap.get(id)).filter(Boolean);
+  const others = all
+    .filter((e) => e.id !== current.exerciseId && !altIds.includes(e.id))
     .sort((a, b) => (a.muscleGroup === group ? -1 : 1) - (b.muscleGroup === group ? -1 : 1));
+
+  const swapTo = async (ex, close) => {
+    current.exerciseId = ex.id;
+    current.exerciseName = ex.namePt;
+    current.provisional = Boolean(ex.needsMedicalReview);
+    if (ex.atHome && !current.timeBased) {
+      // exercícios de peso corporal costumam pedir faixa de repetições mais alta
+      current.repMax = Math.max(current.repMax, 12);
+    }
+    await store.sessions.save(state.session);
+    close();
+    toastOk(`Trocado para ${ex.namePt}`);
+    ctx.rerender();
+  };
+
+  const row = (ex, close, highlight = false) => h('button.list-item.clickable', {
+    style: { width: '100%', textAlign: 'left', borderColor: highlight ? 'var(--volt-dim)' : undefined },
+    onClick: () => swapTo(ex, close),
+  },
+  h('div.grow',
+    h('div.list-item__title', ex.namePt),
+    h('div.list-item__sub', `${ex.muscleGroup} · ${ex.atHome ? 'sem equipamento' : ex.nameEn}`),
+  ),
+  ex.kneeRisk === 'high' ? h('span.pill.pill--warn', 'joelho') : null);
 
   openSheet({
     title: 'Trocar exercício',
     content: (close) => h('div.stack.stack--sm',
       h('p.muted', 'A troca vale só para esta sessão. Para mudar o programa, edite o treino na aba Programa.'),
-      ...candidates.slice(0, 40).map((ex) => h('button.list-item.clickable', {
-        style: { width: '100%', textAlign: 'left' },
-        onClick: async () => {
-          current.exerciseId = ex.id;
-          current.exerciseName = ex.namePt;
-          await store.sessions.save(state.session);
-          close();
-          toastOk(`Trocado para ${ex.namePt}`);
-          ctx.rerender();
-        },
-      },
-      h('div.grow',
-        h('div.list-item__title', ex.namePt),
-        h('div.list-item__sub', `${ex.muscleGroup} · ${ex.nameEn}`),
-      ))),
+      alternatives.length ? h('div.field__label', 'Alternativas equivalentes') : null,
+      ...alternatives.map((ex) => row(ex, close, true)),
+      h('div.field__label', { style: { marginTop: '10px' } }, 'Todos os exercícios'),
+      ...others.slice(0, 40).map((ex) => row(ex, close)),
     ),
   });
 }
