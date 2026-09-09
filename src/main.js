@@ -61,6 +61,10 @@ const ROUTES = [
 async function boot() {
   const root = document.getElementById('app-root');
 
+  // Registrado antes de tudo: o cadastro inicial espera por você, e o evento
+  // `load` já pode ter passado quando o banco terminar de abrir.
+  registerServiceWorker();
+
   try {
     await openDB();
     await seedIfNeeded();
@@ -99,7 +103,6 @@ async function boot() {
     },
   });
 
-  registerServiceWorker();
   wireGlobalEvents();
 }
 
@@ -130,11 +133,16 @@ function wireGlobalEvents() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol === 'file:') return;
-  window.addEventListener('load', () => {
+
+  const register = () => {
     navigator.serviceWorker.register('./sw.js').catch((err) => {
+      // Sem service worker o app continua funcionando — só perde o modo offline.
       console.warn('Service worker não registrado:', err);
     });
-  });
+  };
+
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 }
 
 boot();

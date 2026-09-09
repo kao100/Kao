@@ -2,7 +2,7 @@
   "name": "Kao Training",
   "short_name": "Kao",
   "description": "Personal training digital: musculação, cardio, futebol, progressão e acompanhamento do joelho.",
-  "id": "/kao-training/",
+  "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -10,16 +10,49 @@
   "background_color": "#0A0B0D",
   "theme_color": "#0A0B0D",
   "lang": "pt-BR",
-  "categories": ["health", "fitness", "sports"],
+  "categories": [
+    "health",
+    "fitness",
+    "sports"
+  ],
   "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ],
   "shortcuts": [
-    { "name": "Treino de hoje", "url": "./index.html#/hoje" },
-    { "name": "Modo treino", "url": "./index.html#/treinar" },
-    { "name": "Joelho", "url": "./index.html#/joelho" }
+    {
+      "name": "Treino de hoje",
+      "url": "./index.html#/hoje"
+    },
+    {
+      "name": "Modo treino",
+      "url": "./index.html#/treinar"
+    },
+    {
+      "name": "Joelho",
+      "url": "./index.html#/joelho"
+    }
   ]
 }
