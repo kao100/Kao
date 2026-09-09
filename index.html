@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
+  <title>Kao Training</title>
+  <meta name="description" content="Personal training digital e diário de treinamento — hipertrofia, força, condicionamento e futebol." />
+
+  <meta name="theme-color" content="#0A0B0D" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- iOS / PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kao" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png" />
+
+  <link rel="stylesheet" href="./src/styles/theme.css" />
+  <link rel="stylesheet" href="./src/styles/base.css" />
+  <link rel="stylesheet" href="./src/styles/components.css" />
+  <link rel="stylesheet" href="./src/styles/views.css" />
+</head>
+<body>
+  <div id="app-root">
+    <div class="boot">
+      <div class="boot__logo">KAO</div>
+      <div class="boot__msg">Carregando seu treino…</div>
+    </div>
+  </div>
+  <div id="sheet-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <script type="module" src="./src/main.js"></script>
+  <noscript>
+    <p style="padding:24px;color:#fff;background:#0A0B0D">
+      Este aplicativo precisa de JavaScript habilitado.
+    </p>
+  </noscript>
+</body>
+</html>

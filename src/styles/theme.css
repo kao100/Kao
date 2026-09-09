@@ -1,0 +1,75 @@
+/* ==========================================================================
+   Kao Training — design tokens
+   Dark-first, esportivo, alto contraste para leitura durante o treino.
+   ========================================================================== */
+
+:root {
+  /* Superfícies */
+  --bg: #08090B;
+  --bg-elev: #101216;
+  --surface: #14171C;
+  --surface-2: #1B1F26;
+  --surface-3: #232830;
+  --line: #262C35;
+  --line-soft: #1D222A;
+
+  /* Texto */
+  --text: #F4F6F8;
+  --text-2: #B6BEC9;
+  --text-3: #7C8695;
+
+  /* Acentos */
+  --volt: #C8FF4D;          /* ação principal / musculação */
+  --volt-dim: #8FBF17;
+  --flame: #FF7A34;         /* promessa diária / streak */
+  --cardio: #4CC8FF;        /* cardio */
+  --ball: #48E28A;          /* futebol */
+  --recover: #A88BFF;       /* recuperação / mobilidade */
+  --ok: #3DDC97;
+  --warn: #FFC53D;
+  --danger: #FF5C5C;
+
+  /* Tipografia */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter,
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+  --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Raio e sombra */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.3);
+
+  /* Espaçamento */
+  --gap: 14px;
+  --pad: 16px;
+
+  /* Safe areas iOS */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+
+  /* Altura da barra de navegação inferior */
+  --tabbar-h: 62px;
+}
+
+/* O app é dark-first por escolha de produto (uso em academia).
+   O modo claro é apenas um fallback de acessibilidade opcional. */
+:root[data-theme="light"] {
+  --bg: #F5F7FA;
+  --bg-elev: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #EEF1F5;
+  --surface-3: #E3E8EF;
+  --line: #DCE2EA;
+  --line-soft: #E8ECF2;
+  --text: #10141A;
+  --text-2: #47515F;
+  --text-3: #6C7887;
+  --volt: #4E9A00;
+  --volt-dim: #3D7A00;
+  --shadow: 0 8px 24px rgba(16, 20, 26, 0.1);
+}
