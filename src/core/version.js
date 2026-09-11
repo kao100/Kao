@@ -7,11 +7,20 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v8';
+export const APP_VERSION = 'kao-v9';
 export const APP_DATE = '2026-09-11';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v9',
+    date: '2026-09-11',
+    items: [
+      'Mais 5 fotos (36 no total): voador de braços vermelhos, supino inclinado de placas, banco inclinado com barra, banco em frente à polia e o crossover Alfa de frente.',
+      'O posterior de ombro ganhou foto — falta 1: supino reto na máquina.',
+      'Duas fotos tiveram pessoas do fundo desfocadas, em vez de recortadas: assim a máquina aparece inteira.',
+    ],
+  },
   {
     version: 'kao-v8',
     date: '2026-09-11',

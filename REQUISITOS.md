@@ -110,8 +110,14 @@ placas com apoio para o peito, máquina de quadril com selim e rosca scott na
 máquina. Duas delas foram recortadas para tirar pessoas do quadro. São 31 no
 total.
 
-Exercícios do programa ainda sem foto: supino reto na máquina e posterior de
-ombro (voador invertido). A remada com apoio do peito saiu da lista — elevação
+Uma sétima rodada trouxe mais 5 (36 no total): voador de braços vermelhos,
+supino inclinado de placas, banco inclinado com barra, banco em frente à polia e
+o crossover Alfa 2050 de frente. Aqui as duas fotos com pessoas ao fundo foram
+**desfocadas** em vez de recortadas: o recorte tirava junto os braços da
+máquina, que é justamente o que permite reconhecê-la.
+
+Exercício do programa ainda sem foto: supino reto na máquina. A remada com apoio
+do peito e o posterior de ombro saíram da lista — elevação
 lateral e rosca martelo, que eu tinha listado antes, são com halteres e não
 dependem de aparelho específico. A tela "Minha academia" calcula essa lista
 sozinha a partir do programa, então ela não depende de eu manter este texto em
