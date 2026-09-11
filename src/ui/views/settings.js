@@ -12,6 +12,15 @@ import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
 import { stepper } from '../components/inputs.js';
 import { toastOk, toastError, toast } from '../components/toast.js';
 
+const HOME_EQUIPMENT = [
+  ['pullUpBar', '🏋️ Barra fixa'],
+  ['bench', '🪑 Banco, cadeira firme ou sofá'],
+  ['backpack', '🎒 Mochila para carregar peso'],
+  ['mat', '🧘 Colchonete'],
+  ['dumbbells', '💪 Halteres'],
+  ['bands', '🎗️ Elásticos'],
+];
+
 export async function settingsView() {
   const [profile, settings, estimate] = await Promise.all([
     store.profile.get(), store.settings.get(), storageEstimate(),
@@ -83,6 +92,20 @@ export async function settingsView() {
         toggle('Perguntar do joelho antes de pernas/futebol', settings?.askKneeBeforeLegsAndFootball !== false, (v) => store.settings.save({ askKneeBeforeLegsAndFootball: v })),
         toggle('Manter a tela acesa durante o treino', settings?.keepScreenAwake !== false, (v) => store.settings.save({ keepScreenAwake: v })),
         toggle('Sons de cronômetro', settings?.soundEnabled !== false, (v) => store.settings.save({ soundEnabled: v })),
+      ),
+    ),
+
+    /* equipamento de casa */
+    h('div.card',
+      h('div.card__title', 'O que eu tenho em casa'),
+      h('p.muted', { style: { fontSize: '13px', marginTop: '4px' } },
+        'Usado pelos treinos do modo "🏠 Em casa". Desmarcando algo, o app avisa e sugere a alternativa.'),
+      h('div.stack', { style: { marginTop: '10px' } },
+        ...HOME_EQUIPMENT.map(([key, label]) => toggle(
+          label,
+          settings?.homeEquipment?.[key] === true,
+          (v) => store.settings.save({ homeEquipment: { ...(settings?.homeEquipment || {}), [key]: v } }),
+        )),
       ),
     ),
 

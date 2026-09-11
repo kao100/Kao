@@ -11,7 +11,7 @@ import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
 import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -40,6 +40,18 @@ export const DEFAULT_PROFILE = {
   onboarded: false,
 };
 
+/**
+ * Composição dos treinos em casa na versão 2 — usada para saber se você editou
+ * o treino antes de a migração v3 (barra fixa) reescrever qualquer coisa.
+ */
+const V2_HOME_ITEMS = {
+  'tpl-upper-a-casa': ['push-up', 'inverted-row', 'incline-push-up', 'backpack-row', 'pike-push-up', 'lateral-raise', 'biceps-curl', 'bench-dip'],
+  'tpl-lower-a-casa': ['glute-bridge', 'single-leg-rdl', 'single-leg-glute-bridge', 'box-squat', 'calf-raise', 'plank'],
+  'tpl-upper-b-casa': ['inverted-row', 'backpack-row', 'superman', 'pike-push-up', 'lateral-raise', 'hammer-curl'],
+  'tpl-upper-c-casa': ['incline-push-up', 'inverted-row', 'push-up', 'backpack-row', 'lateral-raise', 'biceps-curl', 'bench-dip'],
+  'tpl-lower-b-casa': ['single-leg-glute-bridge', 'single-leg-rdl', 'glute-bridge', 'calf-raise', 'dead-bug'],
+};
+
 export const DEFAULT_SETTINGS = {
   theme: 'dark',
   restCompoundSec: 150,
@@ -55,6 +67,16 @@ export const DEFAULT_SETTINGS = {
   cardioPlans: CARDIO_PLANS,
   nextAppointment: null,
   appointmentNote: '',
+  // O que existe para treinar em casa. Os treinos caseiros assumem barra fixa;
+  // desmarcando aqui, o app avisa e sugere as alternativas sem barra.
+  homeEquipment: {
+    pullUpBar: true,
+    bench: true,
+    backpack: true,
+    mat: true,
+    dumbbells: false,
+    bands: false,
+  },
 };
 
 /**
@@ -143,5 +165,30 @@ async function migrate(fromVersion, existingEx, existingTpl) {
     const plans = settings?.cardioPlans || [];
     const missing = CARDIO_PLANS.filter((p) => !plans.some((x) => x.id === p.id));
     if (missing.length) await store.settings.save({ cardioPlans: [...plans, ...missing] });
+  }
+
+  if (fromVersion < 3) {
+    // v3: barra fixa nos treinos em casa.
+    // Só reescreve o treino que continua exatamente como veio de fábrica —
+    // se você mexeu em algum, ele fica como está e os exercícios novos ficam
+    // disponíveis para você adicionar quando quiser.
+    const tplCatalog = new Map(ALL_TEMPLATES.map((t) => [t.id, t]));
+    const updates = [];
+    const skipped = [];
+    for (const tpl of existingTpl) {
+      const original = V2_HOME_ITEMS[tpl.id];
+      if (!original) continue;
+      const current = (tpl.items || []).map((it) => it.exerciseId);
+      const untouched = current.length === original.length && current.every((id, i) => id === original[i]);
+      if (untouched) updates.push({ ...tpl, items: tplCatalog.get(tpl.id).items, notes: tplCatalog.get(tpl.id).notes });
+      else skipped.push(tpl.name);
+    }
+    if (updates.length) await store.templates.saveMany(updates);
+
+    const settings = await store.settings.get();
+    if (!settings?.homeEquipment) await store.settings.save({ homeEquipment: DEFAULT_SETTINGS.homeEquipment });
+    if (skipped.length) {
+      console.info('Treinos em casa preservados porque foram editados:', skipped.join(', '));
+    }
   }
 }

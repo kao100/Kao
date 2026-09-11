@@ -79,6 +79,16 @@ exercício ou anotada na observação da série.
 | Pergunta do joelho só em dias de perna/futebol | ✅ | `openReadinessSheet({ includeKnee })` — dias de superiores não perguntam mais |
 | Atualização automática do app | ✅ | `main.js` detecta versão nova publicada e recarrega sozinho uma vez |
 
+## Barra fixa em casa (quarta rodada)
+
+| Item | Status | Onde |
+|---|---|---|
+| Exercícios de barra fixa | ✅ | `pull-up`, `chin-up`, `negative-pull-up`, `hanging-knee-raise`, `dead-hang` — ficha completa, pegada/posicionamento e ilustração própria |
+| Progressão para a primeira barra | ✅ | suspensão → negativa (descida de 3–5 s) → supinada → pronada, encadeada pelas alternativas de cada exercício |
+| Treinos em casa usando a barra | ✅ | Upper A/B/C em casa com barra e barra supinada; Lower A/B em casa com elevação de joelhos na barra |
+| "O que eu tenho em casa" | ✅ | Ajustes → lista de equipamentos; sem barra fixa marcada, o modo em casa avisa e aponta as alternativas |
+| Migração que respeita edições | ✅ | `seed.js` v3 só reescreve o treino em casa que continua idêntico ao de fábrica; treino editado fica intacto |
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

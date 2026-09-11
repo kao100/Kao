@@ -53,6 +53,9 @@ export async function planForDate(date) {
   const templatesHere = templates.filter((t) => !t.mode || t.mode === location);
   if (location === 'home') {
     notes.push('Modo "em casa": treino com peso do corpo, sem depender da academia.');
+    if (settings?.homeEquipment && settings.homeEquipment.pullUpBar === false) {
+      notes.push('Você marcou que não tem barra fixa: use "Trocar máquina" nos exercícios de barra — a remada invertida e a remada com mochila substituem.');
+    }
   }
 
   /* ---------- decisão sobre futebol ---------- */

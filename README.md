@@ -149,9 +149,11 @@ Sessões guardam uma **cópia** do treino: editar o programa depois não reescre
   reconhecimento na hora, guardado no histórico de conquistas.
 - **Pergunta do joelho** só aparece em dias de perna, cardio e futebol.
 - **Modo "em casa"**: cada dia da semana tem uma versão de calistenia, com peso
-  do corpo e improviso (mesa, cadeira, degrau, mochila carregada). O botão
-  🏠 no card do treino de hoje troca o dia inteiro — inclusive o cardio, que vira
-  caminhada/escada na rua. Nenhum dia é perdido e a promessa continua de pé.
+  do corpo e improviso (barra fixa, mesa, cadeira, degrau, mochila carregada). O
+  botão 🏠 no card do treino de hoje troca o dia inteiro — inclusive o cardio, que
+  vira caminhada/escada na rua. Nenhum dia é perdido e a promessa continua de pé.
+  Os treinos caseiros assumem barra fixa; em Ajustes → "O que eu tenho em casa"
+  dá para desmarcar, e o app passa a apontar as alternativas sem barra.
 
 ---
 
