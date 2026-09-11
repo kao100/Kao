@@ -7,11 +7,19 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v7';
+export const APP_VERSION = 'kao-v8';
 export const APP_DATE = '2026-09-11';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v8',
+    date: '2026-09-11',
+    items: [
+      'Mais 5 fotos da academia, da área que dá para a rua (31 no total): puxada articulada, duas barras assistidas, remada de placas, máquina de quadril com selim e rosca scott na máquina.',
+      'A remada com apoio do peito ganhou foto — faltam 2.',
+    ],
+  },
   {
     version: 'kao-v7',
     date: '2026-09-11',

@@ -104,8 +104,14 @@ equipamento na ficha e no modo treino.
 A polia alta do tríceps entrou depois, recortada de uma foto de área que eu
 tinha descartado — o recorte pega só a coluna de cabos, sem ninguém no quadro.
 
-Exercícios do programa ainda sem foto: supino reto na máquina, remada com apoio
-do peito e posterior de ombro (voador invertido). São só esses três — elevação
+Uma sexta rodada trouxe mais 5 fotos, da área da academia que dá para a rua:
+puxada de braços articulados, duas barras assistidas lado a lado, remada de
+placas com apoio para o peito, máquina de quadril com selim e rosca scott na
+máquina. Duas delas foram recortadas para tirar pessoas do quadro. São 31 no
+total.
+
+Exercícios do programa ainda sem foto: supino reto na máquina e posterior de
+ombro (voador invertido). A remada com apoio do peito saiu da lista — elevação
 lateral e rosca martelo, que eu tinha listado antes, são com halteres e não
 dependem de aparelho específico. A tela "Minha academia" calcula essa lista
 sozinha a partir do programa, então ela não depende de eu manter este texto em
