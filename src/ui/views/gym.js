@@ -11,9 +11,26 @@ import { page, topbar, sectionTitle, emptyState } from '../shell.js';
 import { openSheet, confirmSheet } from '../components/sheet.js';
 import { toastOk } from '../components/toast.js';
 
+/** Tipos de exercício que dependem de um aparelho específico da academia. */
+const NEEDS_PHOTO = new Set(['machine', 'cable', 'barbell']);
+
 export async function gymView({ query }) {
-  const [equipment, exercises] = await Promise.all([store.equipment.all(), store.exercises.all()]);
+  const [equipment, exercises, templates] = await Promise.all([
+    store.equipment.all(), store.exercises.all(), store.templates.all(),
+  ]);
   const exMap = new Map(exercises.map((e) => [e.id, e]));
+  const withPhoto = new Set(equipment.map((e) => e.exerciseId));
+
+  // exercícios que o SEU programa usa na academia e que ainda não têm foto
+  const inProgram = new Set();
+  for (const tpl of templates) {
+    if (tpl.mode === 'home') continue;
+    for (const it of tpl.items || []) inProgram.add(it.exerciseId);
+  }
+  const missing = [...inProgram]
+    .map((id) => exMap.get(id))
+    .filter((ex) => ex && NEEDS_PHOTO.has(ex.type) && !withPhoto.has(ex.id))
+    .sort((a, b) => a.namePt.localeCompare(b.namePt, 'pt'));
 
   if (query.exercicio) {
     // atalho vindo da ficha do exercício
@@ -22,7 +39,9 @@ export async function gymView({ query }) {
 
   return page(
     topbar({
-      eyebrow: `${equipment.length} equipamento(s)`,
+      eyebrow: missing.length
+        ? `${equipment.length} com foto · ${missing.length} sem foto`
+        : `${equipment.length} equipamento(s) · nenhum faltando`,
       title: 'Minha academia',
       showBack: true,
       backTo: '/mais',
@@ -35,6 +54,21 @@ export async function gymView({ query }) {
     equipment.some((e) => e.confirm)
       ? h('div.safety',
         'As fotos marcadas com "confirmar" foram identificadas pela imagem, sem etiqueta visível na máquina. Se alguma estiver no exercício errado, toque em Editar e troque — leva um toque.')
+      : null,
+
+    missing.length
+      ? h('div.stack.stack--sm',
+        sectionTitle('Ainda sem foto'),
+        h('p.muted', { style: { fontSize: '13px', marginTop: '-4px' } },
+          'Exercícios do seu programa que ainda aparecem só com o desenho. Da próxima vez que estiver na academia, é essa a lista para fotografar — o resto já está aqui.'),
+        ...missing.map((ex) => h('div.list-item',
+          h('div.grow',
+            h('div.list-item__title', ex.namePt),
+            h('div.list-item__sub', `${ex.muscleGroup} · ${ex.nameEn}`),
+          ),
+          h('button.btn.btn--sm.btn--primary', { onClick: () => addEquipment(exercises, ex.id) }, '📷 Foto'),
+        )),
+      )
       : null,
 
     equipment.length

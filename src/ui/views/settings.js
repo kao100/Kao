@@ -11,6 +11,7 @@ import { page, topbar, sectionTitle, menuRow, safetyNote } from '../shell.js';
 import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
 import { stepper } from '../components/inputs.js';
 import { toastOk, toastError, toast } from '../components/toast.js';
+import { APP_VERSION, APP_DATE, CHANGELOG } from '../../core/version.js';
 
 const HOME_EQUIPMENT = [
   ['pullUpBar', '🏋️ Barra fixa'],
@@ -147,7 +148,18 @@ export async function settingsView() {
             ? 'O app está rodando em modo standalone, com suporte offline.'
             : 'No Safari: toque em Compartilhar (⬆️) → "Adicionar à Tela de Início". O app abre em tela cheia e funciona offline.'),
       ),
-      menuRow({ icon: '🔄', title: 'Recarregar app', sub: 'Buscar atualizações', onClick: () => location.reload() }),
+      h('div.card.card--tight',
+        h('div.row.row--between',
+          h('div',
+            h('div.card__title', `Versão ${APP_VERSION}`),
+            h('div.list-item__sub', `publicada em ${formatDate(APP_DATE, 'full')}`),
+          ),
+          h('button.btn.btn--sm.btn--ghost', { onClick: () => showChangelog() }, 'Novidades'),
+        ),
+        h('p.muted', { style: { fontSize: '13px', marginTop: '8px' } },
+          'Esta é a versão que está instalada neste aparelho. Se ela ficar atrás da que eu publiquei, o app está desatualizado.'),
+        h('button.btn.btn--ghost.btn--block.mt', { onClick: checkForUpdate }, '🔄 Procurar atualização'),
+      ),
     ),
 
     safetyNote('Este aplicativo é uma ferramenta de acompanhamento de treino. Ele não diagnostica, não prescreve medicamento e não substitui médico ou fisioterapeuta.'),
@@ -170,6 +182,46 @@ export async function settingsView() {
       }, 'Apagar todos os dados'),
     ),
   );
+}
+
+function showChangelog() {
+  openSheet({
+    title: 'O que mudou',
+    content: () => h('div.stack.stack--sm',
+      ...CHANGELOG.map((rel) => h('div.card.card--tight',
+        h('div.row.row--between',
+          h('div.card__title', rel.version),
+          rel.version === APP_VERSION ? h('span.pill.pill--volt', 'instalada') : null,
+        ),
+        h('div.list-item__sub', formatDate(rel.date, 'full')),
+        h('ul', { style: { margin: '8px 0 0', paddingLeft: '18px' } },
+          ...rel.items.map((t) => h('li', { style: { fontSize: '14px', marginBottom: '4px' } }, t))),
+      )),
+    ),
+  });
+}
+
+/**
+ * Pergunta ao service worker se existe versão nova publicada.
+ * Sem service worker (aba comum, primeira visita) recarrega direto — é o
+ * equivalente honesto: busca da rede.
+ */
+async function checkForUpdate() {
+  const reg = await navigator.serviceWorker?.getRegistration();
+  if (!reg) { toast('Buscando da rede…'); location.reload(); return; }
+  toast('Procurando atualização…');
+  try {
+    await reg.update();
+  } catch {
+    toastError('Sem conexão agora. Tente de novo com internet.');
+    return;
+  }
+  if (reg.installing || reg.waiting) {
+    toastOk('Versão nova encontrada. Recarregando…');
+    setTimeout(() => location.reload(), 1200);
+  } else {
+    toastOk(`Você já está na versão mais recente (${APP_VERSION}).`);
+  }
 }
 
 function row(label, value) {
