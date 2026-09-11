@@ -89,6 +89,22 @@ exercício ou anotada na observação da série.
 | "O que eu tenho em casa" | ✅ | Ajustes → lista de equipamentos; sem barra fixa marcada, o modo em casa avisa e aponta as alternativas |
 | Migração que respeita edições | ✅ | `seed.js` v3 só reescreve o treino em casa que continua idêntico ao de fábrica; treino editado fica intacto |
 
+## Fotos reais das máquinas (quinta rodada)
+
+25 fotos da academia entram em "Minha academia" já associadas aos exercícios
+(`data/gym-equipment.js` + `assets/gym/`). Elas substituem a ilustração do
+equipamento na ficha e no modo treino.
+
+- identificadas por etiqueta na máquina: extensora, abdutora, multi-hip;
+- identificadas pela imagem (marcadas com "confirmar" no app): as demais;
+- fotos de área geral e com outras pessoas em quadro foram descartadas; uma foi
+  recortada para tirar pessoas do fundo;
+- a semente é idempotente: foto que você apagar ou reassociar não volta.
+
+Exercícios ainda sem foto: supino na máquina, remada com apoio do peito,
+posterior de ombro (voador invertido), elevação lateral, rosca martelo e
+tríceps na polia.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

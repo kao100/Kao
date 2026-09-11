@@ -10,8 +10,9 @@
 import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
 import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
+import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -127,9 +128,12 @@ export async function seedIfNeeded() {
   // Migrações de campos novos em itens já existentes (sem apagar suas edições).
   if (current > 0 && current < SEED_VERSION) await migrate(current, existingEx, existingTpl);
 
+  // Fotos das máquinas da academia (idempotente: só adiciona o que falta).
+  const addedEquipment = await seedGymEquipment();
+
   if (current < SEED_VERSION) await store.setKV(store.KV.SEED_VERSION, SEED_VERSION);
 
-  return { seeded: !profile, addedExercises: newEx.length, addedTemplates: newTpl.length };
+  return { seeded: !profile, addedExercises: newEx.length, addedTemplates: newTpl.length, addedEquipment };
 }
 
 /**
@@ -191,4 +195,20 @@ async function migrate(fromVersion, existingEx, existingTpl) {
       console.info('Treinos em casa preservados porque foram editados:', skipped.join(', '));
     }
   }
+
+}
+
+/**
+ * Cadastra as fotos das máquinas da academia em "Minha academia".
+ * Só adiciona o que ainda não existe — foto apagada ou reassociada por você
+ * não volta e não é sobrescrita.
+ */
+async function seedGymEquipment() {
+  const existing = await store.equipment.all();
+  const ids = new Set(existing.map((e) => e.id));
+  const rows = BUILTIN_GYM_EQUIPMENT
+    .filter((e) => !ids.has(e.id))
+    .map((e) => ({ ...e, createdAt: Date.now(), updatedAt: Date.now() }));
+  if (rows.length) await store.equipment.saveMany(rows);
+  return rows.length;
 }

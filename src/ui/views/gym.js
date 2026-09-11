@@ -30,7 +30,12 @@ export async function gymView({ query }) {
     }),
 
     h('p.muted',
-      'Tire uma foto de cada aparelho da sua academia e associe ao exercício. Assim, durante o treino você vê a máquina de verdade, não um desenho genérico.'),
+      'Cada aparelho associado a um exercício: durante o treino você vê a máquina de verdade, não um desenho genérico.'),
+
+    equipment.some((e) => e.confirm)
+      ? h('div.safety',
+        'As fotos marcadas com "confirmar" foram identificadas pela imagem, sem etiqueta visível na máquina. Se alguma estiver no exercício errado, toque em Editar e troque — leva um toque.')
+      : null,
 
     equipment.length
       ? h('div.stack.stack--sm',
@@ -43,14 +48,22 @@ export async function gymView({ query }) {
               h('div.list-item__sub', [eq.brand, eq.model].filter(Boolean).join(' ') || 'marca/modelo não informados'),
               eq.note ? h('div.list-item__sub', eq.note) : null,
             ),
-            eq.useAsPrimary ? h('span.pill.pill--volt', 'principal') : null,
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' } },
+              eq.useAsPrimary ? h('span.pill.pill--volt', 'principal') : null,
+              eq.confirm ? h('span.pill.pill--warn', 'confirmar') : null,
+            ),
           ),
           h('div.btn-row.mt',
             h('button.btn.btn--sm.btn--ghost', { onClick: () => navigate(`/exercicio/${eq.exerciseId}`) }, 'Ver exercício'),
             h('button.btn.btn--sm.btn--ghost', { onClick: () => editEquipment(eq, exercises) }, 'Editar'),
             h('button.btn.btn--sm.btn--danger', {
               onClick: async () => {
-                const ok = await confirmSheet({ title: 'Excluir equipamento?', danger: true, confirmLabel: 'Excluir' });
+                const ok = await confirmSheet({
+                  title: 'Excluir equipamento?',
+                  message: 'A foto sai do app e não volta na próxima atualização.',
+                  danger: true,
+                  confirmLabel: 'Excluir',
+                });
                 if (ok) { await store.equipment.remove(eq.id); refresh(); }
               },
             }, 'Excluir'),
