@@ -16,6 +16,12 @@
 .card--accent { border-color: color-mix(in srgb, var(--volt) 35%, var(--line)); }
 .card--danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
 .card--warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.card--record {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  background:
+    radial-gradient(120% 130% at 90% -20%, color-mix(in srgb, var(--warn) 22%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, var(--surface) 0%, var(--bg-elev) 100%);
+}
 
 .clickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .clickable:active { transform: scale(0.988); }
@@ -226,6 +232,14 @@
 .toast--ok { border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 .toast--warn { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .toast--danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+.toast--record {
+  border-color: color-mix(in srgb, var(--warn) 70%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 22%, var(--surface-3)), var(--surface-3));
+  font-weight: 750;
+  border-radius: var(--r-md);
+  padding: 13px 18px;
+  text-align: center;
+}
 
 /* ---------- Estatísticas ---------- */
 

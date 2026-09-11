@@ -145,6 +145,9 @@ Sessões guardam uma **cópia** do treino: editar o programa depois não reescre
   por exemplo, oferece agachamento até a caixa, hip thrust, step-up, stiff, ponte
   de glúteo e afundo — com o grau de exigência do joelho sinalizado em cada um.
   A troca pode ser só para a sessão do dia (modo treino) ou definitiva (programa).
+- **Recordes**: superar a maior carga (ou repetir mais com a mesma carga) gera um
+  reconhecimento na hora, guardado no histórico de conquistas.
+- **Pergunta do joelho** só aparece em dias de perna, cardio e futebol.
 - **Modo "em casa"**: cada dia da semana tem uma versão de calistenia, com peso
   do corpo e improviso (mesa, cadeira, degrau, mochila carregada). O botão
   🏠 no card do treino de hoje troca o dia inteiro — inclusive o cardio, que vira

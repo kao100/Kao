@@ -76,6 +76,11 @@
 .trainer__prev b { color: var(--text); font-family: var(--num); }
 
 .setgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Em coluna estreita os steppers precisam de botões menores para o número caber */
+.setgrid .stepper { gap: 6px; }
+.setgrid .stepper__btn { width: 42px; font-size: 20px; }
+.setgrid .stepper__value { font-size: 21px; min-height: 54px; }
+.setgrid .stepper__unit { display: none; }
 .setgrid--3 { grid-template-columns: repeat(3, 1fr); }
 
 .setdots { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -85,7 +90,25 @@
   font-size: 12px; font-family: var(--num); color: var(--text-3); text-align: center;
 }
 .setdot--done { background: color-mix(in srgb, var(--volt) 18%, transparent); color: var(--volt); border-color: color-mix(in srgb, var(--volt) 35%, transparent); }
+.setdot--editable { cursor: pointer; font-family: var(--num); }
+.setdot--editable:active { transform: scale(0.94); }
 .setdot--current { border-color: var(--text); color: var(--text); }
+
+/* Consulta rápida de pegada e posicionamento */
+.setup-quick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--volt) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--volt) 22%, var(--line-soft));
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.setup-quick__icon { font-size: 16px; line-height: 1.2; }
+.setup-quick .muted { font-size: 11.5px; white-space: nowrap; align-self: center; }
 
 /* Cronômetro de descanso */
 .rest {

@@ -67,6 +67,18 @@ séries, o próximo passo é a variação mais difícil (mãos mais baixas, pés
 elevados, corpo mais horizontal, mochila mais pesada), registrada como um novo
 exercício ou anotada na observação da série.
 
+## Melhorias da terceira rodada (uso real)
+
+| Ideia | Status | Onde |
+|---|---|---|
+| Corrigir uma série já registrada durante o treino | ✅ | toque na série no modo treino → editar carga/reps/RIR/dor ou excluir |
+| Botões visíveis de "Série extra" e "Encerrar exercício" | ✅ | antes ficavam escondidos no menu ⋯ |
+| Reconhecimento ao bater recorde | ✅ | `logic/records.js` + store `achievements`: aviso na hora, resumo pós-treino, lista em Progresso e 🏆 no resumo semanal |
+| Instrução de pegada, barra, cotovelo e abdômen | ✅ | `SETUP` em `data/exercises.js` (30 exercícios): linha rápida no modo treino + card completo na ficha, com o que muda em cada variação |
+| Alternativa de máquina quando o aparelho está ocupado | ✅ | botão "🔁 Trocar máquina" direto na tela de treino (o recurso existia, estava escondido no menu) |
+| Pergunta do joelho só em dias de perna/futebol | ✅ | `openReadinessSheet({ includeKnee })` — dias de superiores não perguntam mais |
+| Atualização automática do app | ✅ | `main.js` detecta versão nova publicada e recarrega sozinho uma vez |
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

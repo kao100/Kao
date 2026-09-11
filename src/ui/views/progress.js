@@ -8,14 +8,16 @@ import { evolutionPanel } from '../../logic/report.js';
 import { page, topbar, sectionTitle, emptyState } from '../shell.js';
 import { lineChart, barChart, legend } from '../components/chart.js';
 import { segmented } from '../components/inputs.js';
+import { recentAchievements, RECORD_TYPES } from '../../logic/records.js';
 
 export async function progressView() {
-  const [weeks, measurements, streak, exMap, allSets] = await Promise.all([
+  const [weeks, measurements, streak, exMap, allSets, achievements] = await Promise.all([
     evolutionPanel(8),
     store.measurements.all(),
     store.promiseStreak(),
     store.exercises.map(),
     store.db.getAll('sets'),
+    recentAchievements(12),
   ]);
 
   const weightPoints = measurements
@@ -40,6 +42,22 @@ export async function progressView() {
       stat('Cardio', formatMinutes(weeks.at(-1)?.cardioMinutes || 0), `${weeks.at(-1)?.cardioCount || 0} sessão(ões)`),
       stat('Futebol', formatMinutes(weeks.at(-1)?.footballMinutes || 0), `${weeks.at(-1)?.footballCount || 0} partida(s)`),
     ),
+
+    achievements.length
+      ? h('div.stack.stack--sm',
+        sectionTitle('Conquistas'),
+        h('div.list', ...achievements.map((a) => h('div.list-item.clickable', {
+          onClick: () => navigate(`/progresso/${a.exerciseId}`),
+        },
+        h('div.list-item__thumb', { style: { fontSize: '20px' } }, RECORD_TYPES[a.type].icon),
+        h('div.grow',
+          h('div.list-item__title', a.exerciseName),
+          h('div.list-item__sub', `${RECORD_TYPES[a.type].label} · ${a.text}`),
+          h('div.list-item__sub', formatDate(a.date, 'full')),
+        ),
+        ))),
+      )
+      : null,
 
     h('div.card',
       h('div.card__title', 'Volume semanal de musculação'),

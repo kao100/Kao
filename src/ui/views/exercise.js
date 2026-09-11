@@ -118,6 +118,32 @@ export async function exerciseCardContent(exercise, { item = null, compact = fal
       h('ul.mistakes', { style: { marginTop: '10px' } }, ...exercise.mistakes.map((m) => h('li', m))),
     ) : null,
 
+    /* pegada e posicionamento */
+    exercise.setup ? h('div.card.card--tight',
+      h('div.card__title', 'Pegada e posicionamento'),
+      h('p', { style: { marginTop: '6px' } }, exercise.setup.quick),
+      h('div.kv', { style: { marginTop: '6px' } },
+        kvRow('Qual barra / pegador', exercise.setup.bar),
+        kvRow('Largura das mãos', exercise.setup.handWidth),
+        kvRow('Cotovelos', exercise.setup.elbows),
+        kvRow('Abdômen / tronco', exercise.setup.core),
+      ),
+      exercise.setup.variations?.length
+        ? h('div', { style: { marginTop: '12px' } },
+          h('div.field__label', 'O que muda em cada variação'),
+          h('div.stack.stack--sm', { style: { marginTop: '8px' } },
+            ...exercise.setup.variations.map((v) => h('div.list-item',
+              h('div.grow',
+                h('div.list-item__title', v.name),
+                h('div.list-item__sub', v.changes),
+                h('div.list-item__sub', { style: { color: 'var(--volt-dim)' } }, `Quando usar: ${v.when}`),
+              ),
+            )),
+          ),
+        )
+        : null,
+    ) : null,
+
     /* ajustes */
     h('div.card.card--tight',
       h('div.card__title', 'Ajustes e execução'),

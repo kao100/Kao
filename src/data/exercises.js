@@ -1265,8 +1265,375 @@ export const ALTERNATIVES = {
   'cable-crunch': ['plank', 'dead-bug'],
 };
 
+
+/**
+ * Pegada e posicionamento.
+ *
+ * `quick` é a linha que aparece no meio do treino: o mínimo para não errar a
+ * montagem do exercício. O resto abre na ficha, com o que muda em cada variação
+ * (qual barra/pegador usar e quando faz sentido trocar).
+ */
+export const SETUP = {
+  'lat-pulldown': {
+    quick: 'Barra longa, pegada pronada um pouco mais aberta que os ombros. Puxe levando os COTOVELOS para baixo, abdômen firme.',
+    bar: 'A barra longa e reta é a padrão. O triângulo (pegada neutra, mãos próximas) e a barra curta supinada também servem para o mesmo movimento — escolha pelo conforto do ombro.',
+    handWidth: 'Cerca de 1,2 a 1,5 vez a largura dos ombros na barra longa. Pegada aberta demais encurta a amplitude e incomoda o ombro; muito fechada vira trabalho de bíceps.',
+    elbows: 'Apontados para baixo e levemente à frente durante a descida da barra. Pense em "enfiar o cotovelo no bolso de trás", não em puxar com a mão.',
+    core: 'Abdômen firme para o tronco não balançar. Incline o tronco só uns 10–15° para trás e mantenha esse ângulo do começo ao fim da série.',
+    variations: [
+      { name: 'Barra longa pronada (padrão)', changes: 'Pegada aberta, palmas para frente.', when: 'Escolha principal para as costas no geral.' },
+      { name: 'Triângulo (pegada neutra)', changes: 'Mãos próximas, palmas se olhando.', when: 'Quando o ombro incomoda na pegada aberta, ou para sentir mais a parte de baixo das costas laterais.' },
+      { name: 'Barra curta supinada', changes: 'Palmas para você, mãos na largura dos ombros.', when: 'Puxada mais forte, com mais participação do bíceps.' },
+      { name: 'Máquina com braços independentes', changes: 'Cada lado trabalha sozinho.', when: 'Para corrigir diferença entre os lados.' },
+    ],
+  },
+  'seated-cable-row': {
+    quick: 'Triângulo na largura dos ombros. Cotovelos rentes ao corpo, puxe até a barriga. Tronco parado, abdômen firme.',
+    bar: 'O triângulo (pegada neutra) é o padrão e o mais confortável. A barra reta pronada abre mais os cotovelos e pega mais a parte alta das costas e o posterior de ombro.',
+    handWidth: 'No triângulo, mãos na largura natural do pegador. Na barra reta, um pouco mais que a largura dos ombros.',
+    elbows: 'Com o triângulo, cotovelos passam rentes às costelas. Com a barra reta, cotovelos abrem a ~45°. Pare quando a mão chegar ao abdômen — não force além.',
+    core: 'Abdômen firme e coluna neutra. O tronco fica quase parado: se ele vai e volta para gerar impulso, o peso está alto demais.',
+    variations: [
+      { name: 'Triângulo (padrão)', changes: 'Pegada neutra, cotovelos rentes.', when: 'Escolha principal: mais espessura de costas.' },
+      { name: 'Barra reta pronada', changes: 'Cotovelos mais abertos.', when: 'Para enfatizar trapézio médio e posterior de ombro.' },
+      { name: 'Corda ou pegador unilateral', changes: 'Um braço de cada vez, amplitude maior.', when: 'Para sentir melhor o lado que trabalha menos.' },
+    ],
+  },
+  'chest-supported-row': {
+    quick: 'Peito colado no apoio o tempo todo. Comece o movimento juntando as escápulas, depois puxe os cotovelos para trás.',
+    bar: 'Use os pegadores neutros (verticais) quando quiser cotovelos rentes; os pronados (horizontais) quando quiser mais posterior de ombro.',
+    handWidth: 'Largura dos ombros nos pegadores neutros; um pouco mais aberta nos pronados.',
+    elbows: 'Cotovelos param na linha do tronco. Passar muito além disso força o ombro sem trabalhar mais as costas.',
+    core: 'Como o peito fica apoiado, o abdômen só precisa manter o tronco firme — o mérito do exercício é justamente não dar para usar impulso.',
+    variations: [
+      { name: 'Pegada neutra', changes: 'Cotovelos rentes ao corpo.', when: 'Foco em espessura das costas.' },
+      { name: 'Pegada pronada aberta', changes: 'Cotovelos a 45–90°.', when: 'Foco em trapézio médio e posterior de ombro.' },
+    ],
+  },
+  'unilateral-pulldown': {
+    quick: 'Uma alça só. Deixe o ombro subir no topo, puxe o cotovelo até a costela. Abdômen firme para o tronco não girar.',
+    bar: 'Alça simples (estribo) na polia alta.',
+    handWidth: 'Não se aplica — pegada neutra na alça.',
+    elbows: 'O cotovelo desce colado à lateral do corpo e para na altura da costela.',
+    core: 'Abdômen firme: o tronco não deve girar acompanhando o braço. Se girar, diminua a carga.',
+    variations: [
+      { name: 'Sentado na máquina', changes: 'Coxas travadas.', when: 'Mais estável, permite mais carga.' },
+      { name: 'Ajoelhado sob a polia', changes: 'Tronco livre.', when: 'Amplitude maior, exige mais do core.' },
+    ],
+  },
+  'machine-chest-press': {
+    quick: 'Pegadores na linha do MEIO DO PEITO. Cotovelos a 45–60° do corpo, costas apoiadas, abdômen firme.',
+    bar: 'Pegada neutra (vertical) costuma ser mais amigável ao ombro; a pronada (horizontal) recruta um pouco mais o peito.',
+    handWidth: 'Largura em que, no fim do movimento, o antebraço fica na vertical vendo de frente.',
+    elbows: 'Entre 45° e 60° do tronco — nunca abertos a 90°, que é a posição que mais incomoda o ombro. Não trave os cotovelos no final.',
+    core: 'Costas e cabeça apoiadas, abdômen firme, pés no chão. Não arqueie a lombar para empurrar mais.',
+    variations: [
+      { name: 'Pegada neutra', changes: 'Palmas se olhando.', when: 'Se o ombro incomoda.' },
+      { name: 'Pegada pronada', changes: 'Palmas para baixo/frente.', when: 'Padrão para peito.' },
+      { name: 'Máquina convergente', changes: 'Os braços se aproximam no fim.', when: 'Contração final mais forte.' },
+    ],
+  },
+  'incline-press': {
+    quick: 'Banco entre 30° e 45°. Mãos na linha da parte ALTA do peito, cotovelos a ~45°, lombar sem arquear demais.',
+    bar: 'Com halteres a pegada pode ser semi-neutra (mais confortável). Na máquina ou no Smith, pegada pronada na largura padrão.',
+    handWidth: 'Pouco mais aberta que os ombros. Muito aberta joga tensão para a frente do ombro.',
+    elbows: '45° em relação ao tronco. No topo, empurre um pouco para dentro (as mãos se aproximam), sem travar o cotovelo.',
+    core: 'Abdômen firme, costelas para baixo. Inclinação maior que 45° transforma o exercício em desenvolvimento de ombro.',
+    variations: [
+      { name: 'Halteres', changes: 'Mais amplitude e liberdade de trajetória.', when: 'Melhor alongamento; exige mais estabilidade.' },
+      { name: 'Máquina inclinada', changes: 'Trajetória guiada.', when: 'Para treinar perto da falha com segurança.' },
+      { name: 'Smith inclinado', changes: 'Barra guiada.', when: 'Meio-termo entre halteres e máquina.' },
+    ],
+  },
+  'pec-deck': {
+    quick: 'Pegadores na altura do PEITO, cotovelo com flexão leve e FIXA. Feche até quase encostar as mãos e aperte meio segundo.',
+    bar: 'Apoio de antebraço (almofada) ou pegador vertical, conforme a máquina.',
+    handWidth: 'Definida pela máquina — o que importa é o ajuste da altura do banco.',
+    elbows: 'Flexão leve e constante: o cotovelo não abre nem fecha durante a série. Se ele dobra, virou supino.',
+    core: 'Costas apoiadas, abdômen firme, sem projetar o ombro à frente na abertura.',
+    variations: [
+      { name: 'Peck deck', changes: 'Trajetória guiada.', when: 'Padrão, mais simples de executar.' },
+      { name: 'Crossover na polia', changes: 'Tensão mais constante.', when: 'Quando quiser variar o ângulo.' },
+      { name: 'Crucifixo com halteres', changes: 'Mais alongamento, menos tensão no fim.', when: 'Variação livre.' },
+    ],
+  },
+  'cable-crossover': {
+    quick: 'Um pé à frente, tronco levemente inclinado. Cotovelo com flexão fixa, junte as mãos à frente do peito.',
+    bar: 'Alças simples, uma em cada polia.',
+    handWidth: 'As mãos se cruzam levemente à frente do corpo no fim do movimento.',
+    elbows: 'Flexão leve e fixa, como num abraço. Não estenda nem dobre durante a série.',
+    core: 'Abdômen firme e passada à frente para estabilizar — sem balançar o tronco para ajudar.',
+    variations: [
+      { name: 'Polia alta (de cima para baixo)', changes: 'Enfatiza a parte de baixo do peito.', when: 'Variação clássica.' },
+      { name: 'Polia média', changes: 'Peito no geral.', when: 'Mais equilibrado.' },
+      { name: 'Polia baixa (de baixo para cima)', changes: 'Enfatiza a parte de cima do peito.', when: 'Complemento do inclinado.' },
+    ],
+  },
+  'shoulder-press': {
+    quick: 'Pegadores na altura das ORELHAS. Empurre para cima sem travar o cotovelo. Abdômen firme, costelas para baixo.',
+    bar: 'Pegada neutra (palmas se olhando) costuma ser mais confortável para o ombro; pronada é a padrão.',
+    handWidth: 'Aquela em que o antebraço fica vertical quando o cotovelo está a 90°.',
+    elbows: 'Levemente à frente do corpo, não totalmente abertos para os lados. Desça até a altura das orelhas/queixo.',
+    core: 'Abdômen firme é o que impede a lombar de arquear — o erro mais comum aqui. Glúteo contraído ajuda.',
+    variations: [
+      { name: 'Máquina', changes: 'Trajetória guiada.', when: 'Padrão, mais seguro perto da falha.' },
+      { name: 'Halteres sentado', changes: 'Mais exigência de estabilidade.', when: 'Quando quiser variar.' },
+      { name: 'Pegada neutra', changes: 'Palmas se olhando.', when: 'Se houver desconforto no ombro.' },
+    ],
+  },
+  'lateral-raise': {
+    quick: 'Peso LEVE. Suba liderando pelo COTOVELO até a linha dos ombros, sem encolher o pescoço. Desça contando 2 segundos.',
+    bar: 'Halteres, máquina específica ou polia baixa com alça.',
+    handWidth: 'Braços ao lado do corpo, mãos na largura do quadril no início.',
+    elbows: 'Levemente flexionados e FIXOS. O cotovelo sobe antes da mão — se a mão sobe primeiro, o trabalho sai do ombro.',
+    core: 'Abdômen firme para não usar impulso de quadril. Ombro longe da orelha: não encolha o trapézio.',
+    variations: [
+      { name: 'Halteres em pé', changes: 'Padrão.', when: 'Escolha principal.' },
+      { name: 'Máquina de elevação lateral', changes: 'Trajetória guiada, tensão constante.', when: 'Ótima para repetições altas sem perder a técnica.' },
+      { name: 'Polia unilateral', changes: 'Tensão constante desde o início.', when: 'Para sentir melhor o lado mais fraco.' },
+    ],
+  },
+  'reverse-fly': {
+    quick: 'Sentado de FRENTE para o encosto, peito apoiado. Braços quase estendidos na altura dos ombros, abra até a linha do corpo.',
+    bar: 'Pegadores verticais (neutro) ou horizontais (pronado), conforme a máquina.',
+    handWidth: 'Definida pela máquina; ajuste os braços dela para começar à frente do peito.',
+    elbows: 'Quase estendidos, com flexão mínima e fixa. Dobrar o cotovelo transforma em remada.',
+    core: 'Peito colado no apoio, abdômen firme. Ombros longe das orelhas durante todo o movimento.',
+    variations: [
+      { name: 'Peck deck invertido', changes: 'Guiado, peito apoiado.', when: 'Padrão.' },
+      { name: 'Crucifixo inverso com halteres', changes: 'Tronco inclinado, livre.', when: 'Sem máquina disponível.' },
+      { name: 'Face pull na polia', changes: 'Puxa em direção ao rosto.', when: 'Excelente para saúde do ombro.' },
+    ],
+  },
+  'biceps-curl': {
+    quick: 'Cotovelos COLADOS ao tronco e parados. Suba até a contração, desça até esticar quase totalmente. Sem balançar.',
+    bar: 'Halteres (pegada supinada), barra W (mais confortável para o punho) ou polia baixa (tensão constante).',
+    handWidth: 'Largura dos ombros. Na barra W, use as pegadas inclinadas se o punho incomodar.',
+    elbows: 'Ficam junto ao tronco e não vão para frente. O cotovelo é a dobradiça: só ele se move.',
+    core: 'Abdômen firme, costelas para baixo. Se o tronco joga para trás para subir o peso, está pesado demais.',
+    variations: [
+      { name: 'Halteres', changes: 'Permite girar o punho na subida.', when: 'Padrão.' },
+      { name: 'Barra W', changes: 'Punho em posição intermediária.', when: 'Se a barra reta incomoda o punho.' },
+      { name: 'Polia baixa', changes: 'Tensão constante.', when: 'Boa para finalizar o treino.' },
+      { name: 'Rosca scott', changes: 'Braço apoiado, sem impulso.', when: 'Quando quiser isolar de verdade.' },
+    ],
+  },
+  'hammer-curl': {
+    quick: 'Palmas viradas uma para a outra o tempo todo (como segurar dois martelos). Cotovelos parados ao lado do corpo.',
+    bar: 'Halteres ou corda na polia baixa.',
+    handWidth: 'Largura do quadril, braços ao lado do corpo.',
+    elbows: 'Colados ao tronco, sem avançar. Punho firme e neutro — ele não gira em nenhum momento.',
+    core: 'Abdômen firme, sem usar impulso de quadril.',
+    variations: [
+      { name: 'Halteres simultâneos', changes: 'Padrão.', when: 'Escolha principal.' },
+      { name: 'Alternado', changes: 'Um braço de cada vez.', when: 'Permite mais concentração por lado.' },
+      { name: 'Corda na polia', changes: 'Tensão constante.', when: 'Variação para o fim do treino.' },
+    ],
+  },
+  'triceps-pushdown': {
+    quick: 'Cotovelos COLADOS ao corpo e parados. Empurre até esticar, volte só até o cotovelo a 90°. Tronco levemente inclinado.',
+    bar: 'Corda (permite abrir as mãos no fim, contração maior), barra reta (mais carga) ou barra V (meio-termo, melhor para o punho).',
+    handWidth: 'Na barra, largura dos ombros. Na corda, mãos na altura das bolinhas, polegares para cima.',
+    elbows: 'A dobradiça do movimento. Se afastarem do tronco ou forem para trás, o peso está alto demais.',
+    core: 'Abdômen firme, joelhos levemente flexionados, tronco inclinado uns 10–15° à frente e PARADO.',
+    variations: [
+      { name: 'Corda', changes: 'Abre as mãos no fim do movimento.', when: 'Melhor contração final.' },
+      { name: 'Barra reta', changes: 'Permite mais carga.', when: 'Quando o foco for carga.' },
+      { name: 'Barra V', changes: 'Punho em posição intermediária.', when: 'Se o punho incomoda na barra reta.' },
+    ],
+  },
+  'leg-press': {
+    quick: 'Pés na largura dos ombros, na METADE ou parte alta da plataforma. Desça só até onde não dói. Quadril colado no encosto.',
+    bar: 'Não se aplica — o ajuste aqui é a posição dos pés e do encosto.',
+    handWidth: 'Mãos nas alças laterais, ombros relaxados.',
+    elbows: 'Não se aplica.',
+    core: 'Abdômen firme e quadril colado no assento. O sinal de que desceu demais é a lombar "descolar" e arredondar — é onde a amplitude deve parar.',
+    variations: [
+      { name: 'Pés mais altos na plataforma', changes: 'Menos flexão de joelho, mais quadril e posterior.', when: 'Costuma ser mais amigável para o tendão patelar.' },
+      { name: 'Pés mais baixos', changes: 'Mais flexão de joelho e quadríceps.', when: 'Só se não houver desconforto no joelho.' },
+      { name: 'Pés mais abertos', changes: 'Mais adutor e glúteo.', when: 'Variação de estímulo.' },
+      { name: 'Unilateral', changes: 'Uma perna por vez, carga bem menor.', when: 'Para equilibrar os lados.' },
+    ],
+  },
+  'leg-extension': {
+    quick: 'Joelho ALINHADO com o eixo da máquina, rolo logo acima do tornozelo. Movimento controlado, sem chute.',
+    bar: 'Não se aplica.',
+    handWidth: 'Mãos nas alças laterais para estabilizar o quadril.',
+    elbows: 'Não se aplica.',
+    core: 'Costas apoiadas e quadril firme no assento — sem levantar o bumbum para ajudar na subida.',
+    variations: [
+      { name: 'Amplitude parcial (parte final)', changes: 'Trabalha só o trecho mais esticado.', when: 'Somente se o profissional orientar; é a faixa que costuma incomodar menos o tendão patelar.' },
+      { name: 'Unilateral', changes: 'Uma perna por vez.', when: 'Para comparar os lados.' },
+    ],
+  },
+  'leg-curl': {
+    quick: 'Rolo logo ACIMA do calcanhar, joelho alinhado ao eixo. Quadril colado na mesa, sem levantar o bumbum.',
+    bar: 'Não se aplica.',
+    handWidth: 'Mãos nas alças.',
+    elbows: 'Não se aplica.',
+    core: 'Abdômen firme para manter o quadril apoiado. O quadril subindo é o erro clássico: indica carga alta demais.',
+    variations: [
+      { name: 'Mesa flexora (deitado)', changes: 'Quadril estendido.', when: 'Padrão.' },
+      { name: 'Cadeira flexora (sentado)', changes: 'Quadril flexionado, mais alongamento.', when: 'Boa alternativa quando a mesa está ocupada.' },
+      { name: 'Unilateral', changes: 'Uma perna por vez.', when: 'Para equilibrar os lados.' },
+    ],
+  },
+  'romanian-deadlift': {
+    quick: 'Peso RENTE às pernas. Empurre o quadril para trás, joelho levemente flexionado e FIXO. Coluna neutra, abdômen firme.',
+    bar: 'Halteres (mais fácil de aprender) ou barra. Com halteres, pegada neutra ao lado das coxas ou pronada à frente.',
+    handWidth: 'Largura do quadril, o peso deslizando encostado na perna.',
+    elbows: 'Braços esticados e relaxados — são só "ganchos", não puxam nada.',
+    core: 'Abdômen firme e costelas para baixo durante todo o movimento. Se a lombar arredondar, pare a descida ali.',
+    variations: [
+      { name: 'Halteres', changes: 'Mais fácil de controlar a trajetória.', when: 'Para aprender o movimento.' },
+      { name: 'Barra', changes: 'Permite mais carga.', when: 'Quando a técnica estiver consistente.' },
+      { name: 'Unilateral', changes: 'Uma perna, exige equilíbrio.', when: 'Para corrigir assimetria.' },
+    ],
+  },
+  'hip-thrust': {
+    quick: 'Borda do banco logo abaixo das escápulas. Tíbia VERTICAL no topo, queixo para o peito, aperte o glúteo 1 segundo.',
+    bar: 'Barra com almofada, máquina específica ou halter sobre o quadril.',
+    handWidth: 'Mãos segurando a barra na largura confortável, ou apoiadas no banco.',
+    elbows: 'Apoiados no banco quando a versão permitir — ajudam a estabilizar.',
+    core: 'Abdômen firme e costelas para baixo. No topo, o corpo forma uma linha reta de joelho a ombro: não hiperestenda a lombar.',
+    variations: [
+      { name: 'Máquina de hip thrust', changes: 'Mais prático de montar.', when: 'Se a academia tiver.' },
+      { name: 'Barra no banco', changes: 'Clássico.', when: 'Permite bastante carga.' },
+      { name: 'Unilateral', changes: 'Uma perna de cada vez.', when: 'Carga menor, mais exigência de estabilidade.' },
+    ],
+  },
+  'calf-raise': {
+    quick: 'Ponta dos pés na plataforma, calcanhar livre. Desça até alongar, suba o MÁXIMO e segure meio segundo. Sem quicar.',
+    bar: 'Apoio nos ombros (em pé), sobre os joelhos (sentado) ou a própria plataforma do leg press.',
+    handWidth: 'Mãos no apoio, só para equilíbrio.',
+    elbows: 'Não se aplica.',
+    core: 'Corpo firme e joelho estável — na versão em pé, joelho quase estendido; na sentada, a 90°.',
+    variations: [
+      { name: 'Em pé', changes: 'Joelho estendido, pega mais o gastrocnêmio.', when: 'Padrão.' },
+      { name: 'Sentado', changes: 'Joelho a 90°, pega mais o sóleo.', when: 'Complemento importante para corrida e futebol.' },
+      { name: 'No leg press', changes: 'Carga alta com pouca exigência de equilíbrio.', when: 'Quando as máquinas estiverem ocupadas.' },
+    ],
+  },
+  'hip-abduction': {
+    quick: 'Costas apoiadas, joelhos entre os apoios. Abra controlado, volte sem deixar as placas baterem.',
+    bar: 'Não se aplica.',
+    handWidth: 'Mãos nas alças laterais.',
+    elbows: 'Não se aplica.',
+    core: 'Abdômen firme; o tronco não se move. Inclinar para frente muda a ênfase para a parte superior do glúteo.',
+    variations: [
+      { name: 'Tronco reto', changes: 'Glúteo médio no geral.', when: 'Padrão.' },
+      { name: 'Tronco inclinado à frente', changes: 'Mais glúteo máximo superior.', when: 'Variação de estímulo.' },
+    ],
+  },
+  'box-squat': {
+    quick: 'Cadeira firme atrás. Empurre o QUADRIL para trás e desça até tocar de leve. Joelho na direção do pé, abdômen firme.',
+    bar: 'Peso corporal, halter junto ao peito (goblet) ou mochila carregada.',
+    handWidth: 'Braços à frente para contrapeso, ou halter segurado junto ao peito com as duas mãos.',
+    elbows: 'Se usar halter, cotovelos apontando para baixo, junto às costelas.',
+    core: 'Abdômen firme e peito aberto. A altura da cadeira é o seu limite de amplitude: comece mais alto e só desça a altura se não houver dor.',
+    variations: [
+      { name: 'Peso corporal', changes: 'Sem carga externa.', when: 'Para aprender e para treinar em casa.' },
+      { name: 'Goblet (halter no peito)', changes: 'Contrapeso ajuda a manter o tronco ereto.', when: 'Quando quiser carga com boa postura.' },
+      { name: 'Caixa mais alta', changes: 'Menos flexão de joelho.', when: 'Se houver desconforto no tendão patelar.' },
+    ],
+  },
+  'step-up': {
+    quick: 'Pé INTEIRO no apoio. Suba empurrando com a perna de cima, sem impulso do pé de baixo. Desça devagar.',
+    bar: 'Peso corporal, halteres ao lado do corpo ou mochila nas costas.',
+    handWidth: 'Braços livres ou halteres ao lado do corpo.',
+    elbows: 'Relaxados ao lado do corpo.',
+    core: 'Abdômen firme, tronco ereto. Joelho apontando na direção dos dedos do pé.',
+    variations: [
+      { name: 'Apoio baixo', changes: 'Menos flexão de joelho.', when: 'Começo, ou joelho sensível.' },
+      { name: 'Apoio na altura do joelho', changes: 'Mais exigência.', when: 'Progressão.' },
+    ],
+  },
+  'push-up': {
+    quick: 'Mãos um pouco mais abertas que os ombros, na linha do PEITO. Corpo reto, cotovelos a ~45°, abdômen e glúteo firmes.',
+    bar: 'Sem equipamento. Para facilitar, mãos em uma superfície mais alta.',
+    handWidth: 'Um pouco mais que a largura dos ombros; dedos apontando para frente.',
+    elbows: 'A 45° do tronco — nem colados, nem abertos a 90°.',
+    core: 'Abdômen e glúteo contraídos: o corpo é uma tábua. Quadril caindo ou empinado é o erro mais comum.',
+    variations: [
+      { name: 'Mãos elevadas', changes: 'Mais fácil.', when: 'Enquanto a força não chega.' },
+      { name: 'No chão', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Pés elevados', changes: 'Mais difícil, pega mais peito alto.', when: 'Progressão quando 15 repetições ficarem fáceis.' },
+    ],
+  },
+  'inverted-row': {
+    quick: 'Pegada na largura dos ombros, corpo reto. Puxe o PEITO em direção à mesa, cotovelos para trás. Glúteo firme.',
+    bar: 'Mesa firme, barra baixa ou cabo de vassoura entre duas cadeiras pesadas.',
+    handWidth: 'Largura dos ombros; mais aberta pega mais posterior de ombro.',
+    elbows: 'Rentes ao corpo, terminando atrás da linha do tronco.',
+    core: 'Abdômen e glúteo firmes — o corpo é uma prancha inclinada. Quadril caindo é o erro típico.',
+    variations: [
+      { name: 'Joelhos dobrados', changes: 'Mais fácil.', when: 'Começo.' },
+      { name: 'Pernas estendidas', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Pés elevados', changes: 'Corpo mais horizontal, bem mais difícil.', when: 'Progressão.' },
+    ],
+  },
+  'bench-dip': {
+    quick: 'Mãos na beira do apoio, dedos para frente. Desça até o cotovelo a ~90°, corpo rente ao apoio.',
+    bar: 'Cadeira, cama, sofá ou degrau firme.',
+    handWidth: 'Largura do quadril.',
+    elbows: 'Apontando para TRÁS, não para os lados. Pare a descida em 90°.',
+    core: 'Abdômen firme, corpo próximo ao apoio. Afastar o quadril do banco força o ombro sem ajudar o tríceps.',
+    variations: [
+      { name: 'Joelhos dobrados', changes: 'Mais fácil.', when: 'Começo.' },
+      { name: 'Pernas estendidas', changes: 'Mais carga no tríceps.', when: 'Progressão.' },
+    ],
+  },
+  'pike-push-up': {
+    quick: 'Quadril BEM ALTO, corpo em "V" invertido. Desça a cabeça entre as mãos, cotovelos para trás e um pouco para fora.',
+    bar: 'Sem equipamento; pés elevados dificultam.',
+    handWidth: 'Um pouco mais abertas que os ombros.',
+    elbows: 'Apontando para trás/diagonal, não totalmente para os lados.',
+    core: 'Abdômen firme para manter o "V". Se o quadril baixa, vira flexão comum.',
+    variations: [
+      { name: 'Pés no chão', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Pés elevados', changes: 'Tronco mais vertical, mais ombro.', when: 'Progressão.' },
+    ],
+  },
+  'backpack-row': {
+    quick: 'Quadril para trás, coluna neutra, tronco inclinado. Puxe a mochila até a barriga, cotovelos rentes.',
+    bar: 'Mochila carregada com livros ou garrafas.',
+    handWidth: 'Mãos nas alças, largura dos ombros.',
+    elbows: 'Rentes ao corpo, terminando atrás da linha do tronco.',
+    core: 'Abdômen firme e coluna neutra. Se a lombar cansar antes das costas, faça apoiando uma das mãos numa cadeira.',
+    variations: [
+      { name: 'Bilateral', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Unilateral com apoio', changes: 'Menos exigência da lombar.', when: 'Quando a lombar limitar.' },
+    ],
+  },
+  'glute-bridge': {
+    quick: 'Calcanhares perto do quadril, empurre pelo CALCANHAR. Suba até alinhar joelho–quadril–ombro e aperte 1 segundo.',
+    bar: 'Peso corporal ou mochila sobre o quadril.',
+    handWidth: 'Braços ao lado do corpo.',
+    elbows: 'Apoiados no chão.',
+    core: 'Abdômen firme e costelas para baixo — a subida vem do glúteo, não de arquear a lombar.',
+    variations: [
+      { name: 'Dois pés', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Unilateral', changes: 'Bem mais difícil.', when: 'Progressão natural em casa.' },
+      { name: 'Pés elevados', changes: 'Mais amplitude.', when: 'Variação.' },
+    ],
+  },
+  'single-leg-rdl': {
+    quick: 'Uma perna, joelho levemente flexionado. Quadril para trás, perna livre indo para trás como contrapeso. Coluna neutra.',
+    bar: 'Peso corporal, halter ou mochila.',
+    handWidth: 'Braços livres para equilíbrio, ou segurando o peso à frente.',
+    elbows: 'Relaxados.',
+    core: 'Abdômen firme e quadril NIVELADO — não deixe o lado da perna livre girar para cima.',
+    variations: [
+      { name: 'Com apoio da mão', changes: 'Menos equilíbrio exigido.', when: 'Começo.' },
+      { name: 'Sem apoio', changes: 'Padrão.', when: 'Referência.' },
+      { name: 'Com mochila', changes: 'Mais carga.', when: 'Progressão.' },
+    ],
+  },
+};
+
 for (const ex of EXERCISES) {
   ex.alternatives = (ALTERNATIVES[ex.id] || []).filter((id) => id !== ex.id);
+  if (SETUP[ex.id]) ex.setup = SETUP[ex.id];
 }
 
 export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));

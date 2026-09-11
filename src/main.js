@@ -134,11 +134,29 @@ function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol === 'file:') return;
 
-  const register = () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => {
+  // Se a página já estava sendo controlada por um service worker, uma troca de
+  // controlador significa versão nova publicada: recarrega uma vez para o app
+  // abrir atualizado, sem precisar fechar e abrir duas vezes.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+
+  const register = async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('./sw.js');
+      // procura atualização ao abrir e sempre que o app volta para a frente
+      registration.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') registration.update().catch(() => {});
+      });
+    } catch (err) {
       // Sem service worker o app continua funcionando — só perde o modo offline.
       console.warn('Service worker não registrado:', err);
-    });
+    }
   };
 
   if (document.readyState === 'complete') register();

@@ -9,7 +9,7 @@
  * Os dados do usuário NÃO passam por aqui: ficam no IndexedDB.
  */
 
-const VERSION = 'kao-v2';
+const VERSION = 'kao-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 
 const SHELL = [
@@ -43,6 +43,7 @@ const SHELL = [
   './src/logic/readiness.js',
   './src/logic/report.js',
   './src/logic/backup.js',
+  './src/logic/records.js',
   './src/ui/shell.js',
   './src/ui/components/toast.js',
   './src/ui/components/sheet.js',
@@ -67,6 +68,7 @@ const SHELL = [
   './src/ui/views/settings.js',
   './src/ui/views/more.js',
   './src/ui/views/readiness.js',
+  './src/ui/views/onboarding.js',
 ];
 
 self.addEventListener('install', (event) => {

@@ -20,6 +20,7 @@ import { topbar, page, safetyNote, emptyState } from '../shell.js';
 import { exerciseSheet } from './exercise.js';
 import { openKneeCheckSheet } from './knee.js';
 import { openReadinessSheet } from './readiness.js';
+import { checkSetRecords, checkSessionRecords, celebrationText, sessionAchievements, RECORD_TYPES } from '../../logic/records.js';
 
 /* ------------------------------------------------------------------ */
 /* Início do treino                                                     */
@@ -41,9 +42,10 @@ export async function startWorkoutFlow(plan, date = today()) {
     if (answered === 'cancel') return;
   }
 
-  // 2) Check rápido de recuperação (opcional)
+  // 2) Check rápido de recuperação (opcional).
+  //    A pergunta do joelho só entra quando o dia exige das pernas.
   if (settings.askRecoveryBeforeWorkout !== false) {
-    await openReadinessSheet({ date, optional: true });
+    await openReadinessSheet({ date, optional: true, includeKnee: plan.needsKneeCheck });
   }
 
   if (strength) {
@@ -187,6 +189,9 @@ async function renderTrainer(state, ctx) {
     state.sets.push(row);
     haptic([12, 40, 12]);
 
+    const records = await checkSetRecords(row, exercise);
+    for (const record of records) celebrate(record);
+
     if (row.pain >= 4) {
       toast('Dor registrada. Se ela for importante ou piorar, reduza a carga e converse com seu ortopedista/fisioterapeuta.', { type: 'warn', ms: 5000 });
     }
@@ -231,6 +236,15 @@ async function renderTrainer(state, ctx) {
       h('div.trainer__exsub', [exercise?.nameEn, exercise?.muscleGroup].filter(Boolean).join(' · ')),
     ),
 
+    /* como pegar / como posicionar — a consulta rápida no meio do treino */
+    exercise?.setup?.quick
+      ? h('div.setup-quick.clickable', { onClick: () => exerciseSheet(exercise, { item, focus: 'setup' }) },
+        h('span.setup-quick__icon', '🤲'),
+        h('span.grow', exercise.setup.quick),
+        h('span.muted', 'ver +'),
+      )
+      : null,
+
     item.permission?.state === 'forbidden'
       ? safetyNote(`Este exercício está marcado como NÃO liberado nas suas orientações médicas. ${item.permission.note}`, 'danger')
       : item.provisional || exercise?.needsMedicalReview
@@ -244,7 +258,11 @@ async function renderTrainer(state, ctx) {
 
     h('div.btn-row',
       h('button.btn.btn--sm.btn--ghost', { onClick: () => exerciseSheet(exercise, { item }) }, '❔ Como fazer?'),
+      h('button.btn.btn--sm.btn--ghost', { onClick: () => openSwapSheet(state, ctx) }, '🔁 Trocar máquina'),
+    ),
+    h('div.btn-row',
       h('button.btn.btn--sm.btn--ghost', { onClick: () => navigate(`/progresso/${item.exerciseId}`) }, '📈 Histórico'),
+      h('button.btn.btn--sm.btn--ghost', { onClick: () => navigate(`/academia?exercicio=${item.exerciseId}`) }, '📷 Foto da máquina'),
     ),
 
     /* série atual */
@@ -257,14 +275,20 @@ async function renderTrainer(state, ctx) {
         h('span.pill', item.timeBased ? `${item.durationSec}s` : `${item.repMin}–${item.repMax} reps · RIR ${item.rir ?? 2}`),
       ),
       h('div.setdots', { style: { marginTop: '10px' } },
-        ...Array.from({ length: totalSets }, (_, i) => {
+        ...Array.from({ length: Math.max(totalSets, doneSets.length) }, (_, i) => {
           const d = doneSets[i];
           const cls = d ? 'setdot setdot--done' : (i === doneSets.length ? 'setdot setdot--current' : 'setdot');
-          return h('div', { class: cls }, d
-            ? (item.timeBased ? `${d.durationSec}s` : `${num(d.weight, 1)}×${d.reps}`)
-            : `${i + 1}`);
+          if (!d) return h('div', { class: cls }, `${i + 1}`);
+          return h('button', {
+            class: `${cls} setdot--editable`,
+            title: 'Tocar para corrigir',
+            onClick: () => openEditSetSheet(d, item, state, ctx),
+          }, item.timeBased ? `${d.durationSec}s` : `${num(d.weight, 1)}×${d.reps}`);
         }),
       ),
+      doneSets.length
+        ? h('div.muted', { style: { fontSize: '11.5px', marginTop: '6px' } }, 'Toque em uma série registrada para corrigir carga ou repetições.')
+        : null,
       h('div.trainer__prev', { style: { marginTop: '10px' } },
         h('div.muted', { style: { fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.08em' } }, 'Último treino'),
         h('div', formatLastSets(last)),
@@ -300,18 +324,126 @@ async function renderTrainer(state, ctx) {
     h('button.btn.btn--primary.btn--lg.btn--block', { onClick: finishSet }, '✓  FINALIZAR SÉRIE'),
 
     h('div.btn-row',
+      h('button.btn.btn--sm.btn--ghost', {
+        onClick: async () => {
+          item.sets = (item.sets || 0) + 1;
+          await store.sessions.save(session);
+          toastOk('Série extra adicionada');
+          ctx.rerender();
+        },
+      }, '＋ Série extra'),
+      h('button.btn.btn--sm.btn--ghost', {
+        onClick: () => {
+          state.itemIndex += 1;
+          state.setIndex = 0;
+          session.cursor = { itemIndex: state.itemIndex, setIndex: 0 };
+          store.sessions.save(session);
+          ctx.rerender();
+        },
+      }, doneSets.length >= totalSets ? 'Próximo exercício ›' : 'Encerrar exercício ›'),
+    ),
+
+    h('div.btn-row',
       h('button.btn.btn--sm.btn--quiet', {
         disabled: state.itemIndex === 0,
         onClick: () => { state.itemIndex = Math.max(0, state.itemIndex - 1); ctx.rerender(); },
       }, '‹ Anterior'),
       h('button.btn.btn--sm.btn--quiet', {
-        onClick: () => { state.itemIndex += 1; ctx.rerender(); },
-      }, 'Próximo ›'),
+        onClick: () => confirmExit(state, ctx),
+      }, 'Pausar treino'),
     ),
 
     state.rest ? restBar(state, ctx) : null,
     h('div', { style: { height: state.rest ? '150px' : '0' } }),
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Reconhecimento de recorde                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Aviso na hora em que o recorde acontece. Aparece por alguns segundos e some
+ * sozinho: nada de travar o treino com uma janela para fechar.
+ */
+function celebrate(record) {
+  beepFinish();
+  haptic([25, 60, 25, 60, 40]);
+  toast(celebrationText(record), { type: 'record', ms: 6000 });
+}
+
+/* ------------------------------------------------------------------ */
+/* Correção de uma série já registrada                                  */
+/* ------------------------------------------------------------------ */
+
+function openEditSetSheet(row, item, state, ctx) {
+  openSheet({
+    title: `Série ${(row.index ?? 0) + 1} — corrigir`,
+    content: (close) => {
+      const weight = item.timeBased ? null : stepper({
+        value: row.weight ?? 0, step: ctx.settings?.weightIncrementKg ?? 2.5, min: 0, max: 500, unit: 'kg', decimals: 1,
+      });
+      const reps = item.timeBased ? null : stepper({ value: row.reps ?? 0, step: 1, min: 0, max: 60, unit: 'reps', decimals: 0 });
+      const duration = item.timeBased ? stepper({ value: row.durationSec ?? 40, step: 5, min: 5, max: 600, unit: 'seg', decimals: 0 }) : null;
+      const rir = item.timeBased ? null : stepper({ value: row.rir ?? 2, step: 1, min: 0, max: 5, unit: 'RIR', decimals: 0 });
+      const pain = stepper({ value: row.pain ?? 0, step: 1, min: 0, max: 10, unit: 'dor', decimals: 0 });
+
+      return h('div.stack',
+        item.timeBased
+          ? h('div.field', h('label.field__label', 'Tempo'), duration)
+          : h('div.stack.stack--sm',
+            h('div.field', h('label.field__label', 'Carga'), weight),
+            h('div.field', h('label.field__label', 'Repetições'), reps),
+            h('div.field', h('label.field__label', 'RIR'), rir),
+          ),
+        h('div.field', h('label.field__label', 'Dor (0–10)'), pain),
+        h('button.btn.btn--primary.btn--block', {
+          onClick: async () => {
+            const updated = {
+              ...row,
+              weight: item.timeBased ? null : weight.getValue(),
+              reps: item.timeBased ? null : reps.getValue(),
+              durationSec: item.timeBased ? duration.getValue() : null,
+              rir: item.timeBased ? null : rir.getValue(),
+              pain: pain.getValue(),
+            };
+            await store.sets.save(updated);
+            const i = state.sets.findIndex((s) => s.id === row.id);
+            if (i >= 0) state.sets[i] = updated;
+            close();
+            toastOk('Série corrigida');
+            ctx.rerender();
+          },
+        }, 'Salvar correção'),
+        h('button.btn.btn--danger.btn--block', {
+          onClick: async () => {
+            const ok = await confirmSheet({
+              title: 'Excluir esta série?',
+              message: 'Ela sai do histórico e do cálculo de volume.',
+              confirmLabel: 'Excluir',
+              danger: true,
+            });
+            if (!ok) return;
+            await store.sets.remove(row.id);
+            state.sets = state.sets.filter((s) => s.id !== row.id);
+            // reordena os índices das séries restantes deste exercício
+            const remaining = state.sets
+              .filter((s) => s.itemIndex === row.itemIndex)
+              .sort((a, b) => a.ts - b.ts);
+            for (let i = 0; i < remaining.length; i += 1) {
+              if (remaining[i].index !== i) {
+                remaining[i].index = i;
+                await store.sets.save(remaining[i]);
+              }
+            }
+            close();
+            toastOk('Série excluída');
+            ctx.rerender();
+          },
+        }, 'Excluir série'),
+      );
+    },
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -479,6 +611,7 @@ async function finishSession(state, ctx) {
   session.durationMin = Math.max(1, Math.round((session.finishedAt - session.startedAt) / 60000));
   await store.sessions.save(session);
   await store.recomputeDay(session.date);
+  await checkSessionRecords(session);
   beepFinish();
   navigate(`/treinar/${session.id}`);
   refresh();
@@ -503,11 +636,12 @@ function finishPrompt(state, ctx) {
 /* ------------------------------------------------------------------ */
 
 export async function workoutSummaryView(session) {
-  const [sessionSets, log, plan, exMap] = await Promise.all([
+  const [sessionSets, log, plan, exMap, achievements] = await Promise.all([
     store.sets.bySession(session.id),
     store.dailyLog.get(session.date),
     planForDate(session.date),
     store.exercises.map(),
+    sessionAchievements(session.id),
   ]);
 
   const volume = setsVolume(sessionSets);
@@ -526,6 +660,20 @@ export async function workoutSummaryView(session) {
         ? h('div.pill.pill--flame', { style: { marginTop: '8px' } }, '🔥 Promessa do dia cumprida')
         : h('div.pill.pill--warn', { style: { marginTop: '8px' } }, `Faltam ${Math.max(0, 30 - (log?.minutes || 0))} min para a promessa do dia`),
     ),
+
+    achievements.length
+      ? h('div.card.card--record',
+        h('div.card__title', achievements.length === 1 ? 'Você bateu um recorde hoje' : `Você bateu ${achievements.length} recordes hoje`),
+        h('div.stack.stack--sm', { style: { marginTop: '10px' } },
+          ...achievements.map((a) => h('div.report-line',
+            h('span', `${RECORD_TYPES[a.type].icon} ${a.exerciseName}`),
+            h('span.report-line__v', a.text),
+          )),
+        ),
+        h('p.muted', { style: { fontSize: '12.5px', marginTop: '8px' } },
+          'Progresso de verdade é isso: pouca coisa por semana, sempre com a mesma técnica.'),
+      )
+      : null,
 
     cardioBlock && !doneCardio
       ? h('div.card.card--accent',

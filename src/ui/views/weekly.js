@@ -46,7 +46,7 @@ export async function weeklyView({ query }) {
             h('div.list-item__sub', row.text),
           ),
           h('span', { class: row.kind === 'up' ? 'delta-up' : row.kind === 'down' ? 'delta-down' : 'delta-flat' },
-            row.kind === 'up' ? '▲' : row.kind === 'down' ? '▼' : row.kind === 'new' ? '✦' : '='),
+            row.kind === 'up' ? (row.topWeight > (row.prevTop ?? 0) ? '🏆' : '▲') : row.kind === 'down' ? '▼' : row.kind === 'new' ? '✦' : '='),
         )))
         : emptyState('📈', 'Nenhuma série registrada nesta semana.'),
     ),

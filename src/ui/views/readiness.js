@@ -9,7 +9,7 @@ import { scale } from '../components/inputs.js';
 import { evaluateReadiness } from '../../logic/readiness.js';
 import { safetyNote } from '../shell.js';
 
-export function openReadinessSheet({ date = today(), optional = true } = {}) {
+export function openReadinessSheet({ date = today(), optional = true, includeKnee = true } = {}) {
   return new Promise((resolve) => {
     let done = false;
     openSheet({
@@ -20,7 +20,7 @@ export function openReadinessSheet({ date = today(), optional = true } = {}) {
         const energy = scale({ from: 1, to: 5, value: 3, labels: ['sem energia', 'cheio de energia'] });
         const soreness = scale({ from: 1, to: 5, value: 2, labels: ['sem dor muscular', 'muita dor muscular'] });
         const motivation = scale({ from: 1, to: 5, value: 4, labels: ['baixa', 'alta'] });
-        const knee = scale({ from: 0, to: 10, value: 0, labels: ['joelho sem dor', 'dor máxima'] });
+        const knee = includeKnee ? scale({ from: 0, to: 10, value: 0, labels: ['joelho sem dor', 'dor máxima'] }) : null;
         const result = h('div');
 
         const save = async () => {
@@ -29,11 +29,11 @@ export function openReadinessSheet({ date = today(), optional = true } = {}) {
             energy: energy.getValue(),
             soreness: soreness.getValue(),
             motivation: motivation.getValue(),
-            knee: knee.getValue(),
+            knee: knee ? knee.getValue() : 0,
           };
           const verdict = evaluateReadiness(input);
           await store.recovery.save({ id: uid('rec'), date, ...input, verdict: verdict.key, ts: Date.now() });
-          if (input.knee > 0) {
+          if (includeKnee && input.knee > 0) {
             await store.painLogs.save({
               id: uid('pain'),
               date,
@@ -61,7 +61,7 @@ export function openReadinessSheet({ date = today(), optional = true } = {}) {
           h('div.field', h('label.field__label', 'Energia'), energy),
           h('div.field', h('label.field__label', 'Dor muscular'), soreness),
           h('div.field', h('label.field__label', 'Motivação'), motivation),
-          h('div.field', h('label.field__label', 'Joelho esquerdo (0–10)'), knee),
+          includeKnee ? h('div.field', h('label.field__label', 'Joelho esquerdo (0–10)'), knee) : null,
           safetyNote('Indicação prática para conduzir o treino de hoje. Não é avaliação médica.'),
           result,
           h('div.btn-row',
