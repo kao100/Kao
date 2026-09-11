@@ -85,6 +85,8 @@ export const BUILTIN_GYM_EQUIPMENT = [
   /* ---------- braços ---------- */
   eq('rosca-scott', 'biceps-curl', 'rosca-scott', 'Rosca scott / banco com apoio',
     { confirm: true }),
+  eq('polia-triceps', 'triceps-pushdown', 'polia-triceps', 'Polia alta (estação de cabos com barra fixa em cima)',
+    { brand: 'Onix / Technogym', note: 'Prenda a barra ou a corda no carrinho de cima. A mesma estação tem barra fixa no alto e serve de crossover.' }),
 ];
 
 export const GYM_EQUIPMENT_VERSION = 1;

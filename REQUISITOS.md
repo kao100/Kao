@@ -91,7 +91,7 @@ exercício ou anotada na observação da série.
 
 ## Fotos reais das máquinas (quinta rodada)
 
-25 fotos da academia entram em "Minha academia" já associadas aos exercícios
+26 fotos da academia entram em "Minha academia" já associadas aos exercícios
 (`data/gym-equipment.js` + `assets/gym/`). Elas substituem a ilustração do
 equipamento na ficha e no modo treino.
 
@@ -101,9 +101,11 @@ equipamento na ficha e no modo treino.
   recortada para tirar pessoas do fundo;
 - a semente é idempotente: foto que você apagar ou reassociar não volta.
 
+A polia alta do tríceps entrou depois, recortada de uma foto de área que eu
+tinha descartado — o recorte pega só a coluna de cabos, sem ninguém no quadro.
+
 Exercícios ainda sem foto: supino na máquina, remada com apoio do peito,
-posterior de ombro (voador invertido), elevação lateral, rosca martelo e
-tríceps na polia.
+posterior de ombro (voador invertido), elevação lateral e rosca martelo.
 
 ## Pendências assumidas nesta versão
 

@@ -17,6 +17,7 @@ export const KV = {
   PROFILE: 'profile',
   SETTINGS: 'settings',
   SEED_VERSION: 'seedVersion',
+  REMOVED_EQUIPMENT: 'removedBuiltinEquipment',
 };
 
 export async function getKV(key, fallback = null) {
@@ -122,7 +123,27 @@ export const photos = repo('photos', 'ph');
 export const painLogs = repo('painLogs', 'pain');
 export const recovery = repo('recovery', 'rec');
 export const medical = repo('medical', 'med');
-export const equipment = repo('equipment', 'eq');
+/**
+ * Equipamentos ("Minha academia").
+ *
+ * As fotos que já vêm no app (`builtin`) são registros comuns depois de
+ * instaladas: dá para editar, reassociar ou apagar. Apagar grava uma lápide —
+ * assim a semente não traz a foto de volta na próxima atualização, que é
+ * exatamente o que a tela promete ao confirmar a exclusão.
+ */
+export const equipment = {
+  ...repo('equipment', 'eq'),
+  async remove(id) {
+    const row = await db.get('equipment', id);
+    if (row?.builtin) {
+      const removed = (await getKV(KV.REMOVED_EQUIPMENT)) || [];
+      if (!removed.includes(id)) await setKV(KV.REMOVED_EQUIPMENT, [...removed, id]);
+    }
+    return db.remove('equipment', id);
+  },
+  /** Ids de fotos embutidas que você apagou — a semente pula esses. */
+  removedBuiltinIds: async () => (await getKV(KV.REMOVED_EQUIPMENT)) || [],
+};
 export const supplements = repo('supplements', 'sup');
 export const nutrition = repo('nutrition', 'nut');
 

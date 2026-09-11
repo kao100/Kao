@@ -204,8 +204,13 @@ async function migrate(fromVersion, existingEx, existingTpl) {
  * não volta e não é sobrescrita.
  */
 async function seedGymEquipment() {
-  const existing = await store.equipment.all();
+  const [existing, removed] = await Promise.all([
+    store.equipment.all(),
+    store.equipment.removedBuiltinIds(),
+  ]);
   const ids = new Set(existing.map((e) => e.id));
+  // foto que você apagou não volta na atualização seguinte
+  for (const id of removed) ids.add(id);
   const rows = BUILTIN_GYM_EQUIPMENT
     .filter((e) => !ids.has(e.id))
     .map((e) => ({ ...e, createdAt: Date.now(), updatedAt: Date.now() }));
