@@ -9,7 +9,7 @@
  * Os dados do usuário NÃO passam por aqui: ficam no IndexedDB.
  */
 
-const VERSION = 'kao-v9';
+const VERSION = 'kao-v10';
 const SHELL_CACHE = `${VERSION}-shell`;
 
 const SHELL = [

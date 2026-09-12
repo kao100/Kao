@@ -7,11 +7,20 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v9';
-export const APP_DATE = '2026-09-11';
+export const APP_VERSION = 'kao-v10';
+export const APP_DATE = '2026-09-12';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v10',
+    date: '2026-09-12',
+    items: [
+      'As 4 fotos que eu tinha descartado por terem pessoas em quadro entraram (40 no total): a fileira de barras guiadas (Smith), o par abdutora + adutora, a máquina "exTender" de trás e a foto de área da quadra.',
+      'Nenhuma foto ficou de fora: as pessoas foram desfocadas, e a máquina aparece inteira.',
+      'A abdutora e a adutora ficam lado a lado e têm a mesma cara — a foto do par agora explica qual é qual.',
+    ],
+  },
   {
     version: 'kao-v9',
     date: '2026-09-11',

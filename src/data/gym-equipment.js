@@ -30,6 +30,8 @@ export const BUILTIN_GYM_EQUIPMENT = [
     { primary: false, confirm: true }),
   eq('agachamento-sentado', 'leg-press', 'agachamento-sentado', 'Agachamento/hack sentado',
     { primary: false, confirm: true, note: 'Máquina de agachamento com apoio nos ombros e plataforma.' }),
+  eq('maquina-extender', 'leg-press', 'maquina-extender', 'Máquina de placas "exTender" (vista de trás)',
+    { primary: false, confirm: true, note: 'Foto tirada por trás, do lado da piscina: dá para ver a estrutura e as placas, mas não o assento. Vale conferir a etiqueta na frente antes de usar. Um pé de outra pessoa no canto foi desfocado.' }),
 
   eq('leg-extension', 'leg-extension', 'leg-extension', 'Cadeira extensora',
     { note: 'Etiqueta "Leg Extension" na própria máquina.' }),
@@ -37,12 +39,16 @@ export const BUILTIN_GYM_EQUIPMENT = [
     { primary: false, confirm: true }),
   eq('extensora-21', 'leg-extension', 'extensora-flexora-21', 'Máquina nº 21',
     { primary: false, confirm: true, note: 'Pode ser extensora ou flexora sentada — confira.' }),
+  eq('area-quadra', 'leg-extension', 'area-quadra', 'A fileira de máquinas ao lado da quadra',
+    { primary: false, confirm: true, note: 'Foto de área, não de uma máquina só: serve para achar o lugar. A fileira Matrix (extensora, flexora) fica à esquerda, e a máquina vermelha Righetto no meio. Uma pessoa ao fundo, do outro lado do vidro, foi desfocada.' }),
 
   eq('flexora-sentada', 'leg-curl', 'flexora-sentada', 'Cadeira flexora',
     { confirm: true }),
 
   eq('abdutora', 'hip-abduction', 'abdutora', 'Cadeira abdutora',
     { brand: 'Matrix', note: 'Etiqueta "Hip Abductor". A adutora fica ao lado.' }),
+  eq('abdutora-par', 'hip-abduction', 'abdutora-par', 'O par: abdutora e adutora lado a lado',
+    { brand: 'Matrix', primary: false, note: 'As duas juntas, e é por isso que confundem: uma tem etiqueta "Hip Abductor" (abrir as pernas contra o peso) e a outra "Hip Adductor" (fechar). Seu treino usa a de ABRIR. Pessoas ao fundo foram desfocadas.' }),
   eq('quadril-selim', 'hip-abduction', 'quadril-selim', 'Máquina de quadril com selim (área da rua)',
     { primary: false, confirm: true, note: 'Selim para sentar e duas plataformas para os pés, que abrem e fecham. Confira na etiqueta se é abdutora (abrir) ou adutora (fechar) — são exercícios opostos.' }),
   eq('multi-hip', 'hip-abduction', 'multi-hip', 'Multi-Hip',
@@ -85,6 +91,8 @@ export const BUILTIN_GYM_EQUIPMENT = [
   /* ---------- peito e ombros ---------- */
   eq('supino-inclinado', 'incline-press', 'supino-inclinado', 'Banco inclinado com barra',
     { note: 'Banco regulável com suporte de barra.' }),
+  eq('smith-machine', 'box-squat', 'smith-machine', 'Barra guiada (Smith), a fileira toda',
+    { primary: false, confirm: true, note: 'A barra corre em trilhos, então não cai para os lados — é a forma mais controlada de agachar na academia. Ponha um banco atrás para marcar até onde descer, como você já faz em casa. Pessoas ao fundo foram desfocadas.' }),
   eq('banco-inclinado-barra', 'incline-press', 'banco-inclinado-barra', 'Banco inclinado com barra (outro)',
     { primary: false, note: 'Banco regulável em frente ao suporte de barra, do lado da piscina.' }),
   eq('desenvolvimento-hammer', 'shoulder-press', 'desenvolvimento-hammer', 'Desenvolvimento de placas',

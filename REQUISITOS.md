@@ -110,6 +110,17 @@ placas com apoio para o peito, máquina de quadril com selim e rosca scott na
 máquina. Duas delas foram recortadas para tirar pessoas do quadro. São 31 no
 total.
 
+**Nenhuma foto ficou de fora.** Na oitava rodada você pediu para usar todas,
+inclusive as que tinham pessoas, desfocando-as se possível. As 4 que eu havia
+descartado entraram: a fileira de barras guiadas (Smith), o par abdutora +
+adutora, a máquina "exTender" vista de trás e a foto de área ao lado da quadra.
+São **40 fotos e 40 associações** — uma para cada imagem enviada.
+
+Sobre pessoas em quadro: o método passou a ser desfoque por região, não recorte.
+O recorte tirava junto os braços das máquinas, que é justamente o que permite
+reconhecê-las. Todas as fotos publicadas foram conferidas visualmente depois do
+desfoque.
+
 Uma sétima rodada trouxe mais 5 (36 no total): voador de braços vermelhos,
 supino inclinado de placas, banco inclinado com barra, banco em frente à polia e
 o crossover Alfa 2050 de frente. Aqui as duas fotos com pessoas ao fundo foram
