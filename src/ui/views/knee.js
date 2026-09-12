@@ -10,7 +10,7 @@ import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { today, formatDate, addDays } from '../../core/format.js';
 import { uid, toCSV, downloadFile } from '../../core/util.js';
-import { kneeStatus, painSeries, painWithContext, PAIN_LABELS, PAIN_CONTEXTS } from '../../logic/knee.js';
+import { kneeStatus, painSeries, painWithContext, painByExercise, PAIN_LABELS, PAIN_CONTEXTS, PAIN_FLAG_TEXT } from '../../logic/knee.js';
 import { page, topbar, sectionTitle, safetyNote, emptyState, menuRow } from '../shell.js';
 import { openSheet } from '../components/sheet.js';
 import { scale, yesNo } from '../components/inputs.js';
@@ -91,6 +91,8 @@ export async function kneeView() {
     store.settings.get(),
     store.profile.get(),
   ]);
+
+  const byExercise = await painByExercise({ days: 120 });
 
   const condition = profile?.conditions?.[0];
   const levelPill = {
@@ -179,6 +181,8 @@ export async function kneeView() {
         : emptyState('📉', 'Sem registros suficientes para comparar ainda.'),
     ),
 
+    exerciseSection(byExercise),
+
     safetyNote('Se a dor for importante, piorar, vier com inchaço, travamento ou sensação de instabilidade, procure seu ortopedista/fisioterapeuta. Dor em tendão e articulação não é a mesma coisa que o desconforto muscular normal do treino.', 'danger'),
   );
 }
@@ -208,4 +212,55 @@ async function exportKneeHistory() {
   })));
   downloadFile(`historico-joelho-${today()}.csv`, csv, 'text/csv');
   toastOk('Histórico exportado em CSV');
+}
+
+/**
+ * Dor por exercício.
+ *
+ * Responde, com os seus próprios registros, à pergunta que nenhum app pode
+ * responder no abstrato: "este exercício faz mal ao meu joelho?". Não é
+ * veredito — é material para levar ao fisioterapeuta, e o texto diz isso.
+ */
+function exerciseSection(report) {
+  const withReading = report.rows.filter((r) => r.enough);
+  const waiting = report.rows.filter((r) => !r.enough && r.lower);
+
+  return h('div.stack.stack--sm',
+    sectionTitle('Dor por exercício'),
+    h('p.muted', { style: { fontSize: '13px', marginTop: '-4px' } },
+      `Média da dor que você anotou em cada série, nos últimos 120 dias. Um exercício só ganha leitura depois de ${report.minSets} séries registradas — menos que isso diz mais sobre o dia do que sobre o exercício.`),
+
+    withReading.length
+      ? h('div.list', ...withReading.map((r) => {
+        const flag = PAIN_FLAG_TEXT[r.flag];
+        return h('div.list-item',
+          h('div.grow',
+            h('div.list-item__title', r.name),
+            h('div.list-item__sub',
+              `média ${r.avgPain} · pico ${r.maxPain} · ${r.sets} séries em ${r.sessions} treinos`),
+          ),
+          h('span', {
+            class: flag.tone === 'warn' ? 'pill pill--warn' : flag.tone === 'ok' ? 'pill pill--ok' : 'pill',
+          }, flag.label),
+        );
+      }))
+      : emptyState('📋', 'Ainda não há séries suficientes com dor registrada.',
+        h('p.muted', { style: { fontSize: '13px' } },
+          'Anote a dor a cada série nos exercícios de perna. Em duas ou três semanas esta lista começa a responder qual movimento incomoda mais.')),
+
+    report.reference != null
+      ? h('p.muted', { style: { fontSize: '13px' } },
+        `A comparação é com a sua própria média nos exercícios de perna (${report.reference}), não com uma tabela: o que interessa é se um movimento destoa do resto do seu treino.`)
+      : null,
+
+    waiting.length
+      ? h('div.card.card--tight',
+        h('div.list-item__sub', `Aguardando mais registros: ${waiting.map((r) => `${r.name} (${r.sets})`).join(', ')}.`))
+      : null,
+
+    withReading.some((r) => r.flag === 'above' || r.flag === 'high')
+      ? h('div.safety',
+        'Um exercício aparecer acima do seu normal não quer dizer que ele é o culpado, nem que você deva parar por conta própria. Quer dizer que vale mostrar esta tela na próxima consulta — e que o app não vai sugerir aumento de carga nele enquanto o quadro estiver assim.')
+      : null,
+  );
 }

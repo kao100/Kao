@@ -29,6 +29,7 @@ import { medicalView } from './ui/views/medical.js';
 import { gymView } from './ui/views/gym.js';
 import { supplementsView } from './ui/views/supplements.js';
 import { foodView } from './ui/views/food.js';
+import { cycleView } from './ui/views/cycle.js';
 import { weeklyView } from './ui/views/weekly.js';
 import { settingsView } from './ui/views/settings.js';
 import { moreView } from './ui/views/more.js';
@@ -43,6 +44,7 @@ const ROUTES = [
   { name: 'exercise', path: '/exercicio/:id', view: exerciseView },
   { name: 'library', path: '/biblioteca', view: libraryView },
   { name: 'program', path: '/programa', view: programView },
+  { name: 'cycle', path: '/ciclo', view: cycleView },
   { name: 'template', path: '/programa/:templateId', view: templateEditView },
   { name: 'calendar', path: '/calendario', view: calendarView },
   { name: 'day', path: '/dia/:date', view: dayView },

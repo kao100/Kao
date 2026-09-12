@@ -6,6 +6,7 @@ import * as store from '../../core/store.js';
 import { today, dayKey, DAY_LABEL, DAY_KEYS, formatMinutes } from '../../core/format.js';
 import { uid } from '../../core/util.js';
 import { planForWeek } from '../../logic/planner.js';
+import { cycleState } from '../../logic/cycle.js';
 import { page, topbar, sectionTitle, emptyState, safetyNote, menuRow } from '../shell.js';
 import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
 import { stepper, segmented, textInput } from '../components/inputs.js';
@@ -16,10 +17,11 @@ import { toastOk, toast } from '../components/toast.js';
 /* ------------------------------------------------------------------ */
 
 export async function programView() {
-  const [weekPlans, templates, guidance] = await Promise.all([
+  const [weekPlans, templates, guidance, cycle] = await Promise.all([
     planForWeek(today()),
     store.templates.all(),
     store.activeMedicalGuidance(),
+    cycleState(),
   ]);
   const todayKey = dayKey(today());
 
@@ -29,6 +31,8 @@ export async function programView() {
       title: 'Programa',
       actions: [h('button.iconbtn', { onClick: () => createTemplate(), 'aria-label': 'Novo treino' }, '＋')],
     }),
+
+    cycleCard(cycle),
 
     h('div.card.card--tight',
       h('div.card__title', 'Como o programa está montado'),
@@ -446,4 +450,40 @@ async function editPhase(settings, plan, index) {
   await store.settings.save({ cardioPlans: settings.cardioPlans });
   toastOk('Fase atualizada');
   refresh();
+}
+
+/**
+ * Onde o programa está no ciclo.
+ * Fica no topo do Programa porque é a resposta para "já posso mudar os
+ * exercícios?" — a pergunta que leva gente a trocar cedo demais.
+ */
+function cycleCard(state) {
+  if (!state.block) {
+    return h('div.card.clickable', { onClick: () => navigate('/ciclo') },
+      h('div.row.row--between',
+        h('div',
+          h('div.card__title', 'Ciclo de treino'),
+          h('div.card__sub', 'Organize o programa em blocos e gire os exercícios na hora certa'),
+        ),
+        h('span.list-item__sub', '›'),
+      ),
+    );
+  }
+
+  const phase = state.phase;
+  return h('div.card.clickable', { onClick: () => navigate('/ciclo') },
+    h('div.row.row--between',
+      h('div',
+        h('div.card__title', `Bloco ${state.number} · semana ${state.week} de ${state.totalWeeks}`),
+        h('div.card__sub', state.finished
+          ? 'Bloco encerrado — veja o que girar no próximo'
+          : `${phase.label}: ${phase.short}`),
+      ),
+      state.finished
+        ? h('span.pill.pill--warn', 'revisar')
+        : h('span.list-item__sub', '›'),
+    ),
+    h('div.bar', { style: { marginTop: '10px' } },
+      h('div.bar__fill', { style: { width: `${Math.round((state.week / state.totalWeeks) * 100)}%` } })),
+  );
 }

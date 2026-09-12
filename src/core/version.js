@@ -7,11 +7,21 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v11';
+export const APP_VERSION = 'kao-v12';
 export const APP_DATE = '2026-09-12';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v12',
+    date: '2026-09-12',
+    items: [
+      'Dor por exercício na tela do joelho: a média que você anotou em cada série, comparada ao seu próprio normal. Responde "este exercício me incomoda mais?" com os seus dados, não com palpite.',
+      'Ciclo de treino: o programa passa a rodar em blocos de 4 a 12 semanas, com semana de adaptação, acúmulo, semana pesada e deload.',
+      'No fim do bloco o app sugere o que girar — sempre dentro do mesmo padrão de movimento, nunca subindo o risco para o joelho, e nunca para um exercício que já está doendo.',
+      'Exercício em que você está progredindo bem entra na lista "estes eu não mexeria": trocar o que funciona custa progresso.',
+    ],
+  },
   {
     version: 'kao-v11',
     date: '2026-09-12',

@@ -169,6 +169,41 @@ vale aqui também.
 Dia sem registro não conta como zero em nenhuma média: em branco significa
 desconhecido, e tratar como zero desanima sem motivo.
 
+## Ciclos de treino e dor por exercício (décima rodada)
+
+Duas perguntas suas viraram funcionalidade.
+
+**"Com problema no joelho, ainda vale fazer leg press?"** — nenhum app pode
+responder isso no abstrato, e este não vai fingir que pode. O que dá para fazer
+é responder com os seus próprios registros: `/joelho` ganhou a seção **Dor por
+exercício**, que soma a dor que você anotou em cada série e compara com a sua
+média nos outros exercícios de perna — não com uma tabela. Um exercício só ganha
+leitura depois de 6 séries (`MIN_SETS_FOR_READING`): menos que isso fala do dia,
+não do exercício. O rótulo é deliberadamente conservador ("acima do seu normal",
+nunca "pare"), e o texto manda levar a tela à consulta.
+
+**"Não é ruim fazer sempre o mesmo treino?"** — é meio mito e meio verdade, e o
+app agora explica os dois lados em `/ciclo`. O que faz crescer é sobrecarga
+progressiva, não novidade; trocar toda semana impede saber se você ficou mais
+forte. Mas variar poupa a articulação, atinge porções diferentes do músculo e
+evita enjoo. A conciliação implementada: **o padrão fica, a variante gira** —
+blocos de 4 a 12 semanas (padrão 6), com adaptação, acúmulo, semana pesada e
+deload, e sugestão de rotação só no fim.
+
+Regras da rotação (`logic/cycle.js`), em ordem:
+
+1. só sugere alternativas já cadastradas do exercício, que respeitam o mesmo
+   padrão de movimento;
+2. nunca sugere uma alternativa com `kneeRisk` maior que a do exercício atual;
+3. nunca sugere trocar **para** um exercício que os seus registros mostram acima
+   do seu normal de dor;
+4. exercício com dor acima do normal ou com carga travada há 3+ semanas sobe ao
+   topo com o motivo escrito;
+5. exercício em que a carga está subindo entra em "estes eu não mexeria".
+
+Nada é aplicado sozinho: a troca é um toque seu, e o histórico do exercício
+antigo continua salvo — voltando a ele, as cargas antigas estão lá.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

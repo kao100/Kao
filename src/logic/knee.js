@@ -203,3 +203,89 @@ export async function painWithContext(days = 90) {
         .filter((v, i, arr) => v && arr.indexOf(v) === i),
     }));
 }
+
+/**
+ * Dor registrada por exercício — a resposta para "este exercício me faz mal?".
+ *
+ * Não é diagnóstico nem veredito: é o que VOCÊ anotou, série a série, somado.
+ * Um exercício só aparece com leitura depois de um número mínimo de séries,
+ * porque duas séries num dia ruim não dizem nada sobre o exercício.
+ *
+ * A comparação é contra a sua própria média nos exercícios de perna, não
+ * contra uma tabela: o que interessa é se um movimento específico destoa do
+ * resto do seu treino.
+ */
+export const MIN_SETS_FOR_READING = 6;
+
+export async function painByExercise({ days = 120, minSets = MIN_SETS_FOR_READING } = {}) {
+  const since = addDays(today(), -days);
+  const [sets, exMap] = await Promise.all([store.sets.all(), store.exercises.map()]);
+
+  const groups = new Map();
+  for (const s of sets) {
+    if (s.date < since || s.pain == null) continue;
+    const ex = exMap.get(s.exerciseId);
+    if (!ex) continue;
+    if (!groups.has(s.exerciseId)) {
+      groups.set(s.exerciseId, { exerciseId: s.exerciseId, name: ex.namePt, kneeRisk: ex.kneeRisk || 'low', lower: isLowerBody(ex), pains: [], dates: new Set() });
+    }
+    const g = groups.get(s.exerciseId);
+    g.pains.push(Number(s.pain) || 0);
+    g.dates.add(s.date);
+  }
+
+  const rows = [...groups.values()].map((g) => ({
+    ...g,
+    sets: g.pains.length,
+    sessions: g.dates.size,
+    avgPain: Math.round(avg(g.pains) * 10) / 10,
+    maxPain: Math.max(...g.pains),
+    enough: g.pains.length >= minSets,
+  }));
+
+  const lowerRows = rows.filter((r) => r.lower && r.enough);
+  const reference = lowerRows.length
+    ? Math.round(avg(lowerRows.map((r) => r.avgPain)) * 10) / 10
+    : null;
+
+  for (const r of rows) {
+    r.reference = reference;
+    r.delta = reference != null && r.enough ? Math.round((r.avgPain - reference) * 10) / 10 : null;
+    r.flag = classify(r, reference);
+  }
+
+  return {
+    rows: rows.sort((a, b) => b.avgPain - a.avgPain || b.sets - a.sets),
+    reference,
+    minSets,
+    hasEnough: rows.some((r) => r.enough),
+  };
+}
+
+function isLowerBody(ex) {
+  return ['Quadríceps', 'Posterior de coxa', 'Glúteos', 'Panturrilha', 'Adutores', 'Abdutores'].includes(ex.muscleGroup)
+    || ex.kneeRisk === 'moderate' || ex.kneeRisk === 'high';
+}
+
+/**
+ * Rótulo do exercício.
+ * Deliberadamente conservador: "acima do seu normal" é um convite a levar a
+ * informação ao fisioterapeuta, nunca uma instrução para parar ou continuar.
+ */
+function classify(row, reference) {
+  if (!row.enough) return 'insufficient';
+  if (row.avgPain === 0) return 'clean';
+  if (reference != null && row.delta >= 1.5) return 'above';
+  if (row.avgPain >= 4) return 'high';
+  if (reference != null && row.delta <= -1) return 'below';
+  return 'typical';
+}
+
+export const PAIN_FLAG_TEXT = {
+  clean: { label: 'sem dor registrada', tone: 'ok' },
+  below: { label: 'abaixo do seu normal', tone: 'ok' },
+  typical: { label: 'dentro do seu normal', tone: 'neutral' },
+  above: { label: 'acima do seu normal', tone: 'warn' },
+  high: { label: 'dor alta registrada', tone: 'warn' },
+  insufficient: { label: 'poucos registros', tone: 'neutral' },
+};
