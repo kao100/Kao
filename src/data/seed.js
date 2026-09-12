@@ -11,6 +11,7 @@ import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
 import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
+import { BUILTIN_FOODS } from './foods.js';
 
 export const SEED_VERSION = 4;
 
@@ -131,9 +132,12 @@ export async function seedIfNeeded() {
   // Fotos das máquinas da academia (idempotente: só adiciona o que falta).
   const addedEquipment = await seedGymEquipment();
 
+  // Tabela de alimentos (mesma regra: só adiciona o que falta).
+  const addedFoods = await seedFoods();
+
   if (current < SEED_VERSION) await store.setKV(store.KV.SEED_VERSION, SEED_VERSION);
 
-  return { seeded: !profile, addedExercises: newEx.length, addedTemplates: newTpl.length, addedEquipment };
+  return { seeded: !profile, addedExercises: newEx.length, addedTemplates: newTpl.length, addedEquipment, addedFoods };
 }
 
 /**
@@ -203,6 +207,21 @@ async function migrate(fromVersion, existingEx, existingTpl) {
  * Só adiciona o que ainda não existe — foto apagada ou reassociada por você
  * não volta e não é sobrescrita.
  */
+async function seedFoods() {
+  const [existing, removed] = await Promise.all([
+    store.foods.all(),
+    store.foods.removedBuiltinIds(),
+  ]);
+  const ids = new Set(existing.map((f) => f.id));
+  // alimento que você apagou não volta na atualização seguinte
+  for (const id of removed) ids.add(id);
+  const rows = BUILTIN_FOODS
+    .filter((f) => !ids.has(f.id))
+    .map((f) => ({ ...f, createdAt: Date.now(), updatedAt: Date.now() }));
+  if (rows.length) await store.foods.saveMany(rows);
+  return rows.length;
+}
+
 async function seedGymEquipment() {
   const [existing, removed] = await Promise.all([
     store.equipment.all(),

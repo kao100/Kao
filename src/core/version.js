@@ -7,11 +7,22 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v10';
+export const APP_VERSION = 'kao-v11';
 export const APP_DATE = '2026-09-12';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v11',
+    date: '2026-09-12',
+    items: [
+      'Aba nova: Alimentação. Água em um toque, refeições por medida caseira (sem balança) e a proteína do dia contra a sua meta.',
+      'Tabela com 75 alimentos do dia a dia brasileiro já embutida; dá para cadastrar os seus com os números do rótulo.',
+      'Meta de proteína e de água calculadas a partir do seu peso, e editáveis. A meta de água já soma o treino do dia.',
+      'Proteína e água aparecem no Início e no resumo da semana.',
+      'A tela antiga de Nutrição foi substituída por esta; o link antigo continua funcionando.',
+    ],
+  },
   {
     version: 'kao-v10',
     date: '2026-09-12',

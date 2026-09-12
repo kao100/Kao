@@ -106,8 +106,10 @@ img { max-width: 100%; display: block; }
   bottom: 0; left: 0; right: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 2px;
+  /* uma coluna por aba: acompanha a lista em shell.js sem número fixo aqui */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 1px;
   padding: 6px max(6px, var(--sal)) calc(var(--sab) + 6px) max(6px, var(--sar));
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
   backdrop-filter: blur(18px);
@@ -123,14 +125,28 @@ img { max-width: 100%; display: block; }
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 6px 2px;
+  padding: 6px 1px;
   border-radius: 14px;
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 650;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   cursor: pointer;
+  /* nome de aba nunca quebra em duas linhas nem empurra as vizinhas */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.tabbar__icon { font-size: 20px; line-height: 1; }
+.tabbar__item > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tabbar__icon { font-size: 19px; line-height: 1; }
+@media (min-width: 420px) {
+  .tabbar__item { font-size: 10.5px; }
+  .tabbar__icon { font-size: 20px; }
+}
 .tabbar__item--active { color: var(--text); }
 .tabbar__item--active .tabbar__icon { filter: drop-shadow(0 0 10px rgba(200, 255, 77, 0.35)); }
 

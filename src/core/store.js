@@ -18,6 +18,7 @@ export const KV = {
   SETTINGS: 'settings',
   SEED_VERSION: 'seedVersion',
   REMOVED_EQUIPMENT: 'removedBuiltinEquipment',
+  REMOVED_FOODS: 'removedBuiltinFoods',
 };
 
 export async function getKV(key, fallback = null) {
@@ -131,21 +132,80 @@ export const medical = repo('medical', 'med');
  * assim a semente não traz a foto de volta na próxima atualização, que é
  * exatamente o que a tela promete ao confirmar a exclusão.
  */
-export const equipment = {
-  ...repo('equipment', 'eq'),
-  async remove(id) {
-    const row = await db.get('equipment', id);
-    if (row?.builtin) {
-      const removed = (await getKV(KV.REMOVED_EQUIPMENT)) || [];
-      if (!removed.includes(id)) await setKV(KV.REMOVED_EQUIPMENT, [...removed, id]);
-    }
-    return db.remove('equipment', id);
-  },
-  /** Ids de fotos embutidas que você apagou — a semente pula esses. */
-  removedBuiltinIds: async () => (await getKV(KV.REMOVED_EQUIPMENT)) || [],
-};
+export const equipment = withTombstones(repo('equipment', 'eq'), 'equipment', KV.REMOVED_EQUIPMENT);
+
+/**
+ * Faz `remove` gravar uma lápide quando o registro veio embutido no app.
+ * Sem isso a semente reinstalaria o item na atualização seguinte, contrariando
+ * o que a tela promete ao confirmar a exclusão.
+ */
+function withTombstones(base, storeName, kvKey) {
+  return {
+    ...base,
+    async remove(id) {
+      const row = await db.get(storeName, id);
+      if (row?.builtin) {
+        const removed = (await getKV(kvKey)) || [];
+        if (!removed.includes(id)) await setKV(kvKey, [...removed, id]);
+      }
+      return db.remove(storeName, id);
+    },
+    /** Ids embutidos que você apagou — a semente pula esses. */
+    removedBuiltinIds: async () => (await getKV(kvKey)) || [],
+  };
+}
 export const supplements = repo('supplements', 'sup');
 export const nutrition = repo('nutrition', 'nut');
+
+/* ------------------------------------------------------------------ */
+/* Alimentação                                                          */
+/* ------------------------------------------------------------------ */
+
+/** Cada linha é um alimento consumido: data, refeição, quantidade e macros. */
+export const meals = repo('meals', 'meal');
+
+/** Tabela de alimentos: os que já vêm no app e os que você cadastrar. */
+export const foods = {
+  ...withTombstones(repo('foods', 'fd'), 'foods', KV.REMOVED_FOODS),
+  async search(term) {
+    const list = await db.getAll('foods');
+    const q = String(term || '').toLowerCase().trim();
+    if (!q) return list.sort((a, b) => a.name.localeCompare(b.name, 'pt'));
+    const score = (fd) => {
+      const name = fd.name.toLowerCase();
+      if (name.startsWith(q)) return 0;
+      if (name.includes(q)) return 1;
+      if ((fd.aliases || []).some((a) => a.toLowerCase().includes(q))) return 2;
+      return 99;
+    };
+    return list
+      .map((fd) => ({ fd, s: score(fd) }))
+      .filter((x) => x.s < 99)
+      .sort((a, b) => a.s - b.s || a.fd.name.localeCompare(b.fd.name, 'pt'))
+      .map((x) => x.fd);
+  },
+};
+
+/**
+ * O registro diário de alimentação (água e observações).
+ * Uma linha por data, com id derivado da data para não duplicar.
+ */
+export const nutritionDay = {
+  async get(date) {
+    return db.get('nutrition', `nut-${date}`);
+  },
+  async patch(date, patch) {
+    const cur = (await db.get('nutrition', `nut-${date}`)) || { id: `nut-${date}`, date, createdAt: Date.now() };
+    const next = { ...cur, ...patch, date, updatedAt: Date.now() };
+    await db.put('nutrition', next);
+    return next;
+  },
+  async addWater(date, ml) {
+    const cur = (await db.get('nutrition', `nut-${date}`)) || {};
+    const value = Math.max(0, (Number(cur.waterMl) || 0) + ml);
+    return nutritionDay.patch(date, { waterMl: value });
+  },
+};
 
 /* ------------------------------------------------------------------ */
 /* Registro diário (promessa dos 30 minutos)                            */

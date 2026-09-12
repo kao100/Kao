@@ -106,11 +106,43 @@ export const CSV_EXPORTS = [
     })),
   },
   {
+    id: 'meals',
+    label: 'Alimentação — item por item',
+    build: async () => (await db.getAll('meals'))
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      .map((m) => ({
+        data: m.date, refeicao: m.meal, alimento: m.name, medida: m.portionLabel || '',
+        gramas: m.grams, calorias: m.kcal, proteina_g: m.protein, carboidrato_g: m.carbs, gordura_g: m.fat,
+      })),
+  },
+  {
     id: 'nutrition',
-    label: 'Nutrição',
-    build: async () => (await db.getAll('nutrition')).map((n) => ({
-      data: n.date, calorias: n.kcal, proteina_g: n.protein, carboidrato_g: n.carbs, gordura_g: n.fat, agua_ml: n.waterMl,
-    })),
+    label: 'Alimentação — total por dia',
+    build: async () => {
+      const days = new Map();
+      const bump = (date) => {
+        if (!days.has(date)) days.set(date, { data: date, calorias: 0, proteina_g: 0, carboidrato_g: 0, gordura_g: 0, agua_ml: 0, itens: 0 });
+        return days.get(date);
+      };
+      for (const m of await db.getAll('meals')) {
+        const d = bump(m.date);
+        d.calorias += Number(m.kcal) || 0;
+        d.proteina_g += Number(m.protein) || 0;
+        d.carboidrato_g += Number(m.carbs) || 0;
+        d.gordura_g += Number(m.fat) || 0;
+        d.itens += 1;
+      }
+      for (const n of await db.getAll('nutrition')) {
+        const d = bump(n.date);
+        d.agua_ml += Number(n.waterMl) || 0;
+        // linhas do registro manual antigo, anterior à aba Alimentação
+        if (n.kcal != null) d.calorias += Number(n.kcal) || 0;
+        if (n.protein != null) d.proteina_g += Number(n.protein) || 0;
+      }
+      return [...days.values()]
+        .sort((a, b) => (a.data < b.data ? -1 : 1))
+        .map((d) => ({ ...d, proteina_g: Math.round(d.proteina_g), carboidrato_g: Math.round(d.carboidrato_g), gordura_g: Math.round(d.gordura_g), calorias: Math.round(d.calorias) }));
+    },
   },
 ];
 

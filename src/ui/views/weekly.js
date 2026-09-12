@@ -4,6 +4,7 @@ import { h } from '../../core/dom.js';
 import { navigate } from '../../core/router.js';
 import { today, addDays, weekStart, formatDate, formatMinutes, num, signed, kg } from '../../core/format.js';
 import { weeklySummary } from '../../logic/report.js';
+import { recentDays, averageOfLogged, targetsFor } from '../../logic/nutrition.js';
 import { PAIN_CONTEXTS } from '../../logic/knee.js';
 import { page, topbar, sectionTitle, safetyNote, emptyState } from '../shell.js';
 
@@ -11,6 +12,7 @@ export async function weeklyView({ query }) {
   const ref = query.w || today();
   const summary = await weeklySummary(ref);
   const start = weekStart(ref);
+  const [foodWeek, foodTargets] = await Promise.all([recentDays(7, addDays(start, 6)), targetsFor(ref)]);
 
   return page(
     topbar({
@@ -36,6 +38,8 @@ export async function weeklyView({ query }) {
           summary.prevVolume ? deltaLabel(summary.volumeDelta, ' kg') : null),
       ),
     ),
+
+    foodSection(foodWeek, foodTargets),
 
     h('div.stack.stack--sm',
       sectionTitle('Progressos'),
@@ -96,4 +100,35 @@ function deltaLabel(delta, unit, invertColors = false) {
   const positive = delta > 0;
   const good = invertColors ? !positive : positive;
   return h('span', { class: good ? 'delta-up' : 'delta-down' }, signed(delta, 1, unit));
+}
+
+/**
+ * Alimentação da semana.
+ *
+ * Só aparece se houve registro: quem não anotou não precisa de um cartão
+ * dizendo que não anotou. A média ignora dias em branco, porque "não registrei"
+ * não é "comi zero grama de proteína".
+ */
+function foodSection(days, targets) {
+  const logged = days.filter((d) => d.itemCount > 0 || d.waterMl > 0);
+  if (!logged.length) return null;
+
+  const avgProtein = averageOfLogged(days, 'protein');
+  const goal = targets.protein.value;
+  const hitDays = goal ? days.filter((d) => d.itemCount > 0 && d.protein >= goal).length : 0;
+  const avgWater = Math.round(logged.reduce((s, d) => s + d.waterMl, 0) / logged.length);
+
+  return h('div.stack.stack--sm',
+    sectionTitle('Alimentação'),
+    h('div.card',
+      h('div.stack.stack--sm',
+        line('Dias com registro', `${logged.length}/7`),
+        avgProtein != null
+          ? line('Média de proteína', `${avgProtein} g${goal ? ` (meta ${goal} g)` : ''}`)
+          : null,
+        goal ? line('Dias que bateram a meta', `${hitDays}/${logged.length} registrados`) : null,
+        line('Média de água', `${(avgWater / 1000).toFixed(1)} L`),
+      ),
+    ),
+  );
 }

@@ -115,9 +115,11 @@ sincronizar com um servidor) mexe só em `core/db.js` + `core/store.js`.
 | `painLogs` | dor no joelho: 0–10, movimento, inchaço, instabilidade |
 | `recovery` | check-in de sono/energia/dor muscular/motivação |
 | `medical` | orientações médicas (prioridade sobre o plano padrão) |
-| `equipment` | fotos das máquinas da academia (25 já vêm cadastradas em `assets/gym/`) |
+| `equipment` | fotos das máquinas da academia (40 já vêm cadastradas em `assets/gym/`) |
 | `supplements` | creatina, whey… |
-| `nutrition` | calorias, macros, água (opcional) |
+| `nutrition` | um registro por dia: água consumida (e as linhas do registro manual antigo) |
+| `meals` | um registro por alimento consumido: data, refeição, medida, gramas e macros |
+| `foods` | tabela de alimentos — os 75 que vêm no app e os que você cadastrar do rótulo |
 | `dailyLog` | minutos do dia e promessa cumprida |
 | `dayPlan` | resposta de "vai ter futebol?" por data |
 

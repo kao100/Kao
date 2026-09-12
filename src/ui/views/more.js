@@ -60,7 +60,7 @@ export async function moreView() {
           : 'Cadastre o que você usa',
         to: '/suplementos',
       }),
-      menuRow({ icon: '🍽️', title: 'Nutrição', sub: 'Registro opcional de calorias e macros', to: '/nutricao' }),
+      menuRow({ icon: '🍽️', title: 'Alimentação', sub: 'Água, proteína, refeições e calorias', to: '/alimentacao' }),
       menuRow({ icon: '⚙️', title: 'Ajustes e backup', sub: 'Perfil, descansos, exportar dados', to: '/ajustes' }),
     ),
 

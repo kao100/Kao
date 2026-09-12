@@ -32,7 +32,7 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 25 | Meu físico: medidas, fotos, antes × agora, sem estimativa de %G por foto | ✅ | `/fisico` |
 | 26 | Recomposição: acompanhar peso, cintura, medidas, fotos, força, volume, condicionamento | ✅ | `/fisico` + `/progresso` + resumo semanal |
 | 27 | Suplementação (creatina, whey, marca a escolher; sem substâncias proibidas) | ✅ | `/suplementos` + cadastro inicial |
-| 28 | Espaço de nutrição (kcal, macros, água) sem virar app de dieta | ✅ | `/nutricao` |
+| 28 | Espaço de nutrição (kcal, macros, água) sem virar app de dieta | ✅ | aba **Alimentação** (`/alimentacao`): água, refeições, proteína e calorias, com 75 alimentos e medida caseira. Ampliado a pedido seu na nona rodada — o pedido original excluía dieta |
 | 29 | Alerta de recuperação 🟢🟡🔴 | ✅ | `logic/readiness.js`, sheet antes do treino |
 | 30 | Calendário mensal com ícones e detalhe do dia | ✅ | `/calendario`, `/dia/:date` |
 | 31 | Timeline de cardio com aviso de troca de fase | ✅ | tela de cardio (bipe + vibração + aviso) |
@@ -134,6 +134,41 @@ dependem de aparelho específico. A tela "Minha academia" calcula essa lista
 sozinha a partir do programa, então ela não depende de eu manter este texto em
 dia.
 
+## Alimentação (nona rodada)
+
+O pedido original dizia "sem funcionalidades de dieta". Você mudou isso
+explicitamente: proteína, água e calorias são o que sustenta o treino, e viraram
+uma aba própria. O que ficou:
+
+- **Água em um toque** — copo (250 ml), garrafa (500 ml) ou litro. A meta sai de
+  35 ml/kg **mais** o treino do dia: o planejador diz se há musculação, cardio ou
+  futebol, e a meta sobe junto.
+- **Refeições por medida caseira** — 7 horários (café, lanches, almoço,
+  pós-treino, jantar, ceia). Você busca "frango", escolhe "1 filé médio" e
+  pronto: nada de balança. O app abre no horário provável pelo relógio.
+- **75 alimentos embutidos** (`data/foods.js`), agrupados: proteínas,
+  carboidratos, feijões, laticínios, frutas, legumes, gorduras, bebidas,
+  suplementos e pratos prontos (marmita, x-salada, açaí, pão de queijo).
+  Valores por 100 g de tabelas de composição.
+- **Seus alimentos** — "Novo alimento" cadastra com os números do rótulo, que
+  sempre ganham da tabela. Ficam salvos para as próximas vezes.
+- **"Você registrou recentemente"** — os alimentos mais frequentes dos últimos
+  30 dias aparecem antes de você digitar qualquer coisa.
+- **Meta de proteína** — 1,6–2,2 g/kg é a faixa de referência para hipertrofia;
+  a meta usa o piso e é editável. Sem peso registrado, o app diz isso em vez de
+  inventar número.
+- **Onde aparece** — cartão de proteína e água no Início, seção no resumo da
+  semana (média só dos dias registrados) e gráfico de 14 dias na aba.
+- **Exportação** — CSV item a item e CSV por dia; o JSON completo já pega tudo.
+
+Limite mantido: o app **acompanha, não prescreve**. As metas são estimativas a
+partir do seu peso, não uma dieta, e a tela diz isso e aponta nutricionista para
+plano individual. Nenhuma recomendação de substância — a regra dos 100% natural
+vale aqui também.
+
+Dia sem registro não conta como zero em nenhuma média: em branco significa
+desconhecido, e tratar como zero desanima sem motivo.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias
@@ -148,8 +183,10 @@ dia.
    dados são locais. A migração é feita por backup JSON.
 5. **Integração com Apple Health / relógio** — frequência cardíaca, distância e
    calorias são digitadas manualmente.
-6. **Banco de alimentos na nutrição** — só registro manual de kcal/macros/água,
-   como pedido no item 28.
+6. ~~**Banco de alimentos na nutrição**~~ — **resolvido na v11.** A aba
+   Alimentação traz 75 alimentos do dia a dia brasileiro com medida caseira,
+   busca, registro por refeição, água em um toque e meta de proteína calculada
+   do peso. Ver a seção "Alimentação" abaixo.
 7. **Alertas sonoros com a tela bloqueada** — o app usa wake lock para manter a
    tela acesa durante treino e cardio; com o aparelho bloqueado o iOS suspende o
    áudio (limitação do sistema, não do app). O cronômetro continua correto porque

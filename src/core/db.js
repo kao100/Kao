@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'kao-training';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 /** Definição das object stores e seus índices. */
 export const STORES = {
@@ -28,6 +28,9 @@ export const STORES = {
   dailyLog: { keyPath: 'date', indexes: [] },
   achievements: { keyPath: 'id', indexes: [['byDate', 'date'], ['byExercise', 'exerciseId']] },
   dayPlan: { keyPath: 'date', indexes: [] },
+  // alimentação: um registro por alimento consumido, e a tabela de alimentos
+  meals: { keyPath: 'id', indexes: [['byDate', 'date'], ['byFood', 'foodId']] },
+  foods: { keyPath: 'id', indexes: [['byGroup', 'group']] },
 };
 
 let dbPromise = null;

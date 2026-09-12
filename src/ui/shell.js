@@ -5,6 +5,7 @@ export const TABS = [
   { id: 'home', label: 'Início', icon: '🏠', path: '/' },
   { id: 'program', label: 'Programa', icon: '📋', path: '/programa' },
   { id: 'calendar', label: 'Calendário', icon: '🗓️', path: '/calendario' },
+  { id: 'food', label: 'Comida', icon: '🍽️', path: '/alimentacao' },
   { id: 'progress', label: 'Progresso', icon: '📈', path: '/progresso' },
   { id: 'more', label: 'Mais', icon: '⋯', path: '/mais' },
 ];

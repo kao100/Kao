@@ -4,6 +4,7 @@ import * as store from '../../core/store.js';
 import { today, formatDate, formatMinutes, weekDates, kg, dayLabel } from '../../core/format.js';
 import { planForDate, planForWeek, answerFootball, blockSummary, setLocation } from '../../logic/planner.js';
 import { kneeStatus } from '../../logic/knee.js';
+import { targetsFor, dayTotals } from '../../logic/nutrition.js';
 import { page, topbar, iconAction, sectionTitle, safetyNote } from '../shell.js';
 import { startWorkoutFlow } from './workout.js';
 import { openDayActivitySheet } from './promise.js';
@@ -21,6 +22,8 @@ export async function dashboardView() {
     store.latestMeasurement(),
     kneeStatus(date),
   ]);
+
+  const [foodTargets, foodTotals] = await Promise.all([targetsFor(date), dayTotals(date)]);
 
   const minutes = log?.minutes || 0;
   const goal = profile?.promiseMinutes || 30;
@@ -41,6 +44,8 @@ export async function dashboardView() {
     knee.level !== 'ok' ? kneeAlert(knee) : null,
 
     await weekStats(weekPlans, date),
+
+    foodCard(foodTotals, foodTargets),
 
     bodyCard(profile, measurement),
 
@@ -240,5 +245,46 @@ function bodyCard(profile, measurement) {
         h('span.muted', 'Meu físico ›'),
       ),
     ),
+  );
+}
+
+/**
+ * Proteína e água do dia no Início.
+ *
+ * Só o essencial: os dois números que sustentam o treino. Caloria e macros
+ * ficam na aba Comida — mostrar tudo aqui vira painel de dieta, que não é o
+ * que este app é.
+ */
+function foodCard(totals, targets) {
+  const pGoal = targets.protein.value;
+  const wGoal = targets.water.value || 2500;
+  const pPct = pGoal ? Math.min(100, Math.round((totals.protein / pGoal) * 100)) : 0;
+  const wPct = Math.min(100, Math.round((totals.waterMl / wGoal) * 100));
+
+  return h('div.card.clickable', { onClick: () => navigate('/alimentacao') },
+    h('div.row.row--between',
+      h('div.card__title', 'Alimentação de hoje'),
+      h('span.list-item__sub', '›'),
+    ),
+    h('div.stack.stack--sm', { style: { marginTop: '10px' } },
+      h('div',
+        h('div.row.row--between',
+          h('span.list-item__sub', '🥩 Proteína'),
+          h('span.list-item__sub', pGoal ? `${totals.protein} / ${pGoal} g` : `${totals.protein} g`),
+        ),
+        h('div.bar', { style: { marginTop: '4px' } }, h('div.bar__fill', { style: { width: `${pPct}%` } })),
+      ),
+      h('div',
+        h('div.row.row--between',
+          h('span.list-item__sub', '💧 Água'),
+          h('span.list-item__sub', `${(totals.waterMl / 1000).toFixed(1)} / ${(wGoal / 1000).toFixed(1)} L`),
+        ),
+        h('div.bar', { style: { marginTop: '4px' } },
+          h('div.bar__fill.bar__fill--cardio', { style: { width: `${wPct}%` } })),
+      ),
+    ),
+    !totals.itemCount && !totals.waterMl
+      ? h('div.list-item__sub', { style: { marginTop: '8px' } }, 'Nada registrado ainda hoje — toque para começar.')
+      : null,
   );
 }

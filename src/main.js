@@ -27,7 +27,8 @@ import { bodyView } from './ui/views/body.js';
 import { kneeView } from './ui/views/knee.js';
 import { medicalView } from './ui/views/medical.js';
 import { gymView } from './ui/views/gym.js';
-import { supplementsView, nutritionView } from './ui/views/supplements.js';
+import { supplementsView } from './ui/views/supplements.js';
+import { foodView } from './ui/views/food.js';
 import { weeklyView } from './ui/views/weekly.js';
 import { settingsView } from './ui/views/settings.js';
 import { moreView } from './ui/views/more.js';
@@ -52,7 +53,9 @@ const ROUTES = [
   { name: 'medical', path: '/medico', view: medicalView },
   { name: 'gym', path: '/academia', view: gymView },
   { name: 'supplements', path: '/suplementos', view: supplementsView },
-  { name: 'nutrition', path: '/nutricao', view: nutritionView },
+  { name: 'food', path: '/alimentacao', view: foodView },
+  // rota antiga: qualquer atalho salvo continua funcionando
+  { name: 'nutrition', path: '/nutricao', view: () => { navigate('/alimentacao', { replace: true }); return null; } },
   { name: 'weekly', path: '/semana', view: weeklyView },
   { name: 'settings', path: '/ajustes', view: settingsView },
   { name: 'more', path: '/mais', view: moreView },
