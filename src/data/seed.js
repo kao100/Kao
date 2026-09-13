@@ -13,7 +13,7 @@ import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
 import { BUILTIN_FOODS } from './foods.js';
 
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -21,6 +21,8 @@ export const DEFAULT_PROFILE = {
   heightM: null,
   birthDate: null,
   experienceMonths: null,
+  // iniciante | intermediario | avancado — muda o tom do app e o cardio padrão
+  level: null,
   approach: 'natural',
   goals: [
     'Hipertrofia natural',
@@ -52,6 +54,19 @@ const V2_HOME_ITEMS = {
   'tpl-upper-b-casa': ['inverted-row', 'backpack-row', 'superman', 'pike-push-up', 'lateral-raise', 'hammer-curl'],
   'tpl-upper-c-casa': ['incline-push-up', 'inverted-row', 'push-up', 'backpack-row', 'lateral-raise', 'biceps-curl', 'bench-dip'],
   'tpl-lower-b-casa': ['single-leg-glute-bridge', 'single-leg-rdl', 'glute-bridge', 'calf-raise', 'dead-bug'],
+};
+
+/**
+ * Composição dos treinos de academia na versão 4 — usada para saber se você
+ * editou o treino antes de a migração v5 (core, tríceps e cardio forte)
+ * reescrever qualquer coisa.
+ */
+const V4_GYM_ITEMS = {
+  'tpl-upper-a': ['machine-chest-press', 'lat-pulldown', 'incline-press', 'seated-cable-row', 'shoulder-press', 'lateral-raise', 'biceps-curl', 'triceps-pushdown'],
+  'tpl-lower-a': ['leg-press', 'romanian-deadlift', 'leg-curl', 'hip-thrust', 'leg-extension', 'calf-raise', 'plank'],
+  'tpl-upper-b': ['lat-pulldown', 'chest-supported-row', 'unilateral-pulldown', 'reverse-fly', 'lateral-raise', 'hammer-curl'],
+  'tpl-upper-c': ['incline-press', 'seated-cable-row', 'cable-crossover', 'lat-pulldown', 'lateral-raise', 'biceps-curl', 'triceps-pushdown'],
+  'tpl-lower-b': ['hip-thrust', 'leg-press', 'leg-curl', 'hip-abduction', 'calf-raise', 'dead-bug'],
 };
 
 export const DEFAULT_SETTINGS = {
@@ -197,6 +212,53 @@ async function migrate(fromVersion, existingEx, existingTpl) {
     if (!settings?.homeEquipment) await store.settings.save({ homeEquipment: DEFAULT_SETTINGS.homeEquipment });
     if (skipped.length) {
       console.info('Treinos em casa preservados porque foram editados:', skipped.join(', '));
+    }
+  }
+
+  if (fromVersion < 5) {
+    // v5: core em todo treino, tríceps na dose certa e cardio com intensidade.
+    // Mesma regra de sempre: só reescreve o treino que ainda está idêntico ao
+    // de fábrica. Editou, fica como está — e os exercícios novos ficam na
+    // biblioteca para você adicionar quando quiser.
+    const tplCatalog = new Map(ALL_TEMPLATES.map((t) => [t.id, t]));
+    const updates = [];
+    const skipped = [];
+    for (const tpl of existingTpl) {
+      const original = V4_GYM_ITEMS[tpl.id];
+      const fresh = tplCatalog.get(tpl.id);
+      if (!original || !fresh) continue;
+      const current = (tpl.items || []).map((it) => it.exerciseId);
+      const untouched = current.length === original.length && current.every((id, i) => id === original[i]);
+      if (untouched) updates.push({ ...tpl, items: fresh.items });
+      else skipped.push(tpl.name);
+    }
+
+    // domingo sem futebol passa de Zona 2 a intervalados
+    const sunday = existingTpl.find((t) => t.id === 'tpl-domingo-cardio');
+    const freshSunday = tplCatalog.get('tpl-domingo-cardio');
+    if (sunday && freshSunday && sunday.cardioPlanId === 'cardio-zona2-40') {
+      updates.push({ ...sunday, name: freshSunday.name, subtitle: freshSunday.subtitle, cardioPlanId: freshSunday.cardioPlanId, notes: freshSunday.notes });
+    }
+
+    if (updates.length) await store.templates.saveMany(updates);
+
+    // planos de cardio novos entram na lista; os seus ajustes ficam intactos
+    const settings = await store.settings.get();
+    const plans = settings?.cardioPlans || [];
+    const merged = plans.map((p) => {
+      const fresh = CARDIO_PLANS.find((c) => c.id === p.id);
+      // a Zona 2 de quarta era RPE 3–4, leve demais para quem já tem base;
+      // só corrige quem não mexeu no plano
+      if (fresh && p.id === 'cardio-zona2-30' && p.rpe === '3–4 / 10') return fresh;
+      return p;
+    });
+    const missing = CARDIO_PLANS.filter((c) => !merged.some((p) => p.id === c.id));
+    if (missing.length || merged.some((p, i) => p !== plans[i])) {
+      await store.settings.save({ cardioPlans: [...merged, ...missing] });
+    }
+
+    if (skipped.length) {
+      console.info('Treinos de academia preservados porque foram editados:', skipped.join(', '));
     }
   }
 

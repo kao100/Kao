@@ -7,11 +7,23 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v12';
-export const APP_DATE = '2026-09-12';
+export const APP_VERSION = 'kao-v13';
+export const APP_DATE = '2026-09-13';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v13',
+    date: '2026-09-13',
+    items: [
+      'Cardio com intensidade de verdade: intervalos 4×4, limiar de 20 min, 10-20-30 e Zona 2 longa de 50 min. Antes nenhum plano passava de RPE 4.',
+      'Domingo sem futebol virou a sessão forte da semana (4×4). Nas semanas com jogo, o jogo continua sendo ela.',
+      'Core em todos os cinco treinos: 10 → 25 séries por semana, com 6 exercícios novos e progressão do fácil ao difícil.',
+      'Tríceps subiu de 5 para 10 séries e bíceps de 7 para 9 — estavam abaixo da faixa que produz crescimento.',
+      'Aviso quando um cardio forte cai na véspera de jogo, ou no mesmo dia dele.',
+      'Perfil ganhou "Nível": o app deixa de supor que você é iniciante.',
+    ],
+  },
   {
     version: 'kao-v12',
     date: '2026-09-12',

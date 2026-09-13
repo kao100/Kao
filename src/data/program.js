@@ -27,10 +27,10 @@ const item = (exerciseId, sets, repMin, repMax, opts = {}) => ({
 export const CARDIO_PLANS = [
   {
     id: 'cardio-zona2-30',
-    name: 'Zona 2 inclinada — 30 min',
+    name: 'Zona 2 inclinada — 35 min',
     context: 'Quarta-feira, depois do Upper B',
-    totalMin: 30,
-    rpe: '3–4 / 10',
+    totalMin: 35,
+    rpe: '4–5 / 10',
     talkTest: 'Você deve conseguir conversar em frases completas, mas não cantar confortavelmente.',
     phases: [
       { label: 'Aquecimento', fromMin: 0, toMin: 5, speedMin: 5.0, speedMax: 5.0, incline: 2, note: 'Solta o corpo, respiração tranquila.' },
@@ -117,6 +117,83 @@ export const CARDIO_PLANS = [
       { label: 'Volta à calma', fromMin: 25, toMin: 30, speedMin: 4.5, speedMax: 4.5, incline: 1, note: 'Finalize tranquilo.' },
     ],
   },
+
+  /* ------------------------------------------------------------------ */
+  /* Sessões de intensidade — para quem já tem base                       */
+  /*                                                                      */
+  /* O programa nasceu só com RPE 2–4, o que é pouco para quem joga bola  */
+  /* toda semana. Estas três cobrem a faixa que faltava.                  */
+  /*                                                                      */
+  /* Impacto e joelho: todas funcionam em bicicleta, elíptico ou remo     */
+  /* com o mesmo RPE. Se houver dor no joelho, a versão sem impacto dá o  */
+  /* mesmo estímulo cardiovascular — está escrito em cada plano.          */
+  /* ------------------------------------------------------------------ */
+  {
+    id: 'cardio-limiar-35',
+    name: 'Limiar (tempo) — 35 min',
+    context: 'Ritmo forte e constante, sem virar sprint',
+    totalMin: 35,
+    rpe: '6–7 / 10',
+    lowImpact: 'Bicicleta, elíptico ou remo servem: mantenha o mesmo RPE e ignore velocidade e inclinação.',
+    talkTest: 'Você consegue dizer três ou quatro palavras, não uma frase inteira. Se conseguir conversar, está leve demais.',
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 8, speedMin: 5.5, speedMax: 6.5, incline: 2, note: 'Suba o ritmo aos poucos até sentir o corpo pronto.' },
+      { label: 'Bloco de limiar', fromMin: 8, toMin: 28, speedMin: 8.0, speedMax: 9.5, incline: 1, note: 'Ritmo que você sustentaria por uns 40 min numa prova. Desconfortável, mas constante — não é sprint.' },
+      { label: 'Volta à calma', fromMin: 28, toMin: 35, speedMin: 5.0, speedMax: 5.5, incline: 1, note: 'Desacelere até a respiração normalizar.' },
+    ],
+  },
+  {
+    id: 'cardio-4x4',
+    name: 'Intervalos 4×4 — 40 min',
+    context: 'A sessão mais forte da semana. Só em semana sem futebol no domingo',
+    totalMin: 40,
+    rpe: '8–9 / 10 nos blocos',
+    lowImpact: 'Bicicleta ou elíptico servem, e poupam o joelho do impacto da corrida. O estímulo cardiovascular é o mesmo.',
+    talkTest: 'Nos 4 minutos fortes você não consegue falar. Na recuperação, volta a conversar.',
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 10, speedMin: 5.5, speedMax: 7.0, incline: 2, note: 'Dez minutos de verdade. Entrar frio no primeiro bloco é como o pessoal se machuca.' },
+      { label: '1º forte (4 min)', fromMin: 10, toMin: 14, speedMin: 10.0, speedMax: 12.0, incline: 1, note: 'Respiração pesada, mas você chega ao fim dos 4 min. Se parar antes, reduza no próximo.' },
+      { label: 'Recuperação', fromMin: 14, toMin: 17, speedMin: 5.5, speedMax: 6.0, incline: 1, note: 'Ativa: continue andando, não pare de pé.' },
+      { label: '2º forte (4 min)', fromMin: 17, toMin: 21, speedMin: 10.0, speedMax: 12.0, incline: 1, note: 'Mesmo ritmo do primeiro.' },
+      { label: 'Recuperação', fromMin: 21, toMin: 24, speedMin: 5.5, speedMax: 6.0, incline: 1, note: '' },
+      { label: '3º forte (4 min)', fromMin: 24, toMin: 28, speedMin: 10.0, speedMax: 12.0, incline: 1, note: 'O mais difícil dos quatro. Segure o ritmo.' },
+      { label: 'Recuperação', fromMin: 28, toMin: 31, speedMin: 5.5, speedMax: 6.0, incline: 1, note: '' },
+      { label: '4º forte (4 min)', fromMin: 31, toMin: 35, speedMin: 10.0, speedMax: 12.0, incline: 1, note: 'Último. Pode ser o mais rápido se sobrar.' },
+      { label: 'Volta à calma', fromMin: 35, toMin: 40, speedMin: 5.0, speedMax: 5.5, incline: 1, note: 'Cinco minutos leves até a respiração acalmar.' },
+    ],
+  },
+  {
+    id: 'cardio-10-20-30',
+    name: '10-20-30 — 30 min',
+    context: 'Intervalado curto, quando houver pouco tempo',
+    totalMin: 30,
+    rpe: '5 a 9 / 10, alternando',
+    lowImpact: 'Na bicicleta funciona igual: alterne a resistência em vez da velocidade.',
+    talkTest: 'Os 10 segundos finais de cada ciclo são quase máximos — nada de conversa ali.',
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 8, speedMin: 5.5, speedMax: 6.5, incline: 2, note: 'Solte o corpo.' },
+      { label: 'Bloco 1 — 5 ciclos', fromMin: 8, toMin: 13, speedMin: 6.0, speedMax: 13.0, incline: 1, note: 'Cada ciclo tem 1 min: 30 s leve, 20 s moderado, 10 s forte. Repita 5 vezes seguidas.' },
+      { label: 'Descanso', fromMin: 13, toMin: 15, speedMin: 5.0, speedMax: 5.5, incline: 1, note: 'Dois minutos caminhando.' },
+      { label: 'Bloco 2 — 5 ciclos', fromMin: 15, toMin: 20, speedMin: 6.0, speedMax: 13.0, incline: 1, note: 'Mesma coisa: 30 s / 20 s / 10 s, cinco vezes.' },
+      { label: 'Descanso', fromMin: 20, toMin: 22, speedMin: 5.0, speedMax: 5.5, incline: 1, note: '' },
+      { label: 'Bloco 3 — 5 ciclos', fromMin: 22, toMin: 27, speedMin: 6.0, speedMax: 13.0, incline: 1, note: 'Último bloco. Os 10 s podem ser mais fortes que nos anteriores.' },
+      { label: 'Volta à calma', fromMin: 27, toMin: 30, speedMin: 5.0, speedMax: 5.0, incline: 1, note: 'Finalize caminhando.' },
+    ],
+  },
+  {
+    id: 'cardio-zona2-50',
+    name: 'Zona 2 longa — 50 min',
+    context: 'Base aeróbica. É o que faz você se cansar menos no segundo tempo',
+    totalMin: 50,
+    rpe: '4–5 / 10',
+    lowImpact: 'Bicicleta, elíptico ou caminhada inclinada rápida — o que for mais confortável para o joelho.',
+    talkTest: 'Frases completas o tempo todo, mas com a respiração nitidamente mais funda que em repouso.',
+    phases: [
+      { label: 'Aquecimento', fromMin: 0, toMin: 6, speedMin: 5.0, speedMax: 5.5, incline: 2, note: 'Comece fácil.' },
+      { label: 'Bloco principal', fromMin: 6, toMin: 44, speedMin: 6.5, speedMax: 7.5, incline: 3, note: 'Ritmo constante em RPE 4–5. Se a respiração ficar curta, reduza — aqui o erro clássico é acelerar demais.' },
+      { label: 'Volta à calma', fromMin: 44, toMin: 50, speedMin: 5.0, speedMax: 5.0, incline: 1, note: 'Desacelere.' },
+    ],
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -143,8 +220,9 @@ export const TEMPLATES = [
       item('seated-cable-row', 3, 8, 10, { rir: 2, restSec: 120 }),
       item('shoulder-press', 3, 6, 10, { rir: 2, restSec: 150 }),
       item('lateral-raise', 3, 10, 15, { rir: 1, restSec: 60 }),
-      item('biceps-curl', 2, 8, 12, { rir: 1, restSec: 60 }),
-      item('triceps-pushdown', 2, 8, 12, { rir: 1, restSec: 60 }),
+      item('biceps-curl', 3, 8, 12, { rir: 1, restSec: 60 }),
+      item('triceps-pushdown', 3, 8, 12, { rir: 1, restSec: 60 }),
+      item('hanging-knee-raise', 3, 8, 15, { rir: 1, restSec: 75 }),
     ],
   },
   {
@@ -167,7 +245,8 @@ export const TEMPLATES = [
       item('hip-thrust', 3, 8, 12, { rir: 2, restSec: 150 }),
       item('leg-extension', 2, 10, 15, { rir: 2, restSec: 90, provisional: true, notes: 'Só com liberação: é o exercício que mais tensiona o tendão patelar.' }),
       item('calf-raise', 3, 10, 15, { rir: 1, restSec: 60 }),
-      item('plank', 3, 0, 0, { timeBased: true, durationSec: 40, restSec: 45, rir: null }),
+      item('cable-crunch', 3, 10, 15, { rir: 1, restSec: 60 }),
+      item('side-plank', 3, 0, 0, { timeBased: true, durationSec: 40, restSec: 45, rir: null, notes: 'Cada lado conta como 1 série.' }),
     ],
   },
   {
@@ -189,7 +268,9 @@ export const TEMPLATES = [
       item('unilateral-pulldown', 2, 10, 12, { rir: 1, restSec: 90, notes: 'Um braço por vez, amplitude grande.' }),
       item('reverse-fly', 3, 12, 15, { rir: 1, restSec: 60 }),
       item('lateral-raise', 3, 12, 15, { rir: 1, restSec: 60 }),
-      item('hammer-curl', 2, 10, 12, { rir: 1, restSec: 60 }),
+      item('hammer-curl', 3, 10, 12, { rir: 1, restSec: 60 }),
+      item('triceps-pushdown', 3, 10, 15, { rir: 1, restSec: 60 }),
+      item('pallof-press', 3, 8, 12, { rir: 2, restSec: 60, notes: 'Cada lado conta como 1 série.' }),
     ],
   },
   {
@@ -223,7 +304,8 @@ export const TEMPLATES = [
       item('lat-pulldown', 2, 8, 12, { rir: 2, restSec: 120 }),
       item('lateral-raise', 3, 12, 15, { rir: 1, restSec: 60 }),
       item('biceps-curl', 3, 8, 12, { rir: 1, restSec: 60 }),
-      item('triceps-pushdown', 3, 8, 12, { rir: 1, restSec: 60 }),
+      item('triceps-pushdown', 4, 8, 12, { rir: 1, restSec: 60 }),
+      item('hanging-leg-raise', 3, 6, 12, { rir: 1, restSec: 75 }),
     ],
   },
   {
@@ -247,7 +329,8 @@ export const TEMPLATES = [
       item('leg-curl', 3, 10, 12, { rir: 1, restSec: 120 }),
       item('hip-abduction', 3, 12, 15, { rir: 1, restSec: 60, notes: 'Glúteo médio ajuda na estabilidade do joelho.' }),
       item('calf-raise', 3, 12, 15, { rir: 1, restSec: 60 }),
-      item('dead-bug', 3, 8, 10, { rir: null, restSec: 45, notes: 'Cada lado conta como 1 repetição.' }),
+      item('reverse-crunch', 3, 10, 15, { rir: 1, restSec: 45 }),
+      item('hollow-hold', 3, 0, 0, { timeBased: true, durationSec: 30, restSec: 45, rir: null }),
     ],
   },
   {
@@ -272,16 +355,16 @@ export const TEMPLATES = [
   {
     id: 'tpl-domingo-cardio',
     homeCardioPlanId: 'cardio-casa-30',
-    name: 'Zona 2 de domingo',
-    subtitle: 'Condicionamento sem impacto alto',
+    name: 'Intervalos de domingo',
+    subtitle: 'A sessão mais forte da semana',
     dayKey: 'sun',
     kind: 'cardio',
     accent: 'cardio',
     icon: '❤️',
     order: 2,
-    cardioPlanId: 'cardio-zona2-40',
+    cardioPlanId: 'cardio-4x4',
     condition: 'no-football-sunday',
-    notes: 'Aparece quando não há futebol no domingo.',
+    notes: 'Só aparece quando NÃO há futebol no domingo — nas semanas com jogo, o próprio jogo já é a sessão forte. Se quiser algo mais leve, troque o plano para "Zona 2 longa — 50 min" em Planos de cardio; se o joelho estiver incomodando, faça na bicicleta ou no elíptico com o mesmo RPE.',
     items: [],
   },
   {

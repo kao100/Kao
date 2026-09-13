@@ -15,11 +15,11 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 8 | Upper A (8 exercícios, séries/faixas) | ✅ | `tpl-upper-a` |
 | 9 | Lower A provisório, sem assumir agachamento/avanço/búlgaro | ✅ | `tpl-lower-a`, itens marcados `provisional` |
 | 10 | Upper B com ênfase em costas | ✅ | `tpl-upper-b` |
-| 11 | Cardio de quarta com as 4 fases, RPE 3–4, talk test, controles | ✅ | `cardio-zona2-30` + tela de cardio guiado |
+| 11 | Cardio de quarta com as 4 fases, RPE 3–4, talk test, controles | ✅ | `cardio-zona2-30` + tela de cardio guiado. Na v13 o RPE subiu para 4–5 a seu pedido: 3–4 era caminhada, não Zona 2 |
 | 12 | Quinta: futebol com duração, intensidade, gols, distância, calorias, joelho antes/depois; conta para a promessa | ✅ | `/futebol` |
 | 13 | Upper C | ✅ | `tpl-upper-c` |
 | 14 | Sábado condicional (Lower B + cardio leve OU recuperação) | ✅ | `planner` + `tpl-lower-b` / `tpl-recuperacao` |
-| 15 | Domingo condicional (futebol ou Zona 2 30–40 min) | ✅ | `tpl-domingo-*` |
+| 15 | Domingo condicional (futebol ou Zona 2 30–40 min) | ✅ | `tpl-domingo-*`. Na v13 o domingo sem futebol virou intervalado 4×4, a sessão forte da semana |
 | 16 | Ficha visual completa por exercício (todos os campos pedidos) | ✅ | `data/exercises.js` + `/exercicio/:id` |
 | 17 | Imagens: sem copyright/hotlinking; licença, crédito, fonte e fallback | ⚠️ | O app **não baixa imagens da internet**. Ele usa ilustrações SVG próprias (offline, sem licença de terceiros) e permite cadastrar imagem externa informando URL, fonte, crédito e licença — com fallback automático para a ilustração própria se a imagem falhar (`data/media.js`, botão "Imagem externa"). Busca automática por imagens ficou de fora de propósito: quase todo resultado tem direito autoral. |
 | 18 | "Minha academia": fotos das máquinas, marca/modelo, substituir imagem genérica | ✅ | `/academia`, prioridade em `resolveExerciseMedia` |
@@ -203,6 +203,52 @@ Regras da rotação (`logic/cycle.js`), em ordem:
 
 Nada é aplicado sozinho: a troca é um toque seu, e o histórico do exercício
 antigo continua salvo — voltando a ele, as cargas antigas estão lá.
+
+## Cardio de intensidade, core e volume (décima primeira rodada)
+
+Você corrigiu duas coisas: não é iniciante (treina há 3–4 meses) e o cardio
+estava fraco. O áudit do programa confirmou, e foi pior do que parecia.
+
+**Cardio — nenhum plano passava de RPE 4/10.** Não havia nada de limiar nem
+intervalado no app inteiro. Para quem joga futebol toda semana, é subdosado.
+Entraram quatro sessões:
+
+| plano | RPE | para quê |
+|---|---|---|
+| Intervalos 4×4 — 40 min | 8–9 nos blocos | VO₂máx. A mais forte da semana |
+| Limiar (tempo) — 35 min | 6–7 | 20 min de ritmo forte constante |
+| 10-20-30 — 30 min | 5 a 9 | intervalado curto, quando o tempo aperta |
+| Zona 2 longa — 50 min | 4–5 | base aeróbica |
+
+A Zona 2 de quarta também subiu de RPE 3–4 para 4–5 e de 30 para 35 min: o que
+estava lá era caminhada, não Zona 2. O domingo sem futebol passou de Zona 2 a
+intervalado 4×4 — nas semanas **com** jogo, o próprio jogo é a sessão forte, e o
+planejador agora avisa quando um cardio forte cai na véspera de jogo ou no mesmo
+dia dele (`isHardPlan`, que lê o RPE do próprio plano — planos que você criar
+entram na conta sozinhos).
+
+Todos os planos fortes trazem a versão sem impacto (bicicleta, elíptico, remo)
+com o mesmo RPE, por causa do joelho.
+
+**Core — a causa do problema era estrutural.** "Abdominal na polia" e "elevação
+de joelhos na barra" existiam na biblioteca e **não estavam em nenhum treino**.
+Core saiu de 10 para 25 séries por semana, presente nos cinco treinos, com seis
+exercícios novos: prancha lateral, elevação de pernas na barra, pallof press
+(anti-rotação — o que mais transfere para o futebol), abdominal infra, rollout e
+hollow hold. As alternativas ligam todos numa progressão do mais fácil ao mais
+difícil.
+
+**Volume — duas lacunas reais.** Tríceps tinha 5 séries por semana e o Upper B
+não tinha exercício de tríceps nenhum; bíceps tinha 7. A faixa que produz
+crescimento é ~10–20. Tríceps foi para 10 e bíceps para 9. Costas (19), ombros
+(15) e peito (11) já estavam bem e não foram mexidos.
+
+**Nível no perfil** (`iniciante` / `intermediario` / `avancado`): o app deixa de
+supor que você está começando.
+
+Migração v5: só reescreve o treino que ainda está idêntico ao de fábrica.
+Verificado com um banco onde o Upper C havia sido editado — ele ficou intocado
+enquanto os outros quatro receberam o core novo.
 
 ## Pendências assumidas nesta versão
 

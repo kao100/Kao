@@ -198,6 +198,21 @@ export async function planForDate(date) {
     }
   }
 
+  // Cardio forte na véspera de jogo é como se chega cansado no primeiro tempo —
+  // e é onde as lesões sem contato acontecem.
+  const hardCardio = blocks.find((b) => b.plan && isHardPlan(b.plan));
+  if (hardCardio) {
+    const tomorrowIsFootball = key === 'wed'
+      || (key === 'sat' && (sundayPlan?.football ?? null) === true);
+    if (tomorrowIsFootball) {
+      notes.push(`"${hardCardio.plan.name}" é uma sessão forte e amanhã tem jogo. Chegar cansado no jogo rende menos e cansa mais o joelho — vale trocar por Zona 2 ou recuperação ativa hoje, e deixar o intervalado para um dia sem futebol na sequência.`);
+    }
+    const playedToday = blocks.some((b) => b.type === 'football');
+    if (playedToday) {
+      notes.push('Hoje já tem futebol, que é a sessão intensa do dia. Somar um cardio forte em cima não acrescenta condicionamento — acrescenta fadiga.');
+    }
+  }
+
   return {
     date,
     dayKey: key,
@@ -264,4 +279,18 @@ export async function planForWeek(anyDateInWeek = today()) {
   const { weekDates } = await import('../core/format.js');
   const dates = weekDates(anyDateInWeek);
   return Promise.all(dates.map((d) => planForDate(d)));
+}
+
+/**
+ * Um plano de cardio é "forte" quando o RPE passa de 5.
+ * Lê o número do próprio texto do plano, então planos que você criar ou editar
+ * entram na conta sem precisar de lista alguma.
+ */
+export function isHardPlan(plan) {
+  // o texto é do tipo "8–9 / 10 nos blocos": só o que vem antes da barra é o
+  // RPE; o 10 depois dela é o tamanho da escala, não a intensidade
+  const scale = String(plan?.rpe || '').split('/')[0];
+  const nums = scale.match(/\d+/g);
+  if (!nums) return false;
+  return Math.max(...nums.map(Number)) >= 6;
 }

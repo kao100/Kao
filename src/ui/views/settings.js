@@ -13,6 +13,20 @@ import { stepper } from '../components/inputs.js';
 import { toastOk, toastError, toast } from '../components/toast.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from '../../core/version.js';
 
+export const LEVEL_LABEL = {
+  iniciante: 'Iniciante — primeiros meses',
+  intermediario: 'Intermediário — já tem base',
+  avancado: 'Avançado',
+};
+
+/** Só um palpite inicial: quem manda é o que você escolher. */
+export function levelFromMonths(months) {
+  if (months == null) return null;
+  if (months < 3) return 'iniciante';
+  if (months < 24) return 'intermediario';
+  return 'avancado';
+}
+
 const HOME_EQUIPMENT = [
   ['pullUpBar', '🏋️ Barra fixa'],
   ['bench', '🪑 Banco, cadeira firme ou sofá'],
@@ -44,6 +58,7 @@ export async function settingsView() {
         row('Peso', profile?.weightKg ? `${num(profile.weightKg, 1)} kg` : '—'),
         row('Altura', profile?.heightM ? `${num(profile.heightM, 2)} m` : '—'),
         row('Experiência', profile?.experienceMonths != null ? `${profile.experienceMonths} meses de treino consistente` : '—'),
+        row('Nível', LEVEL_LABEL[profile?.level] || (profile?.experienceMonths != null ? LEVEL_LABEL[levelFromMonths(profile.experienceMonths)] : '—')),
         row('Abordagem', '100% natural — sem esteroides ou similares'),
         row('Promessa diária', `${profile?.promiseMinutes || 30} minutos`),
         row('Futebol', [
@@ -242,6 +257,14 @@ async function editProfile(profile) {
       { key: 'weightKg', label: 'Peso (kg)', type: 'number', value: profile?.weightKg ?? '', step: '0.1' },
       { key: 'heightM', label: 'Altura (m)', type: 'number', value: profile?.heightM ?? '', step: '0.01' },
       { key: 'experienceMonths', label: 'Meses de treino', type: 'number', value: profile?.experienceMonths ?? '', step: '1' },
+      {
+        key: 'level',
+        label: 'Nível',
+        type: 'select',
+        value: profile?.level || levelFromMonths(profile?.experienceMonths) || 'intermediario',
+        options: Object.entries(LEVEL_LABEL).map(([value, label]) => ({ value, label })),
+        hint: 'Muda o tom das orientações e o cardio que o app propõe por padrão.',
+      },
       { key: 'promiseMinutes', label: 'Minutos da promessa diária', type: 'number', value: profile?.promiseMinutes ?? 30, step: '5' },
       {
         key: 'conditionLabel',
