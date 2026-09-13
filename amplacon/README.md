@@ -36,7 +36,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node amplacon/tools/teste.mjs     # 59 verificações da lógica, sem navegador
+node amplacon/tools/teste.mjs     # 74 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -68,7 +68,7 @@ Depois disso, qualquer aba responde na hora.
 | 📤 Contas a pagar | vencimentos, categorias e prorrogação que reflete no caixa |
 | 📥 Contas a receber | títulos, saldos e situação |
 | 🏦 Bancos | saldo por conta, extrato e o que não conciliou |
-| ⚠️ Conciliação | só o que exige atenção; resolveu, sai da frente |
+| ⚠️ Conciliação | só o que exige atenção; resolveu, sai da frente — inclui **Atribuir vendedores**, que sugere o pedido de cada NF para você confirmar |
 | 🗂️ Central de arquivos | checklist do dia, importação e histórico |
 
 Simulação de cenários fica dentro do Fluxo de caixa.
@@ -80,8 +80,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **Faturamento é da NF emitida**, pela data de emissão. Pedido de agosto
   faturado em setembro conta em setembro. Canceladas saem; devoluções entram
   negativas no mês da emissão.
-- **Vendedor nunca é adivinhado.** A ordem é: definido à mão › veio no relatório
-  de NFs › pedido informado na NF › pedido que aponta para a NF › ⚠️ sem vendedor.
+- **Vendedor nunca é adivinhado.** A ordem é: decidido por você › veio no
+  relatório de NFs › pedido informado na NF › pedido que aponta para a NF ›
+  ⚠️ sem vendedor. Como o relatório de pedidos não traz a NF, a tela *Atribuir
+  vendedores* procura os candidatos e espera sua confirmação — dois pedidos com
+  o mesmo valor nunca são resolvidos sozinhos.
+- **Comissão de fábrica:** 2% padrão e 0,5% no cimento (pela palavra na
+  descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência obrigatória:** faturamento fiscal = soma dos vendedores. A
   diferença aparece; o fechamento de comissão fica travado enquanto existir.
 - **Caixa:** vencido sem promessa não entra na projeção (não há data confiável);
@@ -116,13 +121,14 @@ src/
     files/            zip · xlsx (ler) · xlsxw (escrever) · csv · nfe · ofx · read
   data/
     sources.js        catálogo de fontes e campos canônicos (o mapa de importação)
-    seed.js           primeira execução (contas e regra padrão)
+    seed.js           primeira execução (contas e regras de comissão)
   logic/              regras de negócio, sem DOM
     ingest.js         arquivo → registro canônico, validação e deduplicação
     link.js           NF ↔ pedido ↔ vendedor, conciliação e pendências
     revenue.js        faturamento e conferência fiscal
     commission.js     regras, ajustes e fechamento
     collection.js     cobrança: status, fila do dia e baixas
+    suggest.js        candidatos de pedido para cada NF sem vendedor
     cashflow.js       projeção acumulada e simulação
     abc.js            curva ABC e ficha do produto
     routine.js        rotina diária e selo de integridade

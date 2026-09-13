@@ -23,6 +23,7 @@ const cashflow = await import('../src/logic/cashflow.js');
 const collection = await import('../src/logic/collection.js');
 const abc = await import('../src/logic/abc.js');
 const routine = await import('../src/logic/routine.js');
+const suggest = await import('../src/logic/suggest.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 
@@ -149,14 +150,20 @@ igual('conferência aprovada', setembro2.conferencia.ok, true);
 const auditoria = await store.auditoria.listar();
 ok('a correção manual ficou registrada com motivo', auditoria.some((a) => a.acao === 'vendedor_da_nf' && a.motivo), '');
 
-console.log('\n▶ Comissões (item 7)');
-await store.regrasComissao.salvar({
-  id: 'regra_cimento', escopo: 'categoria', nome: 'Cimento', alvo: { categoria: 'Cimento' },
-  percentual: 0.5, base: 'valorProdutos', ativo: true,
-});
-await store.regrasComissao.salvar({
-  id: 'regra_padrao', escopo: 'padrao', nome: 'Padrão da empresa', percentual: 2, base: 'valorProdutos', ativo: true,
-});
+console.log('\n▶ Comissões (item 7) — regras de fábrica: 2% padrão, 0,5% cimento');
+const regrasDeFabrica = await store.regrasComissao.listar();
+igual('a regra padrão nasce em 2%', regrasDeFabrica.find((r) => r.id === 'regra_padrao').percentual, 2);
+igual('e a do cimento em 0,5%', regrasDeFabrica.find((r) => r.id === 'regra_cimento').percentual, 0.5);
+igual(
+  'cimento pega pela palavra, mesmo sem categoria no arquivo',
+  commission.escolherRegra(regrasDeFabrica, { descricao: 'CIMENTO CP-II 50KG', categoria: null, data: '2026-09-01' }).percentual,
+  0.5,
+);
+igual(
+  'o resto fica no padrão',
+  commission.escolherRegra(regrasDeFabrica, { descricao: 'Madeira pinus', categoria: 'Madeira', data: '2026-09-01' }).percentual,
+  2,
+);
 const calc = await commission.calcular('2026-09');
 const comEduardo = calc.vendedores.find((v) => v.nome === 'Eduardo');
 // Eduardo: cimento 12.000 x 0,5% = 60 | areia 2.800 x 2% = 56 | madeira 21.500 x 2% = 430
@@ -262,6 +269,39 @@ console.log('\n▶ Rotina e integridade (itens 3 e 15)');
 const r = await routine.rotina('2026-09-10');
 ok('a rotina lista as fontes que faltam', r.pendentes.length > 0, '');
 ok('o selo de integridade não fica verde com pendência', r.integridade.nivel !== 'verde', '');
+
+console.log('\n▶ Sugestão de vínculo NF ↔ pedido (relatório de pedidos sem a NF)');
+await importar('pedidos', 'pedidos2.csv', `Pedido;Data;Vendedor;Cliente;CNPJ;Valor
+1010;01/10/2026;Roberto;Vidraçaria Ômega;55666777000122;9.900,00`);
+await importar('nfs', 'nfs2.csv', `NF;Serie;Emissao;Cliente;CNPJ;Valor Total;Valor Produtos;Situacao
+3200;1;05/10/2026;Vidraçaria Ômega;55666777000122;9.900,00;9.900,00;Autorizada`);
+await link.recalcular();
+
+const nf3200 = (await store.nfs.listar()).find((n) => n.numero === '3200');
+igual('sem pedido informado na NF, ela fica sem vendedor', nf3200.vendedorId, null);
+
+const lista = await suggest.sugestoes();
+const s3200 = lista.find((x) => x.nf.numero === '3200');
+igual('o app acha o pedido candidato (mesmo cliente, mesmo valor)', s3200.confianca, 'exata');
+igual('e mostra de quem é', s3200.melhor.vendedorNome, 'Roberto');
+igual('o pedido é anterior à emissão', s3200.melhor.diasAntes, 4);
+igual('mas nada foi aplicado sozinho', (await store.nfs.obter(nf3200.id)).vendedorId, null);
+
+const aplicado = await suggest.confirmarVarios(
+  [{ nfId: nf3200.id, pedidoId: s3200.melhor.pedido.id }],
+  { motivo: 'confirmado no teste' },
+);
+igual('a confirmação vincula', aplicado.feitos, 1);
+const nf3200b = await store.nfs.obter(nf3200.id);
+igual('a NF passa a ter vendedor', !!nf3200b.vendedorId, true);
+igual('com a origem registrada', nf3200b.vendedorOrigem, 'pedido-confirmado');
+igual('e o pedido guardado', nf3200b.pedidoNumero, '1010');
+
+await link.recalcular();
+igual('o recálculo não desfaz a confirmação', (await store.nfs.obter(nf3200.id)).vendedorOrigem, 'pedido-confirmado');
+
+const pedidoUsado = await suggest.sugestoes();
+igual('o pedido confirmado sai da lista de candidatos', pedidoUsado.some((x) => x.nf.numero === '3200'), false);
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

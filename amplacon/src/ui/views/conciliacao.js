@@ -9,6 +9,7 @@ import * as store from '../../core/store.js';
 import { TIPOS_PENDENCIA, recalcular, definirVendedorDaNf } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { kpi, chips, botao, aviso, selo } from '../components/ui.js';
+import * as suggest from '../../logic/suggest.js';
 import { formulario, detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
 import { ok, erro } from '../components/toast.js';
 import { money, formatDate } from '../../core/format.js';
@@ -108,7 +109,8 @@ function acoes(p, contexto) {
   const botoes = [];
 
   if (p.tipo === 'nf_sem_vendedor') {
-    botoes.push(botao('Definir vendedor', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
+    botoes.push(botao('Ver sugestões', { tipo: 'primario', pequeno: true, onClick: () => navigate('/conciliacao/vendedores') }));
+    botoes.push(botao('Definir vendedor', { pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
   } else if (p.tipo === 'extrato_sem_vinculo') {
     botoes.push(botao('Vincular', { tipo: 'primario', pequeno: true, onClick: () => vincularMovimento(p, contexto) }));
@@ -328,5 +330,165 @@ async function refazer() {
   const resultado = await recalcular();
   await atualizarAlertas();
   ok(`Vínculos refeitos · ${resultado.pendencias} pendência(s) aberta(s).`);
+  refresh();
+}
+
+/* ------------------------------------------------ atribuir vendedor às NFs */
+
+/**
+ * Tela dedicada ao caso da AMPLACON: o relatório de pedidos não traz a NF, então
+ * quando a nota também não traz o pedido o app procura os candidatos e você
+ * confirma. O que estiver com cliente e valor batendo já vem marcado; o resto
+ * espera sua escolha.
+ */
+export async function telaVendedores({ query }) {
+  const janela = Number(query.j || suggest.JANELA_PADRAO);
+  const [lista, vendedores] = await Promise.all([
+    suggest.sugestoes({ janelaDias: janela }),
+    store.vendedores.listar(),
+  ]);
+  definirTitulo('Atribuir vendedores', `${lista.length} NF(s) sem vendedor`);
+
+  if (!lista.length) {
+    return h('div.empilha', { style: { gap: '14px' } },
+      h('div.tudo-ok',
+        h('div.tudo-ok__icone', '✅'),
+        h('h3', 'Todas as notas têm vendedor'),
+        h('p.pequeno.muted', 'O faturamento fiscal bate com a soma dos vendedores.')),
+      botao('Voltar para a conciliação', { bloco: true, onClick: () => navigate('/conciliacao') }));
+  }
+
+  const marcadas = new Set(lista.filter((s) => s.sugerido).map((s) => s.nf.id));
+  const contador = h('span');
+  const atualizarContador = () => {
+    contador.textContent = marcadas.size ? `Confirmar ${marcadas.size} selecionada(s)` : 'Nenhuma selecionada';
+  };
+  atualizarContador();
+
+  const confirmarSelecionadas = async () => {
+    const pares = lista
+      .filter((s) => marcadas.has(s.nf.id) && s.melhor)
+      .map((s) => ({ nfId: s.nf.id, pedidoId: s.melhor.pedido.id }));
+    if (!pares.length) { erro('Marque ao menos uma sugestão.'); return; }
+    const resultado = await suggest.confirmarVarios(pares, { motivo: 'confirmado em lote na tela de sugestões' });
+    await atualizarAlertas();
+    ok(`${resultado.feitos} NF(s) vinculadas.`);
+    refresh();
+  };
+
+  return h('div.empilha', { style: { gap: '14px' } },
+    aviso('O app procura pedidos do mesmo cliente, anteriores à emissão da nota. '
+      + 'Ele não decide sozinho: o que você confirmar aqui fica registrado como decisão sua.', 'info'),
+
+    h('div.grade.grade--3',
+      kpi({
+        label: 'Cliente e valor batem', valor: String(lista.filter((s) => s.confianca === 'exata').length),
+        icone: '🎯', cor: 'ok', nota: 'já vêm marcadas',
+      }),
+      kpi({
+        label: 'Precisam de escolha', valor: String(lista.filter((s) => s.confianca === 'varias' || s.confianca === 'unica').length),
+        icone: '🤔', cor: 'atencao',
+      }),
+      kpi({
+        label: 'Sem candidato', valor: String(lista.filter((s) => s.confianca === 'nenhuma').length),
+        icone: '✋', nota: 'definir à mão',
+      })),
+
+    chips([30, 60, 90, 180].map((d) => ({ id: String(d), label: `${d} dias` })), String(janela),
+      (id) => navigate(href('/conciliacao/vendedores', { j: id }))),
+    h('p.mini.muted', 'Janela: até quantos dias antes da emissão o pedido ainda é considerado.'),
+
+    h('div.lista', ...lista.map((s) => linhaSugestao(s, { marcadas, atualizarContador, vendedores }))),
+
+    h('div.btn-linha', { style: { position: 'sticky', bottom: '12px' } },
+      h('button.btn.btn--ok.btn--bloco', { onClick: confirmarSelecionadas }, contador)));
+}
+
+function linhaSugestao(s, ctx) {
+  const info = suggest.CONFIANCA[s.confianca];
+  const { nf } = s;
+  const marcavel = !!s.melhor;
+  const caixa = h('span.check__caixa', '✓');
+
+  const alternar = () => {
+    if (!marcavel) return;
+    if (ctx.marcadas.has(nf.id)) ctx.marcadas.delete(nf.id);
+    else ctx.marcadas.add(nf.id);
+    linha.classList.toggle('check--marcado', ctx.marcadas.has(nf.id));
+    ctx.atualizarContador();
+  };
+
+  const linha = h(`div.item.item--st.st-${s.confianca === 'exata' ? 'pago' : 'cobrado'}`,
+    { class: ctx.marcadas.has(nf.id) ? 'check--marcado' : '' },
+    marcavel ? h('button', { onClick: alternar, style: { background: 'none', padding: 0 } }, caixa) : h('span.ponto'),
+    h('div.item__corpo',
+      h('div.item__titulo', `NF ${nf.numero} — ${nf.clienteNome || 'cliente não identificado'}`),
+      h('div.item__sub',
+        h('span', formatDate(nf.dataEmissao)),
+        h('span.forte', money(nf.valorTotal)),
+        selo(info.label, info.cor === 'neutro' ? undefined : info.cor)),
+      s.melhor
+        ? h('div.item__sub',
+          h('span', `↳ pedido ${s.melhor.pedido.numero}`),
+          h('span.forte', s.melhor.vendedorNome),
+          h('span', `${formatDate(s.melhor.pedido.data)} · ${s.melhor.diasAntes} dia(s) antes`),
+          s.melhor.mesmoValor
+            ? h('span.ok', 'mesmo valor')
+            : h('span.atencao', s.melhor.diferenca == null
+              ? 'pedido sem valor'
+              : `diferença de ${money(s.melhor.diferenca)}`))
+        : h('div.item__sub.muted', info.detalhe),
+      h('div.item__acoes',
+        s.candidatos.length > 0 && botao(`Escolher pedido (${s.candidatos.length})`, {
+          pequeno: true, onClick: () => escolherPedido(s),
+        }),
+        botao('Definir vendedor à mão', {
+          pequeno: true, onClick: () => definirManual(nf, ctx.vendedores),
+        }))));
+
+  return linha;
+}
+
+async function escolherPedido(s) {
+  if (!s.candidatos.length) { erro('Nenhum pedido candidato para esta nota.'); return; }
+  const r = await formulario({
+    titulo: `NF ${s.nf.numero} — qual pedido gerou?`,
+    descricao: `${s.nf.clienteNome} · ${formatDate(s.nf.dataEmissao)} · ${money(s.nf.valorTotal)}`,
+    campos: [{
+      chave: 'pedidoId',
+      label: 'Pedido',
+      tipo: 'select',
+      opcoes: s.candidatos.map((c) => ({
+        valor: c.pedido.id,
+        label: `${c.pedido.numero} · ${c.vendedorNome} · ${formatDate(c.pedido.data)} · `
+          + `${c.pedido.valorTotal == null ? 'sem valor' : money(c.pedido.valorTotal)}`
+          + `${c.mesmoValor ? ' ✓ mesmo valor' : ''}`,
+      })),
+    }],
+    confirmar: 'Confirmar vínculo',
+  });
+  if (!r) return;
+  await suggest.confirmar(s.nf.id, r.pedidoId);
+  await recalcular();
+  await atualizarAlertas();
+  ok('Vínculo confirmado.');
+  refresh();
+}
+
+async function definirManual(nf, vendedores) {
+  if (!vendedores.length) { erro('Nenhum vendedor cadastrado. Importe os pedidos ou cadastre em Ajustes.'); return; }
+  const r = await formulario({
+    titulo: `NF ${nf.numero} — definir vendedor`,
+    descricao: `${nf.clienteNome || 'cliente não identificado'} · ${formatDate(nf.dataEmissao)} · ${money(nf.valorTotal)}`,
+    campos: [
+      { chave: 'vendedorId', label: 'Vendedor', tipo: 'select', opcoes: vendedores.map((v) => ({ valor: v.id, label: v.nome })) },
+      { chave: 'motivo', label: 'Por que este vendedor?', tipo: 'texto', obrigatorio: true },
+    ],
+    confirmar: 'Definir',
+  });
+  if (!r) return;
+  await definirVendedorDaNf(nf.id, r.vendedorId, r.motivo);
+  await atualizarAlertas();
+  ok('Vendedor definido.');
   refresh();
 }

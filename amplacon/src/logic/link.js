@@ -7,7 +7,8 @@
  * à mão na tela de Conciliação.
  *
  * Ordem de confiança para descobrir o vendedor de uma NF:
- *   1. definido à mão no app (vence tudo, e fica registrado quem definiu)
+ *   1. decidido por você no app — definido à mão ou vínculo de pedido
+ *      confirmado na tela de sugestões (vence tudo, e fica registrado)
  *   2. vendedor que veio no próprio relatório de NFs
  *   3. pedido informado na NF  → vendedor do pedido
  *   4. pedido que aponta para esta NF → vendedor do pedido
@@ -238,9 +239,12 @@ function resolverVendedor(nome, porNome, novos) {
   return novo;
 }
 
+/** Origens que vieram de uma decisão sua: o recálculo não mexe nelas. */
+const DECIDIDO_POR_VOCE = new Set(['manual', 'pedido-confirmado']);
+
 function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, novosVendedores }) {
-  if (nf.vendedorOrigem === 'manual' && nf.vendedorId) {
-    return { vendedorId: nf.vendedorId, vendedorOrigem: 'manual', pedidoId: nf.pedidoId || null };
+  if (DECIDIDO_POR_VOCE.has(nf.vendedorOrigem) && nf.vendedorId) {
+    return { vendedorId: nf.vendedorId, vendedorOrigem: nf.vendedorOrigem, pedidoId: nf.pedidoId || null };
   }
   if (nf.vendedorNome) {
     const v = resolverVendedor(nf.vendedorNome, porNome, novosVendedores);

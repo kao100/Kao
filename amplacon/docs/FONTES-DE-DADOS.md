@@ -80,12 +80,18 @@ custo" — o app não estima custo.
 Esta é a fonte que resolve o problema central do projeto.
 
 Obrigatórios: número do pedido, data, vendedor.
-**Muito importante:** se o relatório trouxer a **NF gerada** por cada pedido, a
-ligação fica exata e 100% automática.
+
+> **Situação na AMPLACON:** o relatório de pedidos **não traz a NF gerada**.
+> Então a ligação depende de a NF trazer o número do pedido. Quando ela não
+> traz, o app usa a tela **Conciliação → Atribuir vendedores**: procura pedidos
+> do mesmo cliente, anteriores à emissão, e você confirma. Ele marca sozinho só
+> o caso de **um único** pedido com o mesmo valor — e mesmo assim precisa do seu
+> clique. Dois pedidos com o mesmo valor ficam esperando sua escolha.
 
 Ordem que o app usa para descobrir o vendedor de uma NF:
 
-1. definido à mão no app (vence tudo, com registro de quem e por quê);
+1. decidido por você — definido à mão ou vínculo de pedido confirmado na tela
+   de sugestões (vence tudo, com registro de quem e por quê);
 2. vendedor que veio no próprio relatório de NFs;
 3. número do pedido informado na NF → vendedor daquele pedido;
 4. pedido que aponta para aquela NF → vendedor daquele pedido;
@@ -95,9 +101,11 @@ Nunca há ligação por semelhança de nome, valor ou data aproximada.
 
 ### O que perguntar
 
-- [ ] O relatório de pedidos mostra a NF gerada?
+- [x] ~~O relatório de pedidos mostra a NF gerada?~~ **Não.**
+- [x] ~~Uma NF pode juntar vários pedidos?~~ **Não há rateio.**
+- [ ] **A tela/relatório de NFs mostra o número do pedido?** (é o que decide se a
+      ligação fica automática ou passa pela tela de sugestões)
 - [ ] Um pedido pode gerar **várias** NFs (entrega parcelada)? Como aparece?
-- [ ] Uma NF pode juntar **vários** pedidos? (isso muda a regra de rateio da comissão)
 - [ ] O nome do vendedor é escrito igual em todos os relatórios?
 
 ---

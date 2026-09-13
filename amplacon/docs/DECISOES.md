@@ -18,7 +18,16 @@ porque dependem de informação que só a empresa tem.
 
 ### Vendedor
 - A ordem de confiança está em `src/logic/link.js` e no documento de fontes.
-- **Nunca** há ligação por semelhança de nome, valor aproximado ou data próxima.
+- **Nunca** há ligação automática por semelhança de nome, valor aproximado ou
+  data próxima.
+- Como o relatório de pedidos **não traz a NF gerada** (confirmado pela empresa),
+  existe a tela **Conciliação → Atribuir vendedores**: o app procura pedidos do
+  mesmo cliente, anteriores à emissão e dentro de uma janela, e mostra os
+  candidatos. Ele marca sozinho apenas o caso em que há **um único** pedido com
+  o mesmo valor — e ainda assim só grava quando você confirma. Dois pedidos com
+  o mesmo valor, ou valor diferente, ficam esperando sua escolha.
+- **Uma NF tem um vendedor só** (não há rateio, confirmado pela empresa), então
+  um pedido confirmado resolve a nota inteira.
 - Vendedor que aparece num arquivo e ainda não existe no cadastro **é criado** —
   isso é dado do arquivo, não suposição. Nomes diferentes da mesma pessoa se
   resolvem cadastrando **apelidos**.
@@ -37,6 +46,10 @@ porque dependem de informação que só a empresa tem.
 - O valor **não é gravado**: é recalculado de vendas + regras + ajustes, para não
   existir número congelado sem rastreabilidade.
 - Todo ajuste **exige motivo** e guarda valor original, novo, usuário e horário.
+- Regras de fábrica, informadas pela empresa: **2% padrão** e **0,5% no cimento**.
+  A do cimento pega pela **palavra na descrição** (e não pela categoria), porque
+  nem todo arquivo traz categoria. Editar qualquer uma delas tira a marca de
+  "veio de fábrica" e nenhuma atualização futura mexe no seu valor.
 - O fechamento do mês é **bloqueado** enquanto houver NF sem vendedor ou
   divergência entre fiscal e atribuído.
 - Base "margem" só calcula onde há custo confiável; sem custo, a linha fica
@@ -75,16 +88,22 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 
 | # | Pergunta | Enquanto isso |
 |---|---|---|
-| 1 | O relatório de pedidos traz a **NF gerada**? | a ligação usa o número do pedido informado na NF; sem ele, vira pendência |
-| 2 | Uma NF pode juntar **vários pedidos**? | hoje cada NF tem um vendedor só; se houver rateio, a regra precisa ser definida |
-| 3 | Um pedido pode gerar **várias NFs**? | funciona: cada NF é faturamento do seu próprio mês |
-| 4 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
-| 5 | O BPO manda **categoria/plano de contas**? | sem categoria, não dá para ver para onde o dinheiro vai |
-| 6 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
-| 7 | Qual o **percentual padrão** de comissão e as exceções? | a regra padrão nasce em 0% até ser configurada |
-| 8 | Existe **meta por vendedor**, além da meta da empresa? | a meta individual já é cadastrável, mas não vem de arquivo |
-| 9 | Quantos dias sem contato um título deve voltar para a fila de cobrança? | hoje são **3 dias** (`RECONTATO_DIAS` em `src/logic/collection.js`) |
-| 10 | A partir de que saldo o caixa é "atenção" e "crítico"? | Ajustes traz R$ 20.000 e R$ 0 como ponto de partida |
+| 1 | **A tela/relatório de NFs tem o número do pedido?** | se tiver, a ligação vira exata e automática e a tela de sugestões deixa de ser necessária; se não tiver, você confirma pelas sugestões |
+| 2 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
+| 3 | O BPO manda **categoria/plano de contas**? | sem categoria, não dá para ver para onde o dinheiro vai |
+| 4 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
+| 5 | Existe **meta por vendedor**, além da meta da empresa? | a meta individual já é cadastrável, mas não vem de arquivo |
+| 6 | Quantos dias sem contato um título deve voltar para a fila de cobrança? | hoje são **3 dias** (`RECONTATO_DIAS` em `src/logic/collection.js`) |
+| 7 | A partir de que saldo o caixa é "atenção" e "crítico"? | Ajustes traz R$ 20.000 e R$ 0 como ponto de partida |
+| 8 | Quantos dias antes da emissão ainda vale procurar o pedido? | a janela começa em **90 dias** e é trocável na própria tela |
+
+### Já respondidas
+
+| Pergunta | Resposta | O que mudou no app |
+|---|---|---|
+| O relatório de pedidos traz a NF gerada? | **Não** | criada a tela "Atribuir vendedores", com sugestão por cliente + valor e confirmação sua |
+| Existe rateio de uma NF entre vendedores? | **Não** | confirmado o modelo de um vendedor por NF; um pedido confirmado resolve a nota inteira |
+| Qual o percentual de comissão? | **2% padrão, 0,5% no cimento** | regras já criadas de fábrica, editáveis em Comissões → Regras |
 
 ---
 

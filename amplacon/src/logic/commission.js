@@ -5,7 +5,8 @@
  * O cálculo sai das vendas EFETIVAMENTE FATURADAS e já atribuídas a um vendedor.
  *
  * Ordem de especificidade (a mais específica ganha):
- *   produto + vendedor > produto > categoria + vendedor > categoria > vendedor > padrão
+ *   produto + vendedor > produto > categoria + vendedor > categoria >
+ *   palavra na descrição > vendedor > padrão
  *
  * Depois do cálculo entram os AJUSTES (por NF, item, produto ou vendedor), que
  * sempre guardam valor original, valor novo, quem fez, quando e por quê.
@@ -35,6 +36,9 @@ export const ESCOPOS = {
   produto: { label: 'Produto', peso: 50 },
   'categoria-vendedor': { label: 'Categoria + vendedor', peso: 40 },
   categoria: { label: 'Categoria', peso: 30 },
+  // "termo" pega pela palavra na descrição — útil quando o arquivo não traz
+  // categoria (ex.: tudo que tem "cimento" no nome paga 0,5%)
+  termo: { label: 'Palavra na descrição', peso: 25 },
   vendedor: { label: 'Vendedor', peso: 20 },
   padrao: { label: 'Padrão da empresa', peso: 10 },
 };
@@ -62,7 +66,7 @@ export function regraPadrao(percentual = 0) {
 }
 
 /** Escolhe a regra que vale para um item, do mais específico para o mais geral. */
-export function escolherRegra(regras, { produtoId, categoria, vendedorId, data }) {
+export function escolherRegra(regras, { produtoId, categoria, descricao, vendedorId, data }) {
   const candidatas = regras.filter((r) => {
     if (r.ativo === false) return false;
     if (r.vigenciaDe && data && data < r.vigenciaDe) return false;
@@ -70,6 +74,7 @@ export function escolherRegra(regras, { produtoId, categoria, vendedorId, data }
     const alvo = r.alvo || {};
     if (alvo.produtoId && alvo.produtoId !== produtoId) return false;
     if (alvo.categoria && normalizarCategoria(alvo.categoria) !== normalizarCategoria(categoria)) return false;
+    if (alvo.termo && !contemTermo(alvo.termo, categoria, descricao)) return false;
     if (alvo.vendedorId && alvo.vendedorId !== vendedorId) return false;
     return true;
   });
@@ -79,6 +84,14 @@ export function escolherRegra(regras, { produtoId, categoria, vendedorId, data }
 
 function normalizarCategoria(c) {
   return String(c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/** A palavra da regra aparece na categoria ou na descrição do produto? */
+function contemTermo(termo, categoria, descricao) {
+  const alvo = normalizarCategoria(termo);
+  if (!alvo) return false;
+  return normalizarCategoria(categoria).includes(alvo)
+    || normalizarCategoria(descricao).includes(alvo);
 }
 
 /* ------------------------------------------------------------------ cálculo */
@@ -129,7 +142,11 @@ export async function calcular(mes = monthKey()) {
       const produto = produtoPorId.get(item.produtoId) || null;
       const categoria = produto?.categoriaManual || produto?.categoria || item.categoria || null;
       const regra = escolherRegra(regrasTodas, {
-        produtoId: item.produtoId, categoria, vendedorId: nf.vendedorId, data: nf.dataEmissao,
+        produtoId: item.produtoId,
+        categoria,
+        descricao: item.descricao || produto?.descricao,
+        vendedorId: nf.vendedorId,
+        data: nf.dataEmissao,
       });
       if (!regra) avisos.semRegra += 1;
 

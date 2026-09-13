@@ -20,7 +20,7 @@ import * as db from '../core/db.js';
 
 /** Campos que o app calcula ou o usuário edita — uma reimportação não pode apagar. */
 const PRESERVAR = {
-  nfs: ['vendedorId', 'vendedorOrigem', 'vendedorDefinidoEm', 'observacao'],
+  nfs: ['vendedorId', 'vendedorOrigem', 'vendedorDefinidoEm', 'pedidoId', 'pedidoOrigem', 'observacao'],
   receber: ['vendedorId', 'nfId', 'observacao', 'contatoPreferido'],
   pagar: ['prorrogadoPara', 'prorrogacaoMotivo', 'observacaoInterna'],
   extrato: ['conciliacaoStatus', 'conciliadoCom', 'conciliadoEm', 'conciliadoPor'],
@@ -398,6 +398,7 @@ function construirPedido(d) {
       vendedorId: null, // resolvido no recálculo, contra o cadastro de vendedores
       clienteId: cliente?.id || null,
       clienteNome: d.clienteNome || null,
+      clienteDoc: digits(d.clienteDoc) || null,
       valorTotal: d.valorTotal == null ? null : cents(d.valorTotal),
       nfNumero: d.nfNumero ? docNumber(d.nfNumero) : null,
       status: d.status || null,
@@ -721,9 +722,11 @@ function preservar(nome, antigo, novo) {
   for (const campo of PRESERVAR[nome] || []) {
     if (antigo[campo] != null && (novo[campo] == null || novo[campo] === '')) out[campo] = antigo[campo];
   }
-  if (nome === 'nfs' && antigo.vendedorOrigem === 'manual') {
+  // vendedor que você definiu (à mão ou confirmando um pedido) não volta atrás
+  if (nome === 'nfs' && ['manual', 'pedido-confirmado'].includes(antigo.vendedorOrigem)) {
     out.vendedorId = antigo.vendedorId;
-    out.vendedorOrigem = 'manual';
+    out.vendedorOrigem = antigo.vendedorOrigem;
+    out.pedidoId = antigo.pedidoId || null;
   }
   if (nome === 'extrato' && antigo.conciliacaoStatus === 'conciliado') {
     out.conciliacaoStatus = 'conciliado';

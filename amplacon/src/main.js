@@ -19,7 +19,7 @@ import { telaComissoes } from './ui/views/comissoes.js';
 import { telaPagar } from './ui/views/pagar.js';
 import { telaReceber } from './ui/views/receber.js';
 import { telaBancos } from './ui/views/bancos.js';
-import { telaConciliacao } from './ui/views/conciliacao.js';
+import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
 import { telaAjustes } from './ui/views/ajustes.js';
 
@@ -37,6 +37,7 @@ const ROTAS = [
   { path: '/receber', view: telaReceber, titulo: 'Contas a receber' },
   { path: '/bancos', view: telaBancos, titulo: 'Bancos e extrato' },
   { path: '/conciliacao', view: telaConciliacao, titulo: 'Conciliação' },
+  { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'Atribuir vendedores' },
   { path: '/arquivos', view: telaArquivos, titulo: 'Central de arquivos' },
   { path: '/arquivos/:fonte', view: telaImportar, titulo: 'Importar' },
   { path: '/ajustes', view: telaAjustes, titulo: 'Ajustes' },
