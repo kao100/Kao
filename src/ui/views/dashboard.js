@@ -5,6 +5,7 @@ import { today, formatDate, formatMinutes, weekDates, kg, dayLabel } from '../..
 import { planForDate, planForWeek, answerFootball, blockSummary, setLocation } from '../../logic/planner.js';
 import { kneeStatus } from '../../logic/knee.js';
 import { targetsFor, dayTotals } from '../../logic/nutrition.js';
+import { fitsBudget } from '../../logic/duration.js';
 import { page, topbar, iconAction, sectionTitle, safetyNote } from '../shell.js';
 import { startWorkoutFlow } from './workout.js';
 import { openDayActivitySheet } from './promise.js';
@@ -39,7 +40,7 @@ export async function dashboardView() {
 
     plan.question ? footballQuestion(plan.question) : null,
 
-    todayCard(plan, date),
+    todayCard(plan, date, profile?.sessionMinutes || 60),
 
     knee.level !== 'ok' ? kneeAlert(knee) : null,
 
@@ -114,9 +115,11 @@ function footballQuestion(question) {
 
 /* ---------------------------- treino de hoje ---------------------------- */
 
-export function todayCard(plan, date) {
+export function todayCard(plan, date, budget = null) {
   const main = plan.blocks[0];
   const accent = main?.accent || 'volt';
+  const cardioMin = plan.blocks.filter((b) => b.plan).reduce((s, b) => s + (b.plan.totalMin || 0), 0);
+  const time = main?.template ? fitsBudget(main.template, budget, { cardioMin }) : null;
 
   return h('section.today-card', { style: { '--accent-color': `var(--${accent})` } },
     h('div.today-card__kicker', `${plan.dayLabel} · treino de hoje`),
@@ -124,8 +127,10 @@ export function todayCard(plan, date) {
     h('div.today-card__meta',
       ...plan.blocks.map((b, i) => h(`span.pill.pill--${b.accent}`,
         i === 0 ? `${b.icon} ${blockSummary(b) || b.title}` : `${b.icon} ${b.title}`)),
+      time ? h('span.pill', `⏱ ~${time.total} min`) : null,
       plan.blocks.some((b) => b.provisional) ? h('span.pill.pill--warn', 'provisório') : null,
     ),
+    time && !time.fits ? h('div.safety', { style: { marginTop: '10px' } }, time.advice) : null,
     main?.template?.items?.length
       ? h('ul.today-card__list',
         ...main.template.items.slice(0, 5).map((it, i) => h('li',

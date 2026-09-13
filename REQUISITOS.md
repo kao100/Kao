@@ -250,6 +250,35 @@ Migração v5: só reescreve o treino que ainda está idêntico ao de fábrica.
 Verificado com um banco onde o Upper C havia sido editado — ele ficou intocado
 enquanto os outros quatro receberam o core novo.
 
+## Tempo, core no chão e cardio fora da esteira (décima segunda rodada)
+
+**Tempo por treino.** Você disse que tem 1h por dia, no mínimo 30 min. O perfil
+ganhou `sessionMinutes` (padrão 60) e `logic/duration.js` estima cada treino
+série a série: tempo de execução + descanso + 1 min de transição por exercício.
+O card de hoje mostra "⏱ ~X min" e, quando passa, diz o que fazer — e a ordem
+importa: **encurtar descanso de isolador primeiro, cortar série por último**, e
+nunca a do primeiro exercício, que é o que mais rende. A lista em Programa
+mostra a duração de cada treino.
+
+Como ficou (orçamento de 60 min): Upper A 60, Lower A 52, Upper B 46 + 35 de
+cardio, Upper C 47, Lower B 44 + 25 de cardio. Quarta e sábado passam de 1h por
+causa do cardio — é o dia de escolher entre encurtar descanso ou fazer o cardio
+em outro momento.
+
+**Core no chão.** Você pediu abdômen fora das máquinas. Dois exercícios novos
+(elevação de pernas no solo e abdominal bicicleta) e, mais importante, **os três
+treinos de casa que não tinham core nenhum passaram a ter** — o Upper A, B e C
+em casa estavam sem abdômen. Dos 12 exercícios de core, 10 são de chão ou barra
+e só 2 dependem de máquina; todo item de máquina tem o equivalente de chão no
+topo das alternativas.
+
+**Cardio fora da esteira.** `CARDIO_MACHINES` descreve esteira, elíptico e
+simulador de escadas: impacto, como regular e o que isso significa para o
+joelho. Cada plano forte traz instrução específica por aparelho, e a tela de
+cardio ganhou o seletor — a escolha fica salva. O elíptico é apontado como
+primeira opção em dia de joelho sensível (zero impacto), e a escada leva o aviso
+de não se apoiar no corrimão, que falseia o esforço.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

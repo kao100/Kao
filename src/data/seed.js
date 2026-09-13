@@ -40,6 +40,8 @@ export const DEFAULT_PROFILE = {
   },
   conditions: [],
   promiseMinutes: 30,
+  // quanto tempo você tem para treinar num dia normal (o mínimo é a promessa)
+  sessionMinutes: 60,
   promiseText: 'Pelo menos 30 minutos de exercício todos os dias.',
   onboarded: false,
 };

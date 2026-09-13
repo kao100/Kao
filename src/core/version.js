@@ -7,11 +7,20 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v13';
+export const APP_VERSION = 'kao-v14';
 export const APP_DATE = '2026-09-13';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v14',
+    date: '2026-09-13',
+    items: [
+      'Abdômen no chão: dois exercícios novos (elevação de pernas no solo e abdominal bicicleta) e core em TODOS os treinos de casa — três deles não tinham nenhum.',
+      'Cardio em elíptico e simulador de escadas: cada plano diz como fazer em cada aparelho, e a escolha fica salva.',
+      'Tempo por treino no perfil. O card de hoje mostra "~X min" e avisa quando passa do seu tempo — sugerindo encurtar descanso antes de cortar série.',
+    ],
+  },
   {
     version: 'kao-v13',
     date: '2026-09-13',

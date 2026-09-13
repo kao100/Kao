@@ -1,4 +1,11 @@
-/** Cardio guiado na esteira: timeline com alertas de troca de velocidade e inclinação. */
+/**
+ * Cardio guiado: timeline com alertas de troca de fase.
+ *
+ * Os números de velocidade e inclinação são da esteira, porque é o aparelho que
+ * dá valores objetivos. Mas quem comanda a sessão é o RPE: no elíptico ou na
+ * escada, o mesmo plano vale ajustando resistência ou ritmo de degraus até o
+ * esforço bater. O seletor de aparelho no topo mostra como fazer em cada um.
+ */
 
 import { h, haptic } from '../../core/dom.js';
 import { navigate, refresh } from '../../core/router.js';
@@ -10,6 +17,7 @@ import { page, topbar, safetyNote, emptyState, sectionTitle } from '../shell.js'
 import { openSheet } from '../components/sheet.js';
 import { scale, stepper, textInput } from '../components/inputs.js';
 import { toastOk, toast } from '../components/toast.js';
+import { CARDIO_MACHINES } from '../../data/program.js';
 
 export async function cardioView({ params, query }) {
   const date = query.date || today();
@@ -33,6 +41,7 @@ export async function cardioView({ params, query }) {
       speed: ph.speedMax ?? ph.speedMin ?? null,
       incline: ph.incline ?? null,
     })),
+    machine: settings.cardioMachine || 'esteira',
   };
 
   const root = h('div.stack.stack--lg');
@@ -162,7 +171,9 @@ function buildCardio(state, render) {
       ),
     ),
 
-    safetyNote(`${plan.talkTest} Se a intensidade estiver alta demais, reduza velocidade ou inclinação — o futebol já cobre a parte intensa da semana.`, 'info'),
+    machineCard(state),
+
+    safetyNote(`${plan.talkTest} Se a intensidade estiver alta demais, reduza o ritmo — o esforço percebido manda mais que o número do painel.`, 'info'),
   );
 }
 
@@ -296,4 +307,47 @@ export function openManualCardioSheet(date = today()) {
       );
     },
   });
+}
+
+/**
+ * Em que aparelho fazer.
+ * A escolha fica salva em Ajustes e vale para os próximos cardios, porque
+ * ninguém quer escolher o aparelho toda vez.
+ */
+function machineCard(state) {
+  const { plan } = state;
+  const chosen = state.machine || 'esteira';
+  const box = h('div.stack.stack--sm');
+
+  const paint = (id) => {
+    const m = CARDIO_MACHINES.find((x) => x.id === id) || CARDIO_MACHINES[0];
+    const specific = plan.machineNotes?.[m.id];
+    box.textContent = '';
+    box.appendChild(h('div.list-item__sub', `Impacto: ${m.impact}`));
+    box.appendChild(h('p.muted', { style: { fontSize: '14px' } }, specific || m.howTo));
+    if (m.knee) box.appendChild(h('div.safety', `🦵 ${m.knee}`));
+    if (m.tip) box.appendChild(h('p.muted', { style: { fontSize: '13px' } }, m.tip));
+  };
+
+  const buttons = CARDIO_MACHINES.map((m) => {
+    const btn = h('button.btn.btn--sm', { class: m.id === chosen ? 'btn--primary' : 'btn--ghost' }, `${m.icon} ${m.name}`);
+    btn.addEventListener('click', async () => {
+      buttons.forEach((b) => { b.className = 'btn btn--sm btn--ghost'; });
+      btn.className = 'btn btn--sm btn--primary';
+      paint(m.id);
+      state.machine = m.id;
+      await store.settings.save({ cardioMachine: m.id });
+    });
+    return btn;
+  });
+
+  paint(chosen);
+
+  return h('div.card',
+    h('div.card__title', 'Em qual aparelho'),
+    h('p.muted', { style: { fontSize: '13px', marginTop: '4px' } },
+      'Os números das fases são da esteira. Em outro aparelho, ignore-os e ajuste até o RPE bater — o estímulo é o mesmo.'),
+    h('div.btn-row', { style: { flexWrap: 'wrap', marginTop: '10px' } }, ...buttons),
+    h('div', { style: { marginTop: '10px' } }, box),
+  );
 }

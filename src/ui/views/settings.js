@@ -61,6 +61,7 @@ export async function settingsView() {
         row('Nível', LEVEL_LABEL[profile?.level] || (profile?.experienceMonths != null ? LEVEL_LABEL[levelFromMonths(profile.experienceMonths)] : '—')),
         row('Abordagem', '100% natural — sem esteroides ou similares'),
         row('Promessa diária', `${profile?.promiseMinutes || 30} minutos`),
+        row('Tempo por treino', `${profile?.sessionMinutes || 60} minutos`),
         row('Futebol', [
           profile?.football?.thursdayFixed ? 'quinta fixo' : null,
           profile?.football?.sundayOptional ? 'domingo opcional' : null,
@@ -266,6 +267,14 @@ async function editProfile(profile) {
         hint: 'Muda o tom das orientações e o cardio que o app propõe por padrão.',
       },
       { key: 'promiseMinutes', label: 'Minutos da promessa diária', type: 'number', value: profile?.promiseMinutes ?? 30, step: '5' },
+      {
+        key: 'sessionMinutes',
+        label: 'Tempo que tenho por treino (min)',
+        type: 'number',
+        value: profile?.sessionMinutes ?? 60,
+        step: '5',
+        hint: 'O app avisa quando o treino do dia passa disso, e diz o que encurtar primeiro.',
+      },
       {
         key: 'conditionLabel',
         label: 'Condição em acompanhamento',

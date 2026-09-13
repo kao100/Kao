@@ -24,6 +24,41 @@ const item = (exerciseId, sets, repMin, repMax, opts = {}) => ({
 /* Planos de cardio (esteira)                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Como rodar qualquer plano fora da esteira.
+ *
+ * Os planos trazem velocidade e inclinação porque a esteira é o aparelho que
+ * dá números objetivos. Mas o que comanda a sessão é o **RPE**, não o painel:
+ * em qualquer aparelho, se o esforço percebido bate, o estímulo é o mesmo.
+ */
+export const CARDIO_MACHINES = [
+  {
+    id: 'esteira',
+    name: 'Esteira',
+    icon: '🏃',
+    impact: 'alto na corrida, baixo na caminhada inclinada',
+    howTo: 'Use a velocidade e a inclinação escritas em cada fase. São o ponto de partida — ajuste para o RPE bater.',
+    knee: 'Correndo, é o aparelho de maior impacto. Caminhada inclinada rápida tira o impacto e mantém o esforço.',
+  },
+  {
+    id: 'eliptico',
+    name: 'Elíptico',
+    icon: '🌀',
+    impact: 'o mais baixo dos três',
+    howTo: 'Ignore a velocidade da esteira. Suba a resistência (e a rampa, se tiver) até o RPE da fase bater, e mantenha entre 60 e 80 passadas por minuto.',
+    knee: 'O pé nunca deixa o pedal, então não há impacto nenhum. É a primeira escolha em dia de joelho sensível — e serve para qualquer plano, inclusive os intervalados.',
+  },
+  {
+    id: 'escada',
+    name: 'Simulador de escadas',
+    icon: '🪜',
+    impact: 'médio',
+    howTo: 'Controle pela velocidade de degraus por minuto. Suba o ritmo até o RPE bater. Pise no degrau inteiro, não na ponta do pé.',
+    knee: 'Exige mais do joelho e do quadril que o elíptico, porque cada passo é uma subida com o peso do corpo. Bom para glúteo e panturrilha; em dia de dor, prefira o elíptico.',
+    tip: 'Não se apoie no corrente com o peso do corpo: apoiar tira metade do trabalho e falseia o RPE.',
+  },
+];
+
 export const CARDIO_PLANS = [
   {
     id: 'cardio-zona2-30',
@@ -135,6 +170,10 @@ export const CARDIO_PLANS = [
     totalMin: 35,
     rpe: '6–7 / 10',
     lowImpact: 'Bicicleta, elíptico ou remo servem: mantenha o mesmo RPE e ignore velocidade e inclinação.',
+    machineNotes: {
+      eliptico: 'Suba a resistência até quase não conseguir falar. Cadência estável — não é para acelerar e desacelerar.',
+      escada: 'Ritmo de degraus constante e alto. Se precisar se apoiar para aguentar, está pesado demais: reduza.',
+    },
     talkTest: 'Você consegue dizer três ou quatro palavras, não uma frase inteira. Se conseguir conversar, está leve demais.',
     phases: [
       { label: 'Aquecimento', fromMin: 0, toMin: 8, speedMin: 5.5, speedMax: 6.5, incline: 2, note: 'Suba o ritmo aos poucos até sentir o corpo pronto.' },
@@ -149,6 +188,10 @@ export const CARDIO_PLANS = [
     totalMin: 40,
     rpe: '8–9 / 10 nos blocos',
     lowImpact: 'Bicicleta ou elíptico servem, e poupam o joelho do impacto da corrida. O estímulo cardiovascular é o mesmo.',
+    machineNotes: {
+      eliptico: 'A melhor opção aqui: nos 4 minutos fortes, suba a resistência bastante e mantenha a cadência. Zero impacto no joelho.',
+      escada: 'Funciona, mas 4 minutos de escada forte pesam no joelho. Se houver qualquer dor, mude para o elíptico.',
+    },
     talkTest: 'Nos 4 minutos fortes você não consegue falar. Na recuperação, volta a conversar.',
     phases: [
       { label: 'Aquecimento', fromMin: 0, toMin: 10, speedMin: 5.5, speedMax: 7.0, incline: 2, note: 'Dez minutos de verdade. Entrar frio no primeiro bloco é como o pessoal se machuca.' },
@@ -169,6 +212,10 @@ export const CARDIO_PLANS = [
     totalMin: 30,
     rpe: '5 a 9 / 10, alternando',
     lowImpact: 'Na bicicleta funciona igual: alterne a resistência em vez da velocidade.',
+    machineNotes: {
+      eliptico: 'Alterne a resistência nos três níveis, ou mantenha a resistência e alterne a cadência: 30 s lenta, 20 s média, 10 s o mais rápido que der.',
+      escada: 'Alterne a velocidade de degraus. Os 10 s fortes na escada cansam rápido — comece conservador no primeiro bloco.',
+    },
     talkTest: 'Os 10 segundos finais de cada ciclo são quase máximos — nada de conversa ali.',
     phases: [
       { label: 'Aquecimento', fromMin: 0, toMin: 8, speedMin: 5.5, speedMax: 6.5, incline: 2, note: 'Solte o corpo.' },
@@ -187,6 +234,10 @@ export const CARDIO_PLANS = [
     totalMin: 50,
     rpe: '4–5 / 10',
     lowImpact: 'Bicicleta, elíptico ou caminhada inclinada rápida — o que for mais confortável para o joelho.',
+    machineNotes: {
+      eliptico: 'Resistência moderada, cadência confortável, 50 minutos. É o mais fácil de sustentar sem se distrair do ritmo.',
+      escada: 'Ritmo lento e constante. Cinquenta minutos de escada é bastante — na dúvida, divida: 25 de escada e 25 de elíptico.',
+    },
     talkTest: 'Frases completas o tempo todo, mas com a respiração nitidamente mais funda que em repouso.',
     phases: [
       { label: 'Aquecimento', fromMin: 0, toMin: 6, speedMin: 5.0, speedMax: 5.5, incline: 2, note: 'Comece fácil.' },
@@ -413,6 +464,8 @@ export const HOME_TEMPLATES = [
       item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Em casa: garrafas de água de 1,5 L ou mochila pequena em cada mão.' }),
       item('chin-up', 2, 3, 8, { rir: 1, restSec: 120, notes: 'Pegada supinada: é aqui que o bíceps trabalha em casa.' }),
       item('bench-dip', 2, 8, 15, { rir: 1, restSec: 60 }),
+      item('lying-leg-raise', 3, 10, 15, { rir: 1, restSec: 45 }),
+      item('side-plank', 3, 0, 0, { timeBased: true, durationSec: 40, restSec: 45, rir: null, notes: 'Cada lado conta como 1 série.' }),
     ],
   },
   {
@@ -434,6 +487,7 @@ export const HOME_TEMPLATES = [
       item('box-squat', 3, 8, 15, { rir: 2, restSec: 120, provisional: true, notes: 'Opcional e só sem dor: a altura da cadeira limita a amplitude.' }),
       item('calf-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Em casa: no degrau da escada, com apoio na parede.' }),
       item('hanging-knee-raise', 3, 6, 12, { rir: 1, restSec: 75, notes: 'Na barra fixa. Sem barra, troque por prancha.' }),
+      item('dead-bug', 3, 8, 12, { rir: null, restSec: 45, notes: 'Cada lado conta como 1 repetição.' }),
     ],
   },
   {
@@ -456,6 +510,8 @@ export const HOME_TEMPLATES = [
       item('superman', 3, 10, 15, { rir: 1, restSec: 60 }),
       item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Garrafas ou mochila.' }),
       item('dead-hang', 2, 0, 0, { timeBased: true, durationSec: 30, restSec: 60, rir: null, notes: 'Fecha o dia soltando a coluna e ganhando pegada.' }),
+      item('bicycle-crunch', 3, 12, 20, { rir: 1, restSec: 45, notes: 'Cada par de lados conta como 1 repetição. Devagar rende mais que rápido.' }),
+      item('plank', 3, 0, 0, { timeBased: true, durationSec: 45, restSec: 45, rir: null }),
     ],
   },
   {
@@ -477,6 +533,8 @@ export const HOME_TEMPLATES = [
       item('lateral-raise', 3, 12, 20, { rir: 1, restSec: 60 }),
       item('biceps-curl', 3, 10, 15, { rir: 1, restSec: 60, notes: 'Mochila carregada.' }),
       item('bench-dip', 3, 8, 15, { rir: 1, restSec: 60 }),
+      item('reverse-crunch', 3, 10, 15, { rir: 1, restSec: 45 }),
+      item('hollow-hold', 3, 0, 0, { timeBased: true, durationSec: 30, restSec: 45, rir: null }),
     ],
   },
   {
@@ -499,6 +557,8 @@ export const HOME_TEMPLATES = [
       item('glute-bridge', 3, 12, 20, { rir: 1, restSec: 60, notes: 'Com mochila sobre o quadril, se quiser mais dificuldade.' }),
       item('calf-raise', 3, 12, 20, { rir: 1, restSec: 60 }),
       item('hanging-knee-raise', 3, 6, 12, { rir: 1, restSec: 75, notes: 'Na barra fixa. Sem barra, troque por dead bug.' }),
+      item('lying-leg-raise', 3, 10, 15, { rir: 1, restSec: 45 }),
+      item('side-plank', 3, 0, 0, { timeBased: true, durationSec: 40, restSec: 45, rir: null, notes: 'Cada lado conta como 1 série.' }),
     ],
   },
 ];

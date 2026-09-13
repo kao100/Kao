@@ -9,7 +9,7 @@
  * Os dados do usuário NÃO passam por aqui: ficam no IndexedDB.
  */
 
-const VERSION = 'kao-v13';
+const VERSION = 'kao-v14';
 const SHELL_CACHE = `${VERSION}-shell`;
 
 const SHELL = [
@@ -33,6 +33,7 @@ const SHELL = [
   './src/logic/nutrition.js',
   './src/ui/views/food.js',
   './src/logic/cycle.js',
+  './src/logic/duration.js',
   './src/ui/views/cycle.js',
   './src/core/router.js',
   './src/core/format.js',
