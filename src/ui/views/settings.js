@@ -9,7 +9,7 @@ import { formatDate, num } from '../../core/format.js';
 import { exportJSON, exportCSV, importBackup, CSV_EXPORTS } from '../../logic/backup.js';
 import { page, topbar, sectionTitle, menuRow, safetyNote } from '../shell.js';
 import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
-import { stepper } from '../components/inputs.js';
+import { stepper, segmented } from '../components/inputs.js';
 import { toastOk, toastError, toast } from '../components/toast.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from '../../core/version.js';
 
@@ -87,6 +87,29 @@ export async function settingsView() {
             value: settings?.restIsolationSec ?? 75, step: 15, min: 30, max: 240, unit: 'seg', decimals: 0,
             onChange: (v) => store.settings.save({ restIsolationSec: v }),
           }),
+        ),
+        h('div.field',
+          h('label.field__label', 'Descanso ao TROCAR de exercício'),
+          stepper({
+            value: settings?.restBetweenExercisesSec ?? 60, step: 15, min: 0, max: 180, unit: 'seg', decimals: 0,
+            onChange: (v) => store.settings.save({ restBetweenExercisesSec: v }),
+          }),
+          h('div.list-item__sub',
+            'É o tempo entre o fim de um exercício e o começo do próximo — trocar de aparelho, regular o banco. Não é o descanso entre séries.'),
+        ),
+        h('div.field',
+          h('label.field__label', 'Ritmo entre séries'),
+          segmented({
+            value: String(settings?.restPace ?? 1),
+            options: [
+              { value: '1', label: 'Programado' },
+              { value: '0.75', label: 'Mais rápido' },
+              { value: '0.5', label: 'Bem rápido' },
+            ],
+            onChange: (v) => store.settings.save({ restPace: Number(v) }),
+          }),
+          h('div.list-item__sub',
+            'Encurta o descanso entre as séries do mesmo exercício. Vale saber o custo: em exercício pesado (supino, puxada, leg press), descanso curto derruba a carga que você aguenta na série seguinte, e carga é o que puxa o crescimento. Em isolador (rosca, elevação lateral, panturrilha) o custo é pequeno. Se for encurtar, encurte os pequenos.'),
         ),
         h('div.grid-2',
           h('div.field',

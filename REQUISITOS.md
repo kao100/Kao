@@ -279,6 +279,49 @@ cardio ganhou o seletor — a escolha fica salva. O elíptico é apontado como
 primeira opção em dia de joelho sensível (zero impacto), e a escada leva o aviso
 de não se apoiar no corrimão, que falseia o esforço.
 
+## Descanso e fim de semana (décima terceira rodada)
+
+**O descanso de 2:30 entre exercícios era um bug meu.** O modo treino disparava
+o mesmo cronômetro ao terminar a última série de um exercício, antes do
+seguinte. Você via 2:30 parado só para trocar de aparelho. Agora são duas coisas
+separadas:
+
+- **entre séries do mesmo exercício** — continua o tempo do programa (180 s no
+  supino, 150 s na puxada…), porque é ele que sustenta a carga na série
+  seguinte;
+- **ao trocar de exercício** — `restBetweenExercisesSec`, **1 min por padrão**,
+  ajustável de 0 a 3 min.
+
+Ajustes também ganhou **"Ritmo entre séries"** (programado / mais rápido / bem
+rápido), que multiplica o descanso entre séries por 1, 0,75 ou 0,5. O texto na
+tela diz o custo com franqueza: em exercício pesado, descanso curto derruba a
+carga da série seguinte, e carga é o que puxa o crescimento; em isolador o custo
+é pequeno. Quem encurta, encurta os pequenos.
+
+**Sábado e domingo mais pesados**, já que nesses dias você não tem hora. Usei o
+espaço para fechar a lacuna real do programa, que era quadríceps:
+
+| músculo | antes | depois |
+|---|---|---|
+| Quadríceps | 8 | **12** |
+| Panturrilha | 6 | **10** |
+| Ombros | 15 | **18** |
+| Tríceps | 10 | **13** |
+| Bíceps | 9 | **12** |
+| Glúteos | 9 | **12** |
+| Core | 25 | **31** |
+
+Sábado (Lower B) foi de 44 para 68 min: entrou cadeira extensora em repetições
+altas — volume de quadríceps sem carga pesada no joelho —, uma série a mais de
+leg press e de panturrilha, e braço direto, que em sábado não atrapalha dia
+nenhum.
+
+Domingo sem futebol deixou de ser só cardio: virou **intervalado + acessórios**,
+nessa ordem. Os acessórios são de baixa fadiga de propósito (posterior de ombro,
+abdutora, panturrilha, pallof, prancha lateral) — nenhum deles compromete o
+Upper A de segunda. A ordem é garantida pela flag `cardioFirst` no template, que
+faz o planejador pôr o cardio na frente quando ele é o treino principal do dia.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

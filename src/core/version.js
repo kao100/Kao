@@ -7,11 +7,21 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v14';
+export const APP_VERSION = 'kao-v15';
 export const APP_DATE = '2026-09-13';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v15',
+    date: '2026-09-13',
+    items: [
+      'Corrigido: ao terminar um exercício o app disparava o descanso longo da série antes do exercício seguinte. Agora troca de exercício tem tempo próprio — 1 min por padrão.',
+      'Ajustes ganhou "Ritmo entre séries" (programado / mais rápido / bem rápido), com o custo explicado.',
+      'Sábado ficou mais pesado: quadríceps subiu de 8 para 12 séries na semana, panturrilha de 6 para 10, e entrou braço direto.',
+      'Domingo sem futebol virou intervalado + acessórios de baixa fadiga, nessa ordem — nada ali atrapalha a segunda.',
+    ],
+  },
   {
     version: 'kao-v14',
     date: '2026-09-13',

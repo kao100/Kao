@@ -131,6 +131,10 @@ export async function planForDate(date) {
 
   const blocks = [];
   for (const raw of chosen.sort((a, b) => (a.order || 0) - (b.order || 0))) {
+    // ordem dentro do dia: musculação antes do cardio, porque é ela que exige
+    // força e técnica. A exceção é o dia em que o cardio É o treino principal
+    // (domingo de intervalado) — aí os acessórios vêm depois, com `cardioFirst`.
+    const beforeCount = blocks.length;
     const tpl = annotate(raw);
     if (tpl.kind === 'football') {
       blocks.push({ type: 'football', templateId: tpl.id, title: tpl.name, subtitle: tpl.subtitle, icon: '⚽', accent: 'ball', minMinutes: 30 });
@@ -162,6 +166,11 @@ export async function planForDate(date) {
           icon: tpl.kind === 'recovery' ? '🧘' : '❤️',
           accent: tpl.kind === 'recovery' ? 'recover' : 'cardio',
         });
+        if (tpl.cardioFirst) {
+          // o cardio é o treino principal do dia: sobe para a frente dos acessórios
+          const cardioBlock = blocks.pop();
+          blocks.splice(beforeCount, 0, cardioBlock);
+        }
       }
     }
   }

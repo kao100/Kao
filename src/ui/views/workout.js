@@ -208,8 +208,16 @@ async function renderTrainer(state, ctx) {
     session.items[state.itemIndex - (nowDone >= totalSets ? 1 : 0)].completedSets = nowDone;
     await store.sessions.save(session);
 
-    if (ctx.settings?.restAutoStart !== false && (item.restSec || 0) > 0 && state.itemIndex < session.items.length) {
-      startRest(state, item.restSec, ctx);
+    // Descanso entre SÉRIES e descanso entre EXERCÍCIOS são coisas diferentes.
+    // Entre séries do mesmo exercício, o tempo longo é o que sustenta a carga.
+    // Entre exercícios você troca de aparelho, regula o banco e muda de músculo
+    // — aqui o tempo longo é só tempo parado.
+    const trocouDeExercicio = nowDone >= totalSets;
+    const pausa = trocouDeExercicio
+      ? (ctx.settings?.restBetweenExercisesSec ?? 60)
+      : Math.round((item.restSec || 0) * (ctx.settings?.restPace ?? 1));
+    if (ctx.settings?.restAutoStart !== false && pausa > 0 && state.itemIndex < session.items.length) {
+      startRest(state, pausa, ctx);
     }
     ctx.rerender();
   };

@@ -13,7 +13,7 @@ import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
 import { BUILTIN_FOODS } from './foods.js';
 
-export const SEED_VERSION = 5;
+export const SEED_VERSION = 6;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -63,6 +63,10 @@ const V2_HOME_ITEMS = {
  * editou o treino antes de a migração v5 (core, tríceps e cardio forte)
  * reescrever qualquer coisa.
  */
+const V5_WEEKEND_ITEMS = {
+  'tpl-lower-b': ['hip-thrust', 'leg-press', 'leg-curl', 'hip-abduction', 'calf-raise', 'reverse-crunch', 'hollow-hold'],
+};
+
 const V4_GYM_ITEMS = {
   'tpl-upper-a': ['machine-chest-press', 'lat-pulldown', 'incline-press', 'seated-cable-row', 'shoulder-press', 'lateral-raise', 'biceps-curl', 'triceps-pushdown'],
   'tpl-lower-a': ['leg-press', 'romanian-deadlift', 'leg-curl', 'hip-thrust', 'leg-extension', 'calf-raise', 'plank'],
@@ -75,6 +79,11 @@ export const DEFAULT_SETTINGS = {
   theme: 'dark',
   restCompoundSec: 150,
   restIsolationSec: 75,
+  // troca de exercício não é descanso de série: é caminhar até o aparelho e
+  // regular o banco. O tempo longo aqui só atrasa o treino.
+  restBetweenExercisesSec: 60,
+  // multiplicador do descanso ENTRE SÉRIES (1 = como programado)
+  restPace: 1,
   restAutoStart: true,
   soundEnabled: true,
   vibrationEnabled: true,
@@ -261,6 +270,50 @@ async function migrate(fromVersion, existingEx, existingTpl) {
 
     if (skipped.length) {
       console.info('Treinos de academia preservados porque foram editados:', skipped.join(', '));
+    }
+  }
+
+  if (fromVersion < 6) {
+    // v6: sábado e domingo mais pesados (você não tem hora nesses dias) e
+    // descanso de troca de exercício separado do descanso entre séries.
+    const tplCatalog = new Map(ALL_TEMPLATES.map((t) => [t.id, t]));
+    const updates = [];
+    const skipped = [];
+
+    for (const tpl of existingTpl) {
+      const original = V5_WEEKEND_ITEMS[tpl.id];
+      const fresh = tplCatalog.get(tpl.id);
+      if (!original || !fresh) continue;
+      const current = (tpl.items || []).map((it) => it.exerciseId);
+      const untouched = current.length === original.length && current.every((id, i) => id === original[i]);
+      if (untouched) updates.push({ ...tpl, items: fresh.items, notes: fresh.notes });
+      else skipped.push(tpl.name);
+    }
+
+    // domingo ganha os acessórios só se ainda estiver vazio (de fábrica)
+    const sunday = existingTpl.find((t) => t.id === 'tpl-domingo-cardio');
+    const freshSunday = tplCatalog.get('tpl-domingo-cardio');
+    if (sunday && freshSunday && !(sunday.items || []).length) {
+      updates.push({
+        ...sunday,
+        items: freshSunday.items,
+        name: freshSunday.name,
+        subtitle: freshSunday.subtitle,
+        notes: freshSunday.notes,
+        cardioFirst: true,
+      });
+    }
+
+    if (updates.length) await store.templates.saveMany(updates);
+
+    const settings = await store.settings.get();
+    const patch = {};
+    if (settings?.restBetweenExercisesSec == null) patch.restBetweenExercisesSec = DEFAULT_SETTINGS.restBetweenExercisesSec;
+    if (settings?.restPace == null) patch.restPace = DEFAULT_SETTINGS.restPace;
+    if (Object.keys(patch).length) await store.settings.save(patch);
+
+    if (skipped.length) {
+      console.info('Treinos de fim de semana preservados porque foram editados:', skipped.join(', '));
     }
   }
 
