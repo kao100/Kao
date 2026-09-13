@@ -1,3 +1,17 @@
+# Kao
+
+Este repositório guarda dois aplicativos independentes, cada um na sua pasta:
+
+| App | Pasta | O que é |
+|---|---|---|
+| **Kao Training** | `/` (raiz) | personal training digital e diário de treinamento |
+| **AMPLACON** | [`/amplacon`](amplacon/) | gestão administrativa da AMPLACON — faturamento, caixa, cobrança, comissões e conciliação |
+
+Os dois são PWAs sem build, com dados locais no aparelho, e não compartilham
+código nem banco.
+
+---
+
 # Kao Training
 
 Aplicativo pessoal de treino — personal training digital e diário de treinamento.

@@ -1,0 +1,287 @@
+/* ------------------------------------------------------------------ marca */
+
+.logo { display: flex; align-items: center; gap: 9px; }
+.logo__texto { display: flex; flex-direction: column; line-height: 1; }
+.logo__nome { font-weight: 800; letter-spacing: .16em; font-size: 14px; color: var(--txt); }
+.logo__sub { font-size: 8.5px; letter-spacing: .3em; color: var(--muted); margin-top: 5px; text-transform: uppercase; }
+
+.logo--grande { flex-direction: column; gap: 14px; }
+.logo--grande .logo__nome { font-size: 26px; letter-spacing: .2em; }
+.logo--grande .logo__texto { align-items: center; }
+.logo__barra { width: 190px; max-width: 60vw; height: 4px; border-radius: 3px; background: var(--marca); }
+
+.divisa { display: block; }
+
+/* --------------------------------------------------- visão da empresa / selo */
+
+.selo-dados {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: var(--raio-sm);
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--txt-2);
+}
+.selo-dados strong { color: var(--txt); font-weight: 700; }
+.selo-dados__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: left; }
+.selo-dados__linha { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selo-dados__nota { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selo-dados__bola { font-size: 13px; }
+.selo-dados--vermelho { border-color: color-mix(in srgb, var(--vermelho) 45%, var(--line)); }
+.selo-dados--amarelo { border-color: color-mix(in srgb, var(--amarelo) 40%, var(--line)); }
+
+.destaque-dia {
+  background: linear-gradient(150deg, var(--azul-fraco), transparent 60%), var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--raio-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.destaque-dia__topo { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.destaque-dia__valor { font-family: var(--fonte-num); font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+@media (max-width: 380px) { .destaque-dia__valor { font-size: 33px; } }
+
+.alertas { display: flex; flex-direction: column; gap: 8px; }
+.alerta {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border-radius: var(--raio);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cor, var(--muted));
+  text-align: left;
+  width: 100%;
+}
+.alerta__icone { font-size: 19px; flex: none; }
+.alerta__corpo { flex: 1; min-width: 0; }
+.alerta__titulo { font-weight: 700; font-size: 14px; }
+.alerta__sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.alerta__seta { color: var(--muted); font-size: 17px; }
+
+/* ------------------------------------------------------------ fluxo de caixa */
+
+.fluxo-dia {
+  display: grid;
+  grid-template-columns: 62px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--raio-sm);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--nv);
+  width: 100%;
+  text-align: left;
+}
+.fluxo-dia--hoje { box-shadow: inset 0 0 0 1px var(--azul); }
+.fluxo-dia__data { font-size: 12px; font-weight: 700; color: var(--txt-2); line-height: 1.25; }
+.fluxo-dia__data span { display: block; font-size: 10px; color: var(--muted); text-transform: capitalize; font-weight: 600; }
+.fluxo-dia__mov { font-size: 11.5px; color: var(--muted); display: flex; flex-direction: column; gap: 1px; }
+.fluxo-dia__mov b { font-variant-numeric: tabular-nums; font-weight: 700; }
+.fluxo-dia__saldo { font-family: var(--fonte-num); font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; color: var(--nv); text-align: right; }
+
+.fluxo-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-radius: var(--raio-sm); overflow: hidden; }
+.fluxo-resumo > div { background: var(--card); padding: 11px 12px; }
+.fluxo-resumo__label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+.fluxo-resumo__valor { font-family: var(--fonte-num); font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; margin-top: 2px; }
+
+.simulacao-ajuste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--roxo-fraco);
+  border: 1px dashed var(--roxo);
+  border-radius: var(--raio-sm);
+  font-size: 13px;
+}
+.simulacao-ajuste__x { margin-left: auto; color: var(--muted); font-size: 17px; }
+
+.comparativo { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-radius: var(--raio-sm); overflow: hidden; }
+.comparativo > div { background: var(--card); padding: 12px; }
+.comparativo__tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 800; color: var(--muted); }
+.comparativo--sim .comparativo__tag { color: var(--roxo); }
+
+/* ---------------------------------------------------------------- cobrança */
+
+.cobranca-item { flex-direction: column; align-items: stretch; gap: 9px; }
+.cobranca-item__topo { display: flex; gap: 10px; align-items: flex-start; }
+.cobranca-item__hist { font-size: 11.5px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.cobranca-item__acoes { display: flex; gap: 7px; flex-wrap: wrap; }
+.cobranca-item__acoes .btn { flex: 1; min-width: 104px; }
+.atraso {
+  font-family: var(--fonte-num);
+  font-weight: 800;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--st-fraco);
+  color: var(--st);
+}
+
+.faixas { display: flex; flex-direction: column; gap: 7px; }
+.faixa { display: grid; grid-template-columns: 96px 1fr auto; gap: 9px; align-items: center; font-size: 12px; }
+.faixa__trilho { height: 8px; border-radius: 99px; background: var(--card-3); overflow: hidden; }
+.faixa__barra { height: 100%; background: var(--laranja); border-radius: 99px; }
+
+/* ---------------------------------------------------------------- produtos */
+
+.abc-classe {
+  display: inline-grid;
+  place-items: center;
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.abc-A { background: var(--verde-fraco); color: var(--verde); }
+.abc-B { background: var(--amarelo-fraco); color: var(--amarelo); }
+.abc-C { background: var(--card-3); color: var(--muted); }
+
+.barra-linha { display: flex; align-items: center; gap: 9px; }
+.barra-linha__trilho { flex: 1; height: 7px; border-radius: 99px; background: var(--card-3); overflow: hidden; }
+.barra-linha__barra { height: 100%; border-radius: 99px; background: var(--cor, var(--azul)); }
+
+/* --------------------------------------------------------------- comissões */
+
+.comissao-vendedor { display: flex; flex-direction: column; gap: 10px; }
+.comissao-vendedor__topo { display: flex; align-items: center; gap: 10px; }
+.comissao-vendedor__valor { margin-left: auto; text-align: right; }
+.comissao-linha {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  width: 100%;
+  text-align: left;
+}
+.comissao-linha--ajustada { background: linear-gradient(90deg, var(--roxo-fraco), transparent 60%); }
+.comissao-linha--pendente { background: linear-gradient(90deg, var(--amarelo-fraco), transparent 60%); }
+.comissao-linha__sub { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+
+.status-fluxo { display: flex; gap: 4px; flex-wrap: wrap; }
+.status-fluxo__etapa {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: var(--card-2);
+  color: var(--muted);
+}
+.status-fluxo__etapa--atual { background: var(--azul); color: #fff; }
+.status-fluxo__etapa--feita { background: var(--verde-fraco); color: var(--verde); }
+
+/* ------------------------------------------------------- central de arquivos */
+
+.tarefa {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--raio);
+}
+.tarefa--feita { background: var(--bg-2); border-style: dashed; opacity: .72; }
+.tarefa--atrasada { border-left: 3px solid var(--vermelho); }
+.tarefa__icone { font-size: 21px; flex: none; width: 26px; text-align: center; }
+.tarefa__corpo { flex: 1; min-width: 0; }
+.tarefa__nome { font-weight: 700; font-size: 14px; }
+.tarefa--feita .tarefa__nome { color: var(--txt-2); }
+.tarefa__sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+.importador { display: flex; flex-direction: column; gap: 14px; }
+.solta {
+  border: 2px dashed var(--line-forte);
+  border-radius: var(--raio-lg);
+  padding: 30px 18px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  background: var(--bg-2);
+  width: 100%;
+}
+.solta--ativo { border-color: var(--azul); background: var(--azul-fraco); }
+.solta__icone { font-size: 32px; }
+
+.mapa-campo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.mapa-campo__nome { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
+.mapa-campo__nome span { font-size: 11px; color: var(--muted); font-weight: 500; }
+.mapa-campo--faltando .mapa-campo__nome { color: var(--vermelho); }
+
+.previa { font-size: 11.5px; }
+.previa td, .previa th { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+
+.erro-linha {
+  display: flex;
+  gap: 9px;
+  padding: 8px 10px;
+  background: var(--vermelho-fraco);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.erro-linha__n { font-weight: 800; color: var(--vermelho); flex: none; }
+
+/* -------------------------------------------------------------- conciliação */
+
+.pendencia {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 12px 13px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--raio);
+  border-left: 3px solid var(--cor, var(--amarelo));
+  width: 100%;
+  text-align: left;
+}
+.pendencia__icone { font-size: 19px; }
+.pendencia__corpo { flex: 1; min-width: 0; }
+.pendencia__titulo { font-weight: 700; font-size: 14px; }
+.pendencia__detalhe { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pendencia__valor { font-family: var(--fonte-num); font-weight: 800; font-size: 14px; white-space: nowrap; }
+
+.tudo-ok {
+  text-align: center;
+  padding: 34px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  background: var(--verde-fraco);
+  border: 1px solid color-mix(in srgb, var(--verde) 35%, transparent);
+  border-radius: var(--raio-lg);
+}
+.tudo-ok__icone { font-size: 40px; }
+
+/* --------------------------------------------------------------- bancos */
+
+.banco-card { display: flex; align-items: center; gap: 12px; }
+.banco-card__logo {
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  font-weight: 800;
+  font-size: 15px;
+  background: var(--card-3);
+  flex: none;
+}
