@@ -19,7 +19,7 @@ clique.
 |---|---|---|---|---|
 | 1 | Vendas / NFs emitidas | diária | faturamento (valor e data) | **XML da NF-e** (ou ZIP do dia) |
 | 2 | Itens das NFs | diária | produto, quantidade, valor por item | XML da NF-e |
-| 3 | Pedidos de venda | diária | **vendedor** de cada venda | XLSX/CSV |
+| 3 | Pedidos / vendedores | diária | **vendedor** de cada venda | XLSX/CSV |
 | 4 | Contas a receber | diária | títulos, vencimentos, saldo | XLSX/CSV |
 | 5 | Contas a pagar (BPO) | semanal | compromissos e vencimentos | XLSX/CSV |
 | 6 | Extrato bancário | diária | saldo real e o que entrou/saiu | **OFX** |
@@ -48,7 +48,9 @@ Campos obrigatórios quando vier em planilha:
 Úteis: série, chave, cliente, CNPJ/CPF, valor dos produtos, frete, desconto,
 número do pedido, vendedor, situação (autorizada/cancelada), natureza da operação.
 
-**O XML quase nunca traz o vendedor.** Por isso existe a fonte 3.
+**O XML quase nunca traz o vendedor** — mas o relatório de NFs da AMPLACON traz
+o **número do pedido**, e é por ele que o vendedor chega (fonte 3). Por isso a
+coluna do pedido é a mais importante do export depois de valor e data.
 
 ### O que perguntar ao sistema atual
 
@@ -75,18 +77,29 @@ custo" — o app não estima custo.
 
 ---
 
-## 3. Pedidos de venda — de onde vem o vendedor
+## 3. Pedidos / vendedores — de onde vem o vendedor
 
 Esta é a fonte que resolve o problema central do projeto.
 
-Obrigatórios: número do pedido, data, vendedor.
+**Obrigatório: apenas número do pedido + vendedor.** Duas colunas bastam. Data,
+cliente e valor são bem-vindos, mas nenhum deles é indispensável.
 
-> **Situação na AMPLACON:** o relatório de pedidos **não traz a NF gerada**.
-> Então a ligação depende de a NF trazer o número do pedido. Quando ela não
-> traz, o app usa a tela **Conciliação → Atribuir vendedores**: procura pedidos
-> do mesmo cliente, anteriores à emissão, e você confirma. Ele marca sozinho só
-> o caso de **um único** pedido com o mesmo valor — e mesmo assim precisa do seu
-> clique. Dois pedidos com o mesmo valor ficam esperando sua escolha.
+> **Situação na AMPLACON — a corrente fecha sozinha:**
+>
+> ```
+> NF (traz o nº do pedido)  →  pedido (traz o vendedor)  →  vendedor
+> ```
+>
+> A tela de NF **tem o pedido referente**, e o relatório de vendedores tem
+> pedido + vendedor. Com essas duas importações o vínculo é **exato e
+> automático** — nada de confirmar nota por nota, e **nada de gerar PDF por
+> pedido**.
+>
+> Sobra só o caso de a NF citar um pedido que ainda não foi importado, ou não
+> citar pedido nenhum. Aí entra a tela **Conciliação → Atribuir vendedores**,
+> que diz o motivo de cada nota e lista os **números dos pedidos que faltam
+> exportar** (com botão de copiar). Se nem pedido houver, ela procura candidatos
+> do mesmo cliente para você confirmar — nunca decide sozinha.
 
 Ordem que o app usa para descobrir o vendedor de uma NF:
 
@@ -101,10 +114,10 @@ Nunca há ligação por semelhança de nome, valor ou data aproximada.
 
 ### O que perguntar
 
-- [x] ~~O relatório de pedidos mostra a NF gerada?~~ **Não.**
+- [x] ~~O relatório de pedidos mostra a NF gerada?~~ **Não** — e não precisa.
 - [x] ~~Uma NF pode juntar vários pedidos?~~ **Não há rateio.**
-- [ ] **A tela/relatório de NFs mostra o número do pedido?** (é o que decide se a
-      ligação fica automática ou passa pela tela de sugestões)
+- [x] ~~A NF mostra o número do pedido?~~ **Sim** — é o que fecha a ligação.
+- [ ] O **export** de NFs (não só a tela) traz a coluna do pedido?
 - [ ] Um pedido pode gerar **várias** NFs (entrega parcelada)? Como aparece?
 - [ ] O nome do vendedor é escrito igual em todos os relatórios?
 

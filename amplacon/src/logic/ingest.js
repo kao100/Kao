@@ -392,8 +392,8 @@ function construirPedido(d) {
     registro: {
       id: `ped_${numero}`,
       numero,
-      data: d.data,
-      mes: monthKey(d.data),
+      data: d.data || null,
+      mes: d.data ? monthKey(d.data) : null,
       vendedorNome: d.vendedorNome,
       vendedorId: null, // resolvido no recálculo, contra o cadastro de vendedores
       clienteId: cliente?.id || null,

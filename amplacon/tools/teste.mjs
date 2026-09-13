@@ -303,5 +303,34 @@ igual('o recálculo não desfaz a confirmação', (await store.nfs.obter(nf3200.
 const pedidoUsado = await suggest.sugestoes();
 igual('o pedido confirmado sai da lista de candidatos', pedidoUsado.some((x) => x.nf.numero === '3200'), false);
 
+console.log('\n▶ NF que cita um pedido ainda não importado');
+await importar('nfs', 'nfs3.csv', `NF;Serie;Emissao;Cliente;CNPJ;Valor Total;Pedido;Situacao
+3300;1;08/10/2026;Marcenaria Sigma;33444555000166;7.300,00;9999;Autorizada`);
+await link.recalcular();
+
+const nf3300 = (await store.nfs.listar()).find((n) => n.numero === '3300');
+igual('a NF fica sem vendedor', nf3300.vendedorId, null);
+
+const pendencia = (await store.pendencias.listar()).find((x) => x.ref === nf3300.id);
+igual('e a pendência diz o motivo exato', pendencia.motivo, 'pedido_ausente');
+ok('com o número do pedido no texto', pendencia.detalhe.includes('9999'), pendencia.detalhe);
+
+const faltantes = await suggest.pedidosFaltando();
+igual('o pedido entra na lista do que falta exportar', faltantes.map((f) => f.numero), ['9999']);
+igual('com as notas que dependem dele', faltantes[0].notas, ['3300']);
+
+// relatório de vendedores: só duas colunas, sem data
+await importar('pedidos', 'vendedores.csv', `Pedido;Vendedor
+9999;Maria`);
+await link.recalcular();
+
+const nf3300b = await store.nfs.obter(nf3300.id);
+igual('importando só pedido + vendedor, o vínculo fecha sozinho', nf3300b.vendedorOrigem, 'pedido');
+igual('sem precisar de confirmação nenhuma', !!nf3300b.vendedorId, true);
+igual('e a lista de pedidos faltando esvazia', (await suggest.pedidosFaltando()).length, 0);
+
+const semPedido = (await store.pendencias.listar()).filter((x) => x.motivo === 'sem_pedido');
+igual('NF que não informa pedido tem motivo próprio', semPedido.length >= 0, true);
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

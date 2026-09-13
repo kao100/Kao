@@ -17,7 +17,7 @@ import * as store from '../core/store.js';
 import { daysBetween } from '../core/format.js';
 import { cents, sortBy, digits } from '../core/util.js';
 import { valeParaFaturamento } from './revenue.js';
-import { recalcular } from './link.js';
+import { recalcular, porQueSemVendedor } from './link.js';
 
 /** Quantos dias antes da emissão ainda vale procurar o pedido. */
 export const JANELA_PADRAO = 90;
@@ -63,6 +63,7 @@ export async function sugestoes({ janelaDias = JANELA_PADRAO, mes = null } = {})
   const pedidosUsados = new Set(nfs.map((n) => n.pedidoId).filter(Boolean));
   const disponiveis = pedidos.filter((p) => p.vendedorId && !pedidosUsados.has(p.id));
 
+  const pedidoPorNumero = new Map(pedidos.map((p) => [String(p.numero), p]));
   const porCliente = new Map();
   for (const pedido of disponiveis) {
     const chave = chaveCliente(pedido);
@@ -95,11 +96,16 @@ export async function sugestoes({ janelaDias = JANELA_PADRAO, mes = null } = {})
     if (fortes.length === 1) { confianca = 'exata'; [melhor] = fortes; } else if (fortes.length > 1) { confianca = 'varias'; }
     else if (candidatos.length === 1) { confianca = 'unica'; [melhor] = candidatos; } else if (candidatos.length > 1) { confianca = 'varias'; }
 
+    // por que esta nota está sem vendedor — é o que diz o que fazer com ela
+    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
+
     return {
       nf,
       candidatos: sortBy(candidatos, (c) => [c.mesmoValor ? 0 : 1, c.diasAntes].join('|')),
       melhor,
       confianca,
+      motivo,
+      explicacao,
       sugerido: CONFIANCA[confianca].sugerir && !!melhor,
     };
   }), (s) => [CONFIANCA[s.confianca].sugerir ? 0 : 1, s.nf.dataEmissao].join('|'));
@@ -182,13 +188,39 @@ export async function desfazer(nfId, motivo) {
   await recalcular();
 }
 
+/**
+ * Pedidos que as NFs citam mas que não estão na base.
+ *
+ * É a lista mais útil da tela: como a NF traz o número do pedido, basta exportar
+ * estes pedidos do relatório de vendedores para o vínculo fechar sozinho.
+ */
+export async function pedidosFaltando() {
+  const [nfs, pedidos] = await Promise.all([store.nfs.listar(), store.pedidos.listar()]);
+  const existentes = new Set(pedidos.map((p) => String(p.numero)));
+  const mapa = new Map();
+
+  for (const nf of nfs) {
+    if (!valeParaFaturamento(nf) || nf.vendedorId || !nf.pedidoNumero) continue;
+    const numero = String(nf.pedidoNumero);
+    if (existentes.has(numero)) continue;
+    if (!mapa.has(numero)) mapa.set(numero, { numero, notas: [], valor: 0, de: nf.dataEmissao, ate: nf.dataEmissao });
+    const linha = mapa.get(numero);
+    linha.notas.push(nf.numero);
+    linha.valor = cents(linha.valor + (nf.valorTotal || 0));
+    if (nf.dataEmissao < linha.de) linha.de = nf.dataEmissao;
+    if (nf.dataEmissao > linha.ate) linha.ate = nf.dataEmissao;
+  }
+  return sortBy([...mapa.values()], (x) => Number(x.numero) || x.numero);
+}
+
 /** Resumo curto para a tela de conciliação. */
 export async function resumo(opcoes) {
-  const lista = await sugestoes(opcoes);
+  const [lista, faltando] = await Promise.all([sugestoes(opcoes), pedidosFaltando()]);
   return {
     total: lista.length,
     sugeridas: lista.filter((s) => s.sugerido).length,
     escolher: lista.filter((s) => s.confianca === 'varias' || s.confianca === 'unica').length,
     semCandidato: lista.filter((s) => s.confianca === 'nenhuma').length,
+    pedidosFaltando: faltando.length,
   };
 }

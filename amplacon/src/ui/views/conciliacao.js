@@ -343,9 +343,10 @@ async function refazer() {
  */
 export async function telaVendedores({ query }) {
   const janela = Number(query.j || suggest.JANELA_PADRAO);
-  const [lista, vendedores] = await Promise.all([
+  const [lista, vendedores, faltando] = await Promise.all([
     suggest.sugestoes({ janelaDias: janela }),
     store.vendedores.listar(),
+    suggest.pedidosFaltando(),
   ]);
   definirTitulo('Atribuir vendedores', `${lista.length} NF(s) sem vendedor`);
 
@@ -377,8 +378,11 @@ export async function telaVendedores({ query }) {
   };
 
   return h('div.empilha', { style: { gap: '14px' } },
-    aviso('O app procura pedidos do mesmo cliente, anteriores à emissão da nota. '
-      + 'Ele não decide sozinho: o que você confirmar aqui fica registrado como decisão sua.', 'info'),
+    faltando.length > 0 && cardPedidosFaltando(faltando),
+
+    aviso('Quando a NF traz o pedido, o vínculo é exato e automático. Esta tela é para o resto: '
+      + 'o app procura pedidos do mesmo cliente, anteriores à emissão, e você confirma. '
+      + 'Ele não decide sozinho.', 'info'),
 
     h('div.grade.grade--3',
       kpi({
@@ -402,6 +406,41 @@ export async function telaVendedores({ query }) {
 
     h('div.btn-linha', { style: { position: 'sticky', bottom: '12px' } },
       h('button.btn.btn--ok.btn--bloco', { onClick: confirmarSelecionadas }, contador)));
+}
+
+/**
+ * O atalho mais direto: a NF diz qual pedido a gerou, mas esse pedido não está
+ * na base. Exportar esses números do relatório de vendedores resolve sem escolha
+ * nenhuma — por isso a lista vem pronta para copiar.
+ */
+function cardPedidosFaltando(faltando) {
+  const numeros = faltando.map((f) => f.numero).join(', ');
+  const total = faltando.reduce((acc, f) => acc + f.valor, 0);
+
+  return h('div.card.card--alerta',
+    h('div.linha', { style: { alignItems: 'flex-start' } },
+      h('span', { style: { fontSize: '20px' } }, '📋'),
+      h('div.crescer',
+        h('h3', `${faltando.length} pedido(s) citados pelas NFs não estão na base`),
+        h('p.mini.muted', { style: { marginTop: '3px' } },
+          `${money(total)} em notas. Exporte estes pedidos do relatório de vendedores e `
+          + 'importe em Pedidos / vendedores — o vínculo fecha sozinho, sem escolha nenhuma.'))),
+
+    h('p.pequeno.num', { style: { marginTop: '10px', wordBreak: 'break-word', lineHeight: '1.7' } }, numeros),
+
+    h('div.btn-linha', { style: { marginTop: '10px' } },
+      botao('📋 Copiar números', {
+        pequeno: true,
+        onClick: async () => {
+          try {
+            await navigator.clipboard.writeText(numeros);
+            ok('Números copiados.');
+          } catch {
+            erro('Não consegui copiar. Selecione a lista acima.');
+          }
+        },
+      }),
+      botao('Importar pedidos', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/pedidos') })));
 }
 
 function linhaSugestao(s, ctx) {
@@ -437,7 +476,11 @@ function linhaSugestao(s, ctx) {
             : h('span.atencao', s.melhor.diferenca == null
               ? 'pedido sem valor'
               : `diferença de ${money(s.melhor.diferenca)}`))
-        : h('div.item__sub.muted', info.detalhe),
+        : h('div.item__sub',
+          h('span.atencao', s.explicacao || info.detalhe),
+          s.motivo === 'pedido_ausente'
+            ? h('span.muted', '— basta importar esse pedido')
+            : null),
       h('div.item__acoes',
         s.candidatos.length > 0 && botao(`Escolher pedido (${s.candidatos.length})`, {
           pequeno: true, onClick: () => escolherPedido(s),

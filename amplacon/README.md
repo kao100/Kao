@@ -36,7 +36,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node amplacon/tools/teste.mjs     # 74 verificações da lógica, sem navegador
+node amplacon/tools/teste.mjs     # 83 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -47,7 +47,7 @@ comissão → caixa → cobrança) e confere os números que o projeto exige.
 ## Por onde começar
 
 1. **Central de arquivos** — o app conduz a rotina e diz o que falta importar.
-2. Ordem sugerida: Vendas/NFs → Pedidos → Contas a receber → Contas a pagar → Extratos.
+2. Ordem sugerida: Vendas/NFs → Pedidos/vendedores → Contas a receber → Contas a pagar → Extratos.
 3. **Conciliação** — resolver as exceções (NF sem vendedor, movimento sem vínculo).
 4. **Ajustes** — meta do mês, regras de comissão, limites de caixa.
 
@@ -80,11 +80,11 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **Faturamento é da NF emitida**, pela data de emissão. Pedido de agosto
   faturado em setembro conta em setembro. Canceladas saem; devoluções entram
   negativas no mês da emissão.
-- **Vendedor nunca é adivinhado.** A ordem é: decidido por você › veio no
-  relatório de NFs › pedido informado na NF › pedido que aponta para a NF ›
-  ⚠️ sem vendedor. Como o relatório de pedidos não traz a NF, a tela *Atribuir
-  vendedores* procura os candidatos e espera sua confirmação — dois pedidos com
-  o mesmo valor nunca são resolvidos sozinhos.
+- **Vendedor nunca é adivinhado.** O caminho normal é exato: a NF traz o número
+  do pedido e o relatório de vendedores traz pedido + vendedor — duas colunas
+  bastam. O que sobra vai para *Atribuir vendedores*, que diz o motivo de cada
+  nota (pedido não importado, ou NF sem pedido), lista os números que faltam
+  exportar e, quando precisa adivinhar, pergunta em vez de decidir.
 - **Comissão de fábrica:** 2% padrão e 0,5% no cimento (pela palavra na
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência obrigatória:** faturamento fiscal = soma dos vendedores. A

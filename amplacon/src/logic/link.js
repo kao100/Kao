@@ -188,7 +188,15 @@ export async function recalcular() {
   });
 
   /* 8. pendências */
-  const pendencias = await gerarPendencias({ nfs, itens, titulos: titulos.map((t) => titulosAtualizados.find((x) => x.id === t.id) || t), pagamentos, movimentos: conciliacao.movimentos.length ? mesclarPorId(movimentos, conciliacao.movimentos) : movimentos, produtos });
+  const pendencias = await gerarPendencias({
+    nfs,
+    itens,
+    titulos: titulos.map((t) => titulosAtualizados.find((x) => x.id === t.id) || t),
+    pagamentos,
+    movimentos: conciliacao.movimentos.length ? mesclarPorId(movimentos, conciliacao.movimentos) : movimentos,
+    produtos,
+    pedidoPorNumero,
+  });
 
   return {
     vendedoresCriados: novosVendedores.length,
@@ -326,7 +334,7 @@ function empilharChave(mapa, chave, valor) {
 
 /* --------------------------------------------------------------- pendências */
 
-async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos }) {
+async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos, pedidoPorNumero }) {
   const anteriores = await store.pendencias.listar();
   const ignoradas = new Map(anteriores.filter((p) => p.status === 'ignorada').map((p) => [p.id, p]));
   const encontradas = [];
@@ -348,11 +356,14 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   for (const nf of nfs) {
     if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
     if (!nf.vendedorId) {
+      const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
       nova('nf_sem_vendedor', nf.id, {
         titulo: `NF ${nf.numero}`,
-        detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)}`,
+        detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
         valor: nf.valorTotal,
         mes: nf.mes,
+        motivo,
+        pedidoNumero: nf.pedidoNumero || null,
         alvo: { store: 'nfs', id: nf.id },
       });
     }
@@ -459,6 +470,25 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     abertas: encontradas.filter((p) => p.status === 'aberta').length,
     resolvidas: remover.length,
   };
+}
+
+/**
+ * Por que esta NF ficou sem vendedor? A resposta muda o que você precisa fazer:
+ * importar o relatório do período certo, ou escolher o pedido na mão.
+ */
+export function porQueSemVendedor(nf, pedidoPorNumero) {
+  const numero = nf.pedidoNumero ? String(nf.pedidoNumero) : null;
+  if (!numero) {
+    return { motivo: 'sem_pedido', explicacao: 'a NF não informa o pedido' };
+  }
+  const pedido = pedidoPorNumero?.get(numero);
+  if (!pedido) {
+    return { motivo: 'pedido_ausente', explicacao: `pedido ${numero} ainda não foi importado` };
+  }
+  if (!pedido.vendedorId) {
+    return { motivo: 'pedido_sem_vendedor', explicacao: `pedido ${numero} está na base, mas sem vendedor` };
+  }
+  return { motivo: 'indefinido', explicacao: `pedido ${numero}` };
 }
 
 /** Define o vendedor de uma NF à mão — com registro de quem, quando e por quê. */

@@ -86,25 +86,28 @@ export const FONTES = {
 
   pedidos: {
     id: 'pedidos',
-    nome: 'Pedidos de venda (com vendedor)',
+    nome: 'Pedidos / vendedores',
     icone: '🤝',
     periodicidade: 'diaria',
     store: 'pedidos',
     verdadeDe: 'Quem é o vendedor de cada venda.',
-    descricao: 'Relatório de pedidos do sistema atual. É o que permite ligar NF → pedido → vendedor '
-      + 'sem distorcer o mês do faturamento.',
+    descricao: 'Relatório de pedidos ou relatório de vendedores. O essencial são duas colunas: '
+      + 'NÚMERO DO PEDIDO e VENDEDOR. Como a NF já traz o pedido, é isso que fecha '
+      + 'NF → pedido → vendedor sem distorcer o mês do faturamento.',
     formatos: ['xlsx', 'csv'],
     campos: [
       campo('numero', 'Número do pedido', 'texto', { obrigatorio: true, sinonimos: ['pedido', 'numero', 'num pedido', 'nro pedido', 'codigo pedido', 'os'] }),
-      campo('data', 'Data do pedido', 'data', { obrigatorio: true, sinonimos: ['data', 'data pedido', 'dt pedido', 'emissao'] }),
-      campo('vendedorNome', 'Vendedor', 'texto', { obrigatorio: true, sinonimos: ['vendedor', 'representante', 'consultor', 'vend'] }),
+      // a data é útil, mas não indispensável: relatório por vendedor às vezes não traz
+      campo('data', 'Data do pedido', 'data', { sinonimos: ['data', 'data pedido', 'dt pedido', 'emissao'] }),
+      campo('vendedorNome', 'Vendedor', 'texto', { obrigatorio: true, sinonimos: ['vendedor', 'representante', 'consultor', 'vend', 'vendedor responsavel', 'nome vendedor'] }),
       campo('clienteNome', 'Cliente', 'texto', { sinonimos: ['cliente', 'razao social', 'nome cliente'] }),
       campo('clienteDoc', 'CNPJ/CPF do cliente', 'texto', { sinonimos: ['cnpj', 'cpf', 'cnpj/cpf', 'documento'] }),
       campo('valorTotal', 'Valor do pedido', 'dinheiro', { sinonimos: ['valor', 'total', 'valor total', 'vl pedido'] }),
       campo('nfNumero', 'NF gerada', 'texto', { sinonimos: ['nf', 'nota', 'numero nf', 'nota fiscal'] }),
       campo('status', 'Situação', 'texto', { sinonimos: ['situacao', 'status', 'estado'] }),
     ],
-    ajuda: 'Se este relatório já trouxer a NF de cada pedido, a ligação fica exata e automática.',
+    ajuda: 'Basta ter o número do pedido e o vendedor. A data ajuda (usada quando a NF não '
+      + 'informa o pedido), mas não é obrigatória.',
   },
 
   /* -------------------------------------------------------------- financeiro */

@@ -20,12 +20,18 @@ porque dependem de informação que só a empresa tem.
 - A ordem de confiança está em `src/logic/link.js` e no documento de fontes.
 - **Nunca** há ligação automática por semelhança de nome, valor aproximado ou
   data próxima.
-- Como o relatório de pedidos **não traz a NF gerada** (confirmado pela empresa),
-  existe a tela **Conciliação → Atribuir vendedores**: o app procura pedidos do
-  mesmo cliente, anteriores à emissão e dentro de uma janela, e mostra os
-  candidatos. Ele marca sozinho apenas o caso em que há **um único** pedido com
-  o mesmo valor — e ainda assim só grava quando você confirma. Dois pedidos com
-  o mesmo valor, ou valor diferente, ficam esperando sua escolha.
+- **O caminho normal é automático:** a NF traz o número do pedido e o relatório
+  de vendedores traz pedido + vendedor. Com as duas importações, `NF → pedido →
+  vendedor` fecha sozinho, sem confirmação nenhuma. Basta o relatório ter essas
+  duas colunas — data não é obrigatória.
+- Para o que sobra existe a tela **Conciliação → Atribuir vendedores**, que diz
+  o **motivo** de cada nota estar sem vendedor:
+  - *pedido X ainda não foi importado* → a tela lista os números que faltam, com
+    botão de copiar, para você exportar só esses;
+  - *a NF não informa o pedido* → o app procura pedidos do mesmo cliente,
+    anteriores à emissão, e mostra os candidatos. Marca sozinho apenas quando há
+    **um único** pedido com o mesmo valor, e ainda assim só grava com seu clique.
+    Dois pedidos de mesmo valor ficam esperando sua escolha.
 - **Uma NF tem um vendedor só** (não há rateio, confirmado pela empresa), então
   um pedido confirmado resolve a nota inteira.
 - Vendedor que aparece num arquivo e ainda não existe no cadastro **é criado** —
@@ -88,7 +94,7 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 
 | # | Pergunta | Enquanto isso |
 |---|---|---|
-| 1 | **A tela/relatório de NFs tem o número do pedido?** | se tiver, a ligação vira exata e automática e a tela de sugestões deixa de ser necessária; se não tiver, você confirma pelas sugestões |
+| 1 | O **export** de NFs traz a coluna do pedido (a tela traz)? | se o export não trouxer, cada NF cai na tela de sugestões em vez de vincular sozinha |
 | 2 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
 | 3 | O BPO manda **categoria/plano de contas**? | sem categoria, não dá para ver para onde o dinheiro vai |
 | 4 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
@@ -101,7 +107,9 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 
 | Pergunta | Resposta | O que mudou no app |
 |---|---|---|
-| O relatório de pedidos traz a NF gerada? | **Não** | criada a tela "Atribuir vendedores", com sugestão por cliente + valor e confirmação sua |
+| O relatório de pedidos traz a NF gerada? | **Não** | não é preciso: a ligação vai pelo caminho inverso |
+| A NF traz o número do pedido? | **Sim** | `NF → pedido → vendedor` fecha sozinho; o relatório de vendedores precisa de só duas colunas (pedido + vendedor) |
+| E o que ficar sem vendedor? | **Você confirma** | a tela "Atribuir vendedores" diz o motivo de cada nota e lista os pedidos que faltam exportar, com botão de copiar |
 | Existe rateio de uma NF entre vendedores? | **Não** | confirmado o modelo de um vendedor por NF; um pedido confirmado resolve a nota inteira |
 | Qual o percentual de comissão? | **2% padrão, 0,5% no cimento** | regras já criadas de fábrica, editáveis em Comissões → Regras |
 
