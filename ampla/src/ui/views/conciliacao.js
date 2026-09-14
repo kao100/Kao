@@ -6,9 +6,11 @@
 import { h } from '../../core/dom.js';
 import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
-import { TIPOS_PENDENCIA, recalcular, definirVendedorDaNf } from '../../logic/link.js';
+import {
+  TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, pedidosSemVendedor,
+} from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
-import { kpi, chips, botao, aviso, selo } from '../components/ui.js';
+import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
 import * as suggest from '../../logic/suggest.js';
 import { formulario, detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
 import { ok, erro } from '../components/toast.js';
@@ -333,79 +335,109 @@ async function refazer() {
   refresh();
 }
 
-/* ------------------------------------------------ atribuir vendedor às NFs */
+/* --------------------------------------------- de quem foi esta venda? */
 
 /**
- * Tela dedicada ao caso da AMPLA: o relatório de pedidos não traz a NF, então
- * quando a nota também não traz o pedido o app procura os candidatos e você
- * confirma. O que estiver com cliente e valor batendo já vem marcado; o resto
- * espera sua escolha.
+ * A tela que responde "olha Maria, está faltando o vendedor destes aqui".
+ *
+ * A unidade de trabalho é o PEDIDO, não a nota: nenhum relatório traz o
+ * vendedor, então você define uma vez por pedido e todas as notas daquele
+ * pedido herdam — inclusive as que forem emitidas depois. Um toque no nome
+ * resolve e a linha sai da frente.
+ *
+ * As notas que nem chegaram a um pedido ficam embaixo, no bloco de sugestões:
+ * ali o app mostra candidatos, mas quem decide continua sendo você.
  */
 export async function telaVendedores({ query }) {
   const janela = Number(query.j || suggest.JANELA_PADRAO);
-  const [lista, vendedores, faltando] = await Promise.all([
+  const [pedidos, lista, vendedores, faltando] = await Promise.all([
+    pedidosSemVendedor(),
     suggest.sugestoes({ janelaDias: janela }),
     store.vendedores.listar(),
     suggest.pedidosFaltando(),
   ]);
-  definirTitulo('Atribuir vendedores', `${lista.length} NF(s) sem vendedor`);
+  definirTitulo('De quem foi esta venda?',
+    `${pedidos.length} pedido(s) · ${lista.length} NF(s) sem pedido`);
 
-  if (!lista.length) {
+  if (!pedidos.length && !lista.length && !faltando.length) {
     return h('div.empilha', { style: { gap: '14px' } },
       h('div.tudo-ok',
         h('div.tudo-ok__icone', '✅'),
-        h('h3', 'Todas as notas têm vendedor'),
+        h('h3', 'Todo faturamento tem dono'),
         h('p.pequeno.muted', 'O faturamento fiscal bate com a soma dos vendedores.')),
       botao('Voltar para a conciliação', { bloco: true, onClick: () => navigate('/conciliacao') }));
   }
 
-  const marcadas = new Set(lista.filter((s) => s.sugerido).map((s) => s.nf.id));
-  const contador = h('span');
-  const atualizarContador = () => {
-    contador.textContent = marcadas.size ? `Confirmar ${marcadas.size} selecionada(s)` : 'Nenhuma selecionada';
-  };
-  atualizarContador();
+  if (!vendedores.length) {
+    return h('div.empilha', { style: { gap: '14px' } },
+      vazio('🧑‍💼', 'Nenhum vendedor cadastrado',
+        'Cadastre os vendedores primeiro — é o nome deles que você vai marcar em cada pedido.',
+        botao('Cadastrar vendedores', { tipo: 'primario', onClick: () => navigate('/ajustes') })));
+  }
 
-  const confirmarSelecionadas = async () => {
-    const pares = lista
-      .filter((s) => marcadas.has(s.nf.id) && s.melhor)
-      .map((s) => ({ nfId: s.nf.id, pedidoId: s.melhor.pedido.id }));
-    if (!pares.length) { erro('Marque ao menos uma sugestão.'); return; }
-    const resultado = await suggest.confirmarVarios(pares, { motivo: 'confirmado em lote na tela de sugestões' });
-    await atualizarAlertas();
-    ok(`${resultado.feitos} NF(s) vinculadas.`);
-    refresh();
-  };
+  const totalPedidos = cents(sum(pedidos, (p) => p.valor));
 
   return h('div.empilha', { style: { gap: '14px' } },
     faltando.length > 0 && cardPedidosFaltando(faltando),
 
-    aviso('Quando a NF traz o pedido, o vínculo é exato e automático. Esta tela é para o resto: '
-      + 'o app procura pedidos do mesmo cliente, anteriores à emissão, e você confirma. '
-      + 'Ele não decide sozinho.', 'info'),
+    pedidos.length > 0 && h('div.empilha', { style: { gap: '10px' } },
+      h('div.grade.grade--2',
+        kpi({
+          label: 'Pedidos sem vendedor', valor: String(pedidos.length), icone: '🧾', cor: 'atencao',
+        }),
+        kpi({ label: 'Valor parado', valor: money(totalPedidos), icone: '💰' })),
 
-    h('div.grade.grade--3',
-      kpi({
-        label: 'Cliente e valor batem', valor: String(lista.filter((s) => s.confianca === 'exata').length),
-        icone: '🎯', cor: 'ok', nota: 'já vêm marcadas',
-      }),
-      kpi({
-        label: 'Precisam de escolha', valor: String(lista.filter((s) => s.confianca === 'varias' || s.confianca === 'unica').length),
-        icone: '🤔', cor: 'atencao',
-      }),
-      kpi({
-        label: 'Sem candidato', valor: String(lista.filter((s) => s.confianca === 'nenhuma').length),
-        icone: '✋', nota: 'definir à mão',
-      })),
+      aviso('Marque o vendedor e o pedido sai da lista. Todas as notas daquele pedido '
+        + 'recebem o mesmo vendedor de uma vez — inclusive as próximas.', 'info'),
 
-    chips([30, 60, 90, 180].map((d) => ({ id: String(d), label: `${d} dias` })), String(janela),
-      (id) => navigate(href('/conciliacao/vendedores', { j: id }))),
-    h('p.mini.muted', 'Janela: até quantos dias antes da emissão o pedido ainda é considerado.'),
+      h('div.lista', ...pedidos.map((p) => linhaPedido(p, vendedores)))),
 
-    h('div.lista', ...lista.map((s) => linhaSugestao(s, { marcadas, atualizarContador, vendedores }))),
+    lista.length > 0 && h('div.empilha', { style: { gap: '10px' } },
+      h('h2', { style: { marginTop: '6px' } }, `${lista.length} NF(s) que não chegaram a um pedido`),
+      aviso('Aqui o contas a receber não ligou a nota a nenhum pedido. O app procura pedidos '
+        + 'do mesmo cliente, anteriores à emissão, e mostra os candidatos — ele não decide sozinho. '
+        + 'Se puder, reexporte o contas a receber com a coluna NOTA FISCAL: aí o vínculo fecha sem escolha.',
+      'atencao'),
 
-    h('div.btn-linha', { style: { position: 'sticky', bottom: '12px' } },
-      h('button.btn.btn--ok.btn--bloco', { onClick: confirmarSelecionadas }, contador)));
+      chips([30, 60, 90, 180].map((d) => ({ id: String(d), label: `${d} dias` })), String(janela),
+        (id) => navigate(href('/conciliacao/vendedores', { j: id }))),
+      h('p.mini.muted', 'Janela: até quantos dias antes da emissão o pedido ainda é considerado.'),
+
+      h('div.lista', ...lista.map((s) => linhaSugestao(s, {
+        marcadas: new Set(), atualizarContador: () => {}, vendedores,
+      })))));
+}
+
+/**
+ * Uma linha por pedido, com os vendedores como botões: em telefone, um toque
+ * resolve mais rápido que abrir uma lista e escolher.
+ */
+function linhaPedido(item, vendedores) {
+  const { pedido, notas, valor } = item;
+  const marcar = async (v) => {
+    await definirVendedorDoPedido(pedido.id, v.id,
+      `definido na tela de vendedores · ${notas.length} NF(s) herdaram`);
+    await atualizarAlertas();
+    ok(`Pedido ${pedido.numero || ''} é de ${v.nome}${notas.length ? ` · ${notas.length} NF(s) atualizadas` : ''}.`);
+    refresh();
+  };
+
+  return h('div.card',
+    h('div.linha.linha--entre', { style: { alignItems: 'flex-start' } },
+      h('div.crescer',
+        h('strong', `Pedido ${pedido.numero || '(sem número)'}`),
+        h('div.mini.muted', { style: { marginTop: '2px' } },
+          pedido.clienteNome || 'cliente não identificado'),
+        h('div.mini.muted',
+          pedido.data ? `venda em ${formatDate(pedido.data)}` : 'sem data de venda')),
+      h('div.empilha', { style: { alignItems: 'flex-end' } },
+        h('span.num.forte', money(valor)),
+        h('span.mini.muted', notas.length
+          ? `${notas.length} NF: ${notas.map((n) => n.numero).filter(Boolean).slice(0, 3).join(', ')}`
+          : 'ainda sem NF'))),
+
+    h('div.btn-linha', { style: { marginTop: '10px', flexWrap: 'wrap' } },
+      ...vendedores.map((v) => botao(v.nome, { pequeno: true, onClick: () => marcar(v) }))));
 }
 
 /**

@@ -37,7 +37,7 @@ const ROTAS = [
   { path: '/receber', view: telaReceber, titulo: 'Contas a receber' },
   { path: '/bancos', view: telaBancos, titulo: 'Bancos e extrato' },
   { path: '/conciliacao', view: telaConciliacao, titulo: 'Conciliação' },
-  { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'Atribuir vendedores' },
+  { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
   { path: '/arquivos', view: telaArquivos, titulo: 'Central de arquivos' },
   { path: '/arquivos/:fonte', view: telaImportar, titulo: 'Importar' },
   { path: '/ajustes', view: telaAjustes, titulo: 'Ajustes' },

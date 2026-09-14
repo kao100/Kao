@@ -396,6 +396,42 @@ export async function definirVendedorDoPedido(pedidoId, vendedorId, motivo) {
   await recalcular();
 }
 
+/**
+ * Os pedidos que ainda não têm vendedor, do que mais pesa para o que menos
+ * pesa. É esta a lista que o app cobra de você: definir aqui resolve todas as
+ * notas do pedido de uma vez, em vez de marcar nota por nota.
+ *
+ * Pedido sem nota e que não virou venda fica de fora — não é pendência, é só um
+ * pedido que ainda não aconteceu.
+ */
+export async function pedidosSemVendedor() {
+  const [pedidos, nfs] = await Promise.all([store.pedidos.listar(), store.nfs.listar()]);
+  const porPedido = new Map();
+  for (const nf of nfs) {
+    if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
+    const chave = nf.pedidoId || (nf.pedidoNumero ? `n:${nf.pedidoNumero}` : null);
+    if (chave) empilharChave(porPedido, chave, nf);
+  }
+
+  const saida = [];
+  for (const pedido of pedidos) {
+    if (pedido.vendedorId) continue;
+    const notas = [
+      ...(porPedido.get(pedido.id) || []),
+      ...(pedido.numero ? (porPedido.get(`n:${pedido.numero}`) || []) : []),
+    ];
+    const unicas = [...new Map(notas.map((n) => [n.id, n])).values()];
+    if (!unicas.length && pedido.concretizado !== true) continue;
+    saida.push({
+      pedido,
+      notas: unicas.sort((a, b) => String(a.dataEmissao).localeCompare(String(b.dataEmissao))),
+      faturado: cents(sum(unicas, (n) => n.valorTotal || 0)),
+      valor: unicas.length ? cents(sum(unicas, (n) => n.valorTotal || 0)) : (pedido.valorTotal || 0),
+    });
+  }
+  return saida.sort((a, b) => b.valor - a.valor);
+}
+
 /* -------------------------------------------------------------------- título */
 
 export function statusTitulo(titulo) {

@@ -211,6 +211,17 @@ console.log('\n▶ Você define o vendedor uma vez, no pedido');
 const carlos = await store.vendedores.salvar({ nome: 'Carlos', apelidos: [], ativo: true });
 const maria = await store.vendedores.salvar({ nome: 'Maria', apelidos: [], ativo: true });
 const pedidos = await store.pedidos.listar();
+
+// é esta a lista que a tela cobra: pedido, não nota
+const cobranca = await link.pedidosSemVendedor();
+ok('o app cobra o vendedor de todo pedido faturado',
+  cobranca.length > 0 && cobranca.every((c) => !c.pedido.vendedorId), `${cobranca.length} pedido(s)`);
+ok('e do maior para o menor, para resolver o que pesa primeiro',
+  cobranca.every((c, i) => i === 0 || cobranca[i - 1].valor >= c.valor),
+  JSON.stringify(cobranca.map((c) => c.valor)));
+ok('cada pedido já vem com as notas que herdam dele',
+  cobranca.find((c) => c.pedido.numero === '1001')?.notas.some((n) => n.numero === '3001'), '');
+
 await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1001').id, carlos.id, 'conferido');
 await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1002').id, maria.id, 'conferido');
 await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1003').id, carlos.id, 'conferido');
@@ -220,6 +231,8 @@ const nfs2 = await store.nfs.listar();
 igual('a NF herdou o vendedor do pedido', nfs2.find((n) => n.numero === '3001').vendedorId, carlos.id);
 igual('pela ponte do contas a receber', nfs2.find((n) => n.numero === '3001').vendedorOrigem, 'pedido-titulo');
 igual('e a de outro vendedor também', nfs2.find((n) => n.numero === '3002').vendedorId, maria.id);
+igual('resolvido o pedido, ele sai da lista de cobrança',
+  (await link.pedidosSemVendedor()).filter((c) => ['1001', '1002', '1003', '1004'].includes(c.pedido.numero)).length, 0);
 
 console.log('\n▶ Faturamento (item 4)');
 const setembro = await revenue.resumo({ de: '2026-09-01', ate: '2026-09-30' });

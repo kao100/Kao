@@ -72,7 +72,13 @@ export async function sugestoes({ janelaDias = JANELA_PADRAO, mes = null } = {})
     porCliente.get(chave).push(pedido);
   }
 
-  const alvo = nfs.filter((nf) => valeParaFaturamento(nf) && !nf.vendedorId && (!mes || nf.mes === mes));
+  // Nota que já chegou a um pedido não entra aqui: quem resolve ela é a lista de
+  // PEDIDOS sem vendedor, de uma vez só. Mostrar nos dois lugares seria pedir o
+  // mesmo trabalho duas vezes.
+  const alvo = nfs.filter((nf) => valeParaFaturamento(nf)
+    && !nf.vendedorId
+    && !nf.pedidoId && !nf.pedidoNumero
+    && (!mes || nf.mes === mes));
 
   return sortBy(alvo.map((nf) => {
     const candidatos = (porCliente.get(chaveCliente(nf)) || [])
