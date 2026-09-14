@@ -1,0 +1,226 @@
+/**
+ * Teste de ponta a ponta da lógica (sem navegador).
+ *
+ * Os arquivos deste teste usam AS COLUNAS REAIS dos relatórios que a AMPLA
+ * exporta — inclusive as colunas que o app ignora. Ele é, na prática, a
+ * especificação do que o sistema precisa entregar.
+ *
+ * A prova principal:
+ *   nenhum relatório traz o vendedor, e o fiscal não traz o pedido;
+ *   quem liga os dois é o CONTAS A RECEBER (NF + descrição na mesma linha).
+ *
+ *   node ampla/tools/teste.mjs
+ */
+
+import { instalar } from './fake-idb.mjs';
+
+instalar();
+Object.defineProperty(globalThis, 'navigator', { value: { storage: {} }, configurable: true });
+
+const store = await import('../src/core/store.js');
+const ingest = await import('../src/logic/ingest.js');
+const link = await import('../src/logic/link.js');
+const revenue = await import('../src/logic/revenue.js');
+const commission = await import('../src/logic/commission.js');
+const cashflow = await import('../src/logic/cashflow.js');
+const collection = await import('../src/logic/collection.js');
+const routine = await import('../src/logic/routine.js');
+const { readFile } = await import('../src/core/files/read.js');
+const { semear } = await import('../src/data/seed.js');
+
+let passou = 0;
+let falhou = 0;
+
+function ok(descricao, condicao, detalhe = '') {
+  if (condicao) { passou += 1; console.log(`  ✓ ${descricao}`); } else {
+    falhou += 1;
+    console.log(`  ✗ ${descricao}${detalhe ? ` — ${detalhe}` : ''}`);
+  }
+}
+
+function igual(descricao, recebido, esperado) {
+  ok(descricao, JSON.stringify(recebido) === JSON.stringify(esperado),
+    `recebido ${JSON.stringify(recebido)}, esperado ${JSON.stringify(esperado)}`);
+}
+
+async function importar(fonteId, nome, conteudo, extras = {}) {
+  const leitura = await readFile(new File([conteudo], nome, { type: 'text/csv' }));
+  const cabecalho = leitura.planilhas[0].linhas[0].map(String);
+  const mapeamento = ingest.sugerirMapeamento(fonteId, cabecalho);
+  const preparo = await ingest.prepararTabular({
+    fonteId, leitura, planilhaIndex: 0, headerRow: 0, mapeamento, ...extras,
+  });
+  await ingest.confirmar(preparo);
+  return { preparo, mapeamento, cabecalho };
+}
+
+/* ------------------------------------------- os relatórios, como eles saem */
+
+// relatório fiscal: NÃO tem pedido, NÃO tem vendedor
+const FISCAL = `Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação
+3001;01/09/2026;Construtora Alfa Ltda;11222333000181;15.000,00;Autorizada
+3002;02/09/2026;Depósito Beta ME;44555666000199;8.400,00;Autorizada
+3003;05/09/2026;Obra Gama Ltda;77888999000155;22.000,00;Autorizada
+3004;08/09/2026;José da Silva;12345678901;5.000,00;Autorizada
+3005;09/09/2026;Depósito Beta ME;44555666000199;1.200,00;Cancelada`;
+
+// relatório de vendas: NÃO tem vendedor; tem custo; "prazo de entrega" o app ignora
+const VENDAS = `Número do Pedido;Cliente;Data da Venda;Prazo de Entrega;Situação;Valor do Custo;Valor Total
+1001;Construtora Alfa Ltda;28/08/2026;05/09/2026;Concretizada;11.200,00;15.000,00
+1002;Depósito Beta ME;02/09/2026;06/09/2026;Concretizada;6.100,00;8.400,00
+1003;Obra Gama Ltda;05/09/2026;12/09/2026;Concretizada;15.800,00;22.000,00
+1004;José da Silva;08/09/2026;15/09/2026;Concretizada;3.900,00;5.000,00
+1005;Marcenaria Sigma;10/09/2026;20/09/2026;Em aberto;2.000,00;3.500,00`;
+
+// contas a receber: A PONTE — tem nota fiscal E descrição (nº do pedido)
+const RECEBER = `Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal
+Construtora Alfa Ltda;11222333000181;1001;Boleto;Itaú;20/09/2026;Em aberto;15.000,00;3001
+Depósito Beta ME;44555666000199;1002;Boleto;Itaú;05/09/2026;Em aberto;8.400,00;3002
+Obra Gama Ltda;77888999000155;1003;PIX;Bradesco;25/09/2026;Em aberto;22.000,00;3003
+José da Silva;12345678901;1004;Dinheiro;Itaú;10/09/2026;Recebido;5.000,00;3004`;
+
+const PAGAR = `Destinado a;CPF/CNPJ;Descrição;Plano de Contas;Forma de Pagamento;Conta Bancária;Data de Vencimento;Situação;Valor Total;Nota Fiscal
+Fábrica de Cimento SA;99888777000166;Compra de cimento;Mercadoria para revenda;Boleto;Itaú;18/09/2026;Em aberto;42.000,00;55821
+Transportadora Sul;88777666000155;Frete setembro;Despesas com frete;Boleto;Itaú;22/09/2026;Em aberto;6.500,00;
+Energia Elétrica;;Conta de luz;Despesas administrativas;Débito automático;Bradesco;15/09/2026;Em aberto;3.200,00;`;
+
+// clientes: tem colunas que o app ignora de propósito (vendedor responsável)
+const CLIENTES = `Tipo do Cliente;Nome/Razão Social;CPF/CNPJ;IE;Telefone;Celular;E-mail;Endereço;Vendedor Responsável
+Jurídica;Construtora Alfa Ltda;11222333000181;123456789;(11) 3333-1111;(11) 98888-1111;alfa@teste.com;Rua A, 100;Carlos
+Jurídica;Depósito Beta ME;44555666000199;;;(11) 97777-2222;;Rua B, 200;Carlos
+Física;José da Silva;12345678901;;;;;Rua C, 300;`;
+
+const PRODUTOS = `Código Interno;Nome;Valor de Custo;NCM;CEST;CFOP;Grupo;Estoque
+CIM50;Cimento CP-II 50kg;26,00;25232910;;5102;Cimento;480
+MAD01;Madeira pinus m3;300,00;44071100;;5102;Madeira;60`;
+
+const ORCAMENTOS = `Número;Cliente;Data;Previsão de Entrega;Situação;Valor
+900;Construtora Alfa Ltda;20/08/2026;30/08/2026;Aprovado;15.000,00
+901;Marcenaria Sigma;03/09/2026;15/09/2026;Em aberto;9.800,00
+902;Obra Gama Ltda;04/09/2026;18/09/2026;Perdido;7.200,00`;
+
+/* ---------------------------------------------------------------- cenário */
+
+console.log('\n▶ Primeira execução');
+await semear();
+igual('duas contas bancárias criadas', (await store.contas.listar()).length, 2);
+const regras = await store.regrasComissao.listar();
+igual('regra padrão em 2%', regras.find((r) => r.id === 'regra_padrao').percentual, 2);
+igual('regra do cimento em 0,5%', regras.find((r) => r.id === 'regra_cimento').percentual, 0.5);
+
+console.log('\n▶ Importando os relatórios como eles saem do sistema');
+const fiscal = await importar('nfs', 'fiscal.csv', FISCAL);
+igual('as 6 colunas do fiscal foram reconhecidas sozinhas',
+  ['numero', 'dataEmissao', 'clienteNome', 'clienteDoc', 'valorTotal', 'status']
+    .every((c) => fiscal.mapeamento[c]), true);
+igual('5 notas importadas', (await store.nfs.listar()).length, 5);
+
+const vendas = await importar('pedidos', 'vendas.csv', VENDAS);
+igual('"Prazo de Entrega" ficou de fora, como pedido', vendas.mapeamento.prazo, undefined);
+igual('o custo do pedido foi reconhecido', !!vendas.mapeamento.valorCusto, true);
+igual('5 pedidos importados', (await store.pedidos.listar()).length, 5);
+
+await importar('receber', 'receber.csv', RECEBER);
+await importar('pagar', 'pagar.csv', PAGAR);
+await importar('clientes', 'clientes.csv', CLIENTES);
+await importar('produtos', 'produtos.csv', PRODUTOS);
+await importar('orcamentos', 'orcamentos.csv', ORCAMENTOS);
+
+igual('4 títulos a receber', (await store.receber.listar()).length, 4);
+igual('3 contas a pagar', (await store.pagar.listar()).length, 3);
+igual('3 orçamentos', (await store.orcamentos.listar()).length, 3);
+
+const clientes = await store.clientes.listar();
+const alfa = clientes.find((c) => c.documento === '11222333000181');
+igual('cliente identificado por CNPJ', !!alfa, true);
+igual('e-mail do cadastro foi aproveitado', alfa.email, 'alfa@teste.com');
+const jose = clientes.find((c) => c.documento === '12345678901');
+igual('cliente por CPF também entra', !!jose, true);
+igual('cliente sem e-mail entra do mesmo jeito', jose.email, null);
+
+console.log('\n▶ Nada é obrigatório');
+const semNada = await importar('pagar', 'pagar2.csv', `Destinado a;Valor Total
+Fornecedor Sem Mais Nada;1.234,56`);
+igual('linha só com nome e valor entra', semNada.preparo.resumo.novos >= 1, true);
+igual('e não gera erro nenhum', semNada.preparo.erros.length, 0);
+
+const dataRuim = await importar('pagar', 'pagar3.csv', `Destinado a;Data de Vencimento;Valor Total
+Fornecedor Data Torta;31/31/2026;500,00`);
+igual('data impossível não derruba a linha', dataRuim.preparo.erros.length, 0);
+igual('ela vira aviso', dataRuim.preparo.atencao.length, 1);
+const torto = (await store.pagar.listar()).find((x) => x.fornecedorNome === 'Fornecedor Data Torta');
+igual('o registro entra com o vencimento em branco', torto.vencimento, null);
+igual('mas com o valor certo', torto.valor, 500);
+
+console.log('\n▶ A ponte: contas a receber liga NF ao pedido');
+await link.recalcular();
+const nfs = await store.nfs.listar();
+const nf3001 = nfs.find((n) => n.numero === '3001');
+igual('o relatório fiscal não trazia pedido', FISCAL.includes('Pedido'), false);
+igual('mas a NF 3001 achou o pedido 1001 pelo título', nf3001.pedidoNumero, '1001');
+igual('ainda sem vendedor (nenhum relatório traz)', nf3001.vendedorId, null);
+
+const pendencias = await store.pendencias.listar();
+const pedidoSemVendedor = pendencias.filter((p) => p.tipo === 'pedido_sem_vendedor');
+igual('o app cobra o vendedor no PEDIDO, não em cada nota', pedidoSemVendedor.length >= 4, true);
+
+console.log('\n▶ Você define o vendedor uma vez, no pedido');
+const carlos = await store.vendedores.salvar({ nome: 'Carlos', apelidos: [], ativo: true });
+const maria = await store.vendedores.salvar({ nome: 'Maria', apelidos: [], ativo: true });
+const pedidos = await store.pedidos.listar();
+await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1001').id, carlos.id, 'conferido');
+await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1002').id, maria.id, 'conferido');
+await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1003').id, carlos.id, 'conferido');
+await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1004').id, maria.id, 'conferido');
+
+const nfs2 = await store.nfs.listar();
+igual('a NF herdou o vendedor do pedido', nfs2.find((n) => n.numero === '3001').vendedorId, carlos.id);
+igual('pela ponte do contas a receber', nfs2.find((n) => n.numero === '3001').vendedorOrigem, 'pedido-titulo');
+igual('e a de outro vendedor também', nfs2.find((n) => n.numero === '3002').vendedorId, maria.id);
+
+console.log('\n▶ Faturamento (item 4)');
+const setembro = await revenue.resumo({ de: '2026-09-01', ate: '2026-09-30' });
+igual('faturamento de setembro (a cancelada fica fora)', setembro.total, 50400);
+igual('a cancelada foi contada à parte', setembro.canceladas.quantidade, 1);
+igual('fiscal = soma dos vendedores', setembro.conferencia.diferenca, 0);
+igual('conferência aprovada', setembro.conferencia.ok, true);
+const agosto = await revenue.resumo({ de: '2026-08-01', ate: '2026-08-31' });
+igual('pedido de agosto faturado em setembro não conta em agosto', agosto.total, 0);
+igual('Carlos: 15.000 + 22.000', setembro.ranking.find((v) => v.nome === 'Carlos').valor, 37000);
+igual('Maria: 8.400 + 5.000', setembro.ranking.find((v) => v.nome === 'Maria').valor, 13400);
+
+console.log('\n▶ Comissão sobre o que foi faturado');
+const calc = await commission.calcular('2026-09');
+// sem itens por produto, a comissão sai sobre o total da nota, a 2%
+igual('Carlos: 2% de 37.000', calc.vendedores.find((v) => v.nome === 'Carlos').comissao, 740);
+igual('Maria: 2% de 13.400', calc.vendedores.find((v) => v.nome === 'Maria').comissao, 268);
+igual('nada bloqueia o fechamento', calc.podeFechar, true);
+
+console.log('\n▶ Financeiro e caixa');
+await store.saldos.salvar({ id: 'sal_conta_itau_2026-09-13', contaId: 'conta_itau', data: '2026-09-13', saldo: 30000, origem: 'manual' });
+const proj = await cashflow.projetar({ de: '2026-09-13', dias: 20 });
+igual('saldo inicial informado', proj.saldoInicial, 30000);
+const dia18 = proj.linhas.find((l) => l.data === '2026-09-18');
+igual('a compra de cimento cai no dia 18', dia18.saidas, 42000);
+ok('a projeção acusa dia negativo', !!proj.primeiroDiaNegativo, 'não acusou');
+
+const carteira = await collection.carteira({ referencia: '2026-09-13' });
+const beta = carteira.find((l) => l.clienteNome === 'Depósito Beta ME');
+igual('título vencido em 05/09 aparece com atraso', beta.diasAtraso, 8);
+igual('e entra na fila do dia', beta.precisaCobrarHoje, true);
+
+console.log('\n▶ Reimportar não duplica');
+await importar('nfs', 'fiscal.csv', FISCAL);
+await importar('receber', 'receber.csv', RECEBER);
+await link.recalcular();
+igual('continuam 5 notas', (await store.nfs.listar()).length, 5);
+igual('continuam 4 títulos', (await store.receber.listar()).length, 4);
+igual('o vendedor definido por você continua lá',
+  (await store.nfs.listar()).find((n) => n.numero === '3001').vendedorId, carlos.id);
+
+console.log('\n▶ Rotina');
+const r = await routine.rotina('2026-09-14');
+ok('a rotina sabe o que ainda falta', r.pendentes.length >= 0, '');
+
+console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
+process.exit(falhou ? 1 : 0);

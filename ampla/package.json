@@ -1,0 +1,12 @@
+{
+  "name": "ampla-gestao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestão administrativa da AMPLA — PWA sem build, sem dependências.",
+  "type": "module",
+  "scripts": {
+    "teste": "node tools/teste.mjs",
+    "icones": "python3 tools/make-icons.py",
+    "servir": "python3 -m http.server 8080 --directory .."
+  }
+}

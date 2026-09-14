@@ -1,0 +1,76 @@
+/* Tokens visuais — fundo claro, detalhes no azul da AMPLA.
+   Nada de preto: o app é uma central administrativa, não um home broker. */
+
+:root {
+  color-scheme: light;
+
+  /* fundo claro, sem ser branco puro */
+  --bg: #EEF2F8;
+  --bg-2: #F5F8FC;
+  --card: #FFFFFF;
+  --card-2: #F1F5FA;
+  --card-3: #E4EBF4;
+  --line: #DCE4EF;
+  --line-forte: #BCC9DB;
+
+  --txt: #15202F;
+  --txt-2: #3D4B60;
+  --muted: #6B7A91;
+
+  /* azul do logotipo AMPLA, amostrado do arquivo original */
+  --marca: #0044B9;
+  --marca-clara: #1A62E8;
+  --marca-fraca: rgba(0, 68, 185, 0.10);
+
+  /* cores de interface calibradas para ler sobre fundo claro */
+  --azul: #0A52D4;
+  --azul-fraco: rgba(10, 82, 212, 0.10);
+  --verde: #12855A;
+  --verde-fraco: rgba(18, 133, 90, 0.12);
+  --amarelo: #A36F00;
+  --amarelo-fraco: rgba(214, 154, 20, 0.18);
+  --laranja: #C2570F;
+  --laranja-fraco: rgba(194, 87, 15, 0.12);
+  --vermelho: #C42B31;
+  --vermelho-fraco: rgba(196, 43, 49, 0.10);
+  --roxo: #6B3EAE;
+  --roxo-fraco: rgba(107, 62, 174, 0.12);
+  --ciano: #0E7C90;
+
+  --ok: var(--verde);
+  --atencao: var(--amarelo);
+  --critico: var(--vermelho);
+
+  /* superfícies translúcidas do topo e da navegação */
+  --vidro: rgba(238, 242, 248, 0.88);
+
+  --raio: 14px;
+  --raio-sm: 10px;
+  --raio-lg: 20px;
+
+  --sombra: 0 1px 2px rgba(21, 32, 47, 0.06), 0 6px 18px rgba(21, 32, 47, 0.06);
+  --sombra-alta: 0 12px 34px rgba(21, 32, 47, 0.16);
+
+  --fonte: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fonte-num: ui-rounded, 'SF Pro Rounded', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --topo: 60px;
+  --nav: 68px;
+  --gap: 14px;
+  --larg: 1180px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* cores por situação de cobrança (item 8) */
+.st-aberto { --st: var(--vermelho); --st-fraco: var(--vermelho-fraco); }
+.st-cobrado { --st: var(--laranja); --st-fraco: var(--laranja-fraco); }
+.st-retorno { --st: var(--amarelo); --st-fraco: var(--amarelo-fraco); }
+.st-promessa { --st: var(--roxo); --st-fraco: var(--roxo-fraco); }
+.st-pago { --st: var(--verde); --st-fraco: var(--verde-fraco); }
+
+/* níveis de caixa (item 9) */
+.nv-ok { --nv: var(--verde); --nv-fraco: var(--verde-fraco); }
+.nv-atencao { --nv: var(--amarelo); --nv-fraco: var(--amarelo-fraco); }
+.nv-critico { --nv: var(--vermelho); --nv-fraco: var(--vermelho-fraco); }
