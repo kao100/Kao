@@ -64,6 +64,7 @@ Depois disso, qualquer aba responde na hora.
 | 📞 Cobrança | quem cobrar hoje, quem não respondeu, quem prometeu pagar |
 | 📈 Comercial | faturamento, ranking, ticket, evolução e o detalhe de cada vendedor |
 | 📦 Produtos | curva ABC por faturamento, quantidade, clientes e margem |
+| 📝 Orçamentos | quanto foi orçado, quanto virou venda, o que ainda está em aberto e a conversão por cliente |
 | 🎯 Comissões | cálculo por regra, ajuste com motivo e fechamento travado por conferência |
 | 📤 Contas a pagar | vencimentos, categorias e prorrogação que reflete no caixa |
 | 📥 Contas a receber | títulos, saldos e situação |
@@ -98,6 +99,10 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência que nunca some:** faturamento fiscal = soma dos vendedores. A
   diferença aparece; o fechamento de comissão fica travado enquanto existir.
+- **Conversão de orçamento é a do seu sistema:** vem da coluna SITUAÇÃO do
+  relatório. O app não casa orçamento com pedido por cliente e valor parecido —
+  sem o número do pedido no export, isso seria adivinhar. Orçamento em aberto
+  fica fora da taxa: ainda pode virar venda.
 - **DRE sem estimativa:** o CMV vem do "valor do custo" do pedido que gerou cada
   nota. Nota sem custo conhecido não recebe um custo médio — ela fica de fora, a
   cobertura aparece na tela e o lucro bruto só sai quando o custo cobre 100% do

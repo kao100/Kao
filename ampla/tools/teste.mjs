@@ -31,6 +31,7 @@ const collection = await import('../src/logic/collection.js');
 const routine = await import('../src/logic/routine.js');
 const dre = await import('../src/logic/dre.js');
 const dossie = await import('../src/logic/dossie.js');
+const quotes = await import('../src/logic/quotes.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 
@@ -383,6 +384,27 @@ console.log('\n▶ Pasta do mês');
   const blocos = dossie.blocosDaPasta(p);
   ok('e o PDF sai com um bloco por documento',
     blocos.length === p.documentos.length && blocos.every((b) => b.tipo === 'tabela' && b.titulo), '');
+}
+
+
+console.log('\n▶ Orçamentos: quanto virou venda');
+{
+  const q = await quotes.resumo({ de: '2026-09-01', ate: '2026-09-30' });
+  ok('os orçamentos do mês entraram', q.quantidade > 0, String(q.quantidade));
+  const doMes = (await store.orcamentos.listar())
+    .filter((o) => o.data >= '2026-09-01' && o.data <= '2026-09-30');
+  igual('o total orçado bate com a soma', q.total,
+    Math.round(doMes.reduce((a, o) => a + (o.valorTotal || 0), 0) * 100) / 100);
+  ok('a situação veio do arquivo, não de suposição',
+    q.grupos.every((g) => ['convertido', 'perdido', 'aberto', 'desconhecida'].includes(g.situacao)),
+    JSON.stringify(q.grupos));
+  ok('a taxa só conta o que já foi decidido',
+    q.taxa == null || q.decididos === q.convertido.quantidade + q.perdido.quantidade, String(q.taxa));
+  ok('orçamento em aberto não é contado como perda',
+    q.decididos === q.convertido.quantidade + q.perdido.quantidade, '');
+  const serie = await quotes.porMes(3, '2026-09-14');
+  igual('a série mensal tem um ponto por mês', serie.length, 3);
+  ok('e o último é o mês de referência', serie[serie.length - 1].mes === '2026-09', serie[serie.length - 1].mes);
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

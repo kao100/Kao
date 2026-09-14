@@ -11,6 +11,7 @@ export const MODULOS = [
   { path: '/caixa', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
   { path: '/cobranca', icone: '📞', label: 'Cobrança', titulo: 'Inadimplência e cobrança' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
+  { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
   { path: '/produtos', icone: '📦', label: 'Produtos', titulo: 'Produtos e curva ABC' },
   { path: '/comissoes', icone: '🎯', label: 'Comissões', titulo: 'Comissões' },
   { path: '/pagar', icone: '📤', label: 'A pagar', titulo: 'Contas a pagar' },

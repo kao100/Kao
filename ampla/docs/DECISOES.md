@@ -102,6 +102,17 @@ porque dependem de informação que só a empresa tem.
 - Produto sem custo aparece com margem **em branco** e é contado à parte — o app
   não estima custo.
 
+### Orçamentos
+- A **conversão é a que o relatório informa** na coluna SITUAÇÃO: aprovado vira
+  "virou venda", recusado vira "perdido", o resto fica "em aberto".
+- **Orçamento em aberto não entra na taxa.** Contá-lo como perda seria antecipar
+  um fato que ainda não aconteceu; a taxa é sobre o que já foi decidido.
+- Orçamento **sem situação no arquivo** entra no total orçado e fica fora da
+  taxa, com a quantidade dita na tela.
+- O app **não cruza orçamento com pedido** por cliente e valor parecido. Sem o
+  número do pedido no export, seria inventar vínculo. Se um dia essa coluna
+  existir, a taxa passa a ser calculada em vez de informada.
+
 ### DRE e fechamento
 - O **CMV** vem do "valor do custo" do pedido que gerou cada nota. Quando um
   pedido rendeu mais de uma nota, o custo é dividido na proporção do valor de
@@ -169,8 +180,7 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 
 | Item | Por quê |
 |---|---|
-| Tela de orçamento × conversão | a fonte de orçamentos já é importada; falta a tela que compara orçado × virado em pedido |
-| Motivo de perda de venda | seria escolha rápida, não campo livre; depende da tela de conversão |
+| Motivo de perda de venda | o relatório de orçamentos traz a situação, mas não o porquê; seria escolha rápida, não campo livre |
 | Sincronização entre aparelhos | exigiria servidor; hoje a migração é por backup JSON |
 | Login e permissões | o app é de uso administrativo em aparelho próprio |
 

@@ -23,6 +23,7 @@ import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
 import { telaAjustes } from './ui/views/ajustes.js';
 import { telaFechamento } from './ui/views/fechamento.js';
+import { telaOrcamentos } from './ui/views/orcamentos.js';
 
 const ROTAS = [
   { path: '/', view: telaEmpresa, titulo: 'Visão da empresa' },
@@ -31,6 +32,7 @@ const ROTAS = [
   { path: '/cobranca', view: telaCobranca, titulo: 'Inadimplência e cobrança' },
   { path: '/comercial', view: telaComercial, titulo: 'Comercial' },
   { path: '/comercial/:id', view: telaVendedor, titulo: 'Vendedor' },
+  { path: '/orcamentos', view: telaOrcamentos, titulo: 'Orçamentos' },
   { path: '/produtos', view: telaProdutos, titulo: 'Produtos e curva ABC' },
   { path: '/produtos/:id', view: telaProduto, titulo: 'Produto' },
   { path: '/comissoes', view: telaComissoes, titulo: 'Comissões' },
