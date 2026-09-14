@@ -12,6 +12,10 @@
  *   node ampla/tools/teste.mjs
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
 import { instalar } from './fake-idb.mjs';
 
 instalar();
@@ -52,6 +56,45 @@ async function importar(fonteId, nome, conteudo, extras = {}) {
   });
   await ingest.confirmar(preparo);
   return { preparo, mapeamento, cabecalho };
+}
+
+
+/* --------------------------------------------- um PDF de fonte padrão, à mão */
+
+/**
+ * Monta um PDF mínimo com Helvetica (sem fonte embutida) e o texto posicionado
+ * por Td, que é como muito ERP gera relatório. O outro caminho — fonte embutida
+ * com Identity-H e /ToUnicode — é coberto pelo PDF de verdade em tools/fixtures.
+ */
+function pdfSimples(linhas) {
+  const partes = [];
+  let y = 780;
+  for (const linha of linhas) {
+    for (const [x, texto] of linha) {
+      const escapado = texto.replace(/([\\()])/g, '\\$1');
+      partes.push(`BT /F1 9 Tf 1 0 0 1 ${x} ${y} Tm (${escapado}) Tj ET`);
+    }
+    y -= 18;
+  }
+  const conteudo = partes.join('\n');
+
+  const objs = [
+    '<</Type /Catalog /Pages 2 0 R>>',
+    '<</Type /Pages /Kids [3 0 R] /Count 1>>',
+    '<</Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] '
+      + '/Resources <</Font <</F1 5 0 R>>>> /Contents 4 0 R>>',
+    `<</Length ${conteudo.length}>>\nstream\n${conteudo}\nendstream`,
+    '<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>',
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const o of offsets) pdf += `${String(o).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<</Size ${objs.length + 1} /Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
+  return new Uint8Array([...pdf].map((c) => c.charCodeAt(0)));
 }
 
 /* ------------------------------------------- os relatórios, como eles saem */
@@ -221,6 +264,42 @@ igual('o vendedor definido por você continua lá',
 console.log('\n▶ Rotina');
 const r = await routine.rotina('2026-09-14');
 ok('a rotina sabe o que ainda falta', r.pendentes.length >= 0, '');
+
+
+console.log('\n▶ PDF: relatório que não sai em Excel');
+{
+  const linhas = [
+    [[60, 'AMPLA - Contas a Receber']],
+    [[60, 'Destinado a'], [220, 'CPF/CNPJ'], [330, 'Descricao'], [400, 'Vencimento'], [490, 'Valor Total']],
+    [[60, 'Construtora Alfa Ltda'], [220, '11.222.333/0001-81'], [330, '1001'], [400, '10/09/2026'], [490, '15.000,00']],
+    [[60, 'Deposito Beta ME'], [220, '44.555.666/0001-72'], [330, '1003'], [400, '05/09/2026'], [490, '8.400,00']],
+  ];
+  const leitura = await readFile(new File([pdfSimples(linhas)], 'receber.pdf', { type: 'application/pdf' }));
+  igual('o PDF foi reconhecido como PDF', leitura.formato, 'pdf');
+  const lidas = leitura.planilhas[0].linhas;
+  igual('o cabeçalho voltou coluna por coluna', lidas[1],
+    ['Destinado a', 'CPF/CNPJ', 'Descricao', 'Vencimento', 'Valor Total']);
+  igual('a primeira linha de dados voltou inteira', lidas[2],
+    ['Construtora Alfa Ltda', '11.222.333/0001-81', '1001', '10/09/2026', '15.000,00']);
+  igual('o título não virou uma linha de dados', lidas[0].filter(Boolean).length, 1);
+
+  // e o PDF de verdade, gerado por navegador: fonte embutida, Identity-H, acento
+  const daPasta = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'contas-a-receber.pdf');
+  const bytes = await readFile(new File(
+    [readFileSync(daPasta)], 'contas-a-receber.pdf', { type: 'application/pdf' },
+  ));
+  const reais = bytes.planilhas[0].linhas;
+  igual('PDF com fonte embutida: cabeçalho com acento',
+    reais[1], ['Destinado a', 'CPF/CNPJ', 'Descrição', 'Vencimento', 'Situação', 'Valor Total', 'Nota Fiscal']);
+  igual('PDF com fonte embutida: CNPJ não ganhou espaço na quebra',
+    reais[2][1], '11.222.333/0001-81');
+  igual('PDF com fonte embutida: acento no nome do cliente', reais[3][0], 'João da Silva');
+
+  // e o mapeamento automático funciona igual ao de planilha
+  const mapeamento = ingest.sugerirMapeamento('receber', reais[1].map(String));
+  ok('as colunas do PDF casam com os campos do app',
+    mapeamento.clienteNome === 'Destinado a' && mapeamento.nfNumero === 'Nota Fiscal', JSON.stringify(mapeamento));
+}
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

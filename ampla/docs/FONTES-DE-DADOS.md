@@ -35,14 +35,14 @@ pode ser modificado, então quem se adapta é o app.
 
 | # | Fonte | Periodicidade | É a verdade de | Formatos |
 |---|---|---|---|---|
-| 1 | Notas fiscais (relatório fiscal) | diária | faturamento: valor e data de emissão | XLSX · CSV · XML · ZIP |
-| 2 | Pedidos de venda (relatório de vendas) | diária | pedidos concretizados, com custo e valor | XLSX · CSV |
-| 3 | **Contas a receber** | diária | títulos, vencimentos, banco — **e a ponte nota ↔ pedido** | XLSX · CSV |
-| 4 | Contas a pagar | semanal | compromissos, vencimentos, plano de contas | XLSX · CSV |
-| 5 | Orçamentos | semanal | quanto foi orçado e quanto virou venda | XLSX · CSV |
-| 6 | Extrato bancário | diária | saldo real e o que entrou/saiu | OFX · XLSX · CSV |
-| 7 | Produtos | mensal | nome, custo e NCM | XLSX · CSV |
-| 8 | Clientes | mensal | razão social, documento, e-mail | XLSX · CSV |
+| 1 | Notas fiscais (relatório fiscal) | diária | faturamento: valor e data de emissão | XLSX · CSV · PDF · XML · ZIP |
+| 2 | Pedidos de venda (relatório de vendas) | diária | pedidos concretizados, com custo e valor | XLSX · CSV · PDF |
+| 3 | **Contas a receber** | diária | títulos, vencimentos, banco — **e a ponte nota ↔ pedido** | XLSX · CSV · PDF |
+| 4 | Contas a pagar | semanal | compromissos, vencimentos, plano de contas | XLSX · CSV · PDF |
+| 5 | Orçamentos | semanal | quanto foi orçado e quanto virou venda | XLSX · CSV · PDF |
+| 6 | Extrato bancário | diária | saldo real e o que entrou/saiu | OFX · XLSX · CSV · PDF |
+| 7 | Produtos | mensal | nome, custo e NCM | XLSX · CSV · PDF |
+| 8 | Clientes | mensal | razão social, documento, e-mail | XLSX · CSV · PDF |
 | 9 | Itens vendidos | sob demanda | produto/quantidade/valor — base da Curva ABC | XML · ZIP · XLSX · CSV |
 | 10 | Vendedores | sob demanda | nome oficial, apelidos, meta | cadastrado no app |
 | 11 | Saldos bancários | sob demanda | saldo inicial do fluxo | digitado no app, ou XLSX |
@@ -50,9 +50,26 @@ pode ser modificado, então quem se adapta é o app.
 A definição completa de campos vive em `src/data/sources.js` — é ela que o
 importador usa. Mexer lá muda o app; este documento é só a leitura humana.
 
-**PDF ainda não é lido.** Um dos sistemas só exporta em PDF; até o leitor de PDF
-ficar pronto, a tela de importação daquela fonte diz isso na cara, em vez de
-aceitar o arquivo e falhar depois.
+---
+
+## PDF também serve
+
+Um dos sistemas não exporta planilha — o relatório sai em PDF e pronto. O app
+abre o PDF, descobre **onde cada pedaço de texto foi desenhado na página** e
+remonta linhas e colunas pelas coordenadas. O resultado entra no mesmo fluxo de
+uma planilha: você liga coluna → campo uma vez, e o perfil fica salvo.
+
+O que ele resolve sozinho:
+
+- título e período antes da tabela não viram registro;
+- cabeçalho repetido a cada página é descartado (uma vez por página);
+- célula que quebrou em duas linhas volta inteira — inclusive o CNPJ partido no
+  hífen, que volta como `11.222.333/0001-81` e não `11.222.333/0001- 81`;
+- coluna de valor alinhada à direita continua sendo uma coluna só.
+
+**PDF escaneado (foto do papel) não serve.** Não há OCR e não vai haver chute: o
+app avisa que o arquivo não tem texto e pede o relatório gerado direto do
+sistema. Adivinhar número de imagem seria o oposto do item 20.
 
 ---
 

@@ -86,6 +86,14 @@ porque dependem de informação que só a empresa tem.
   em branco e vira **aviso**, com o número da linha.
 - A importação **nunca é bloqueada** por falta de coluna. O app importa o que deu
   e depois diz o que não conseguiu ligar, e onde resolver.
+- **PDF é lido**, porque um dos sistemas não exporta planilha. O texto é
+  remontado em linhas e colunas pela posição em que foi desenhado na página, e
+  daí em diante segue o mesmo caminho de um XLSX.
+- **PDF escaneado não é lido.** Sem OCR, e sem chute: o app diz que o arquivo não
+  tem texto em vez de inventar números a partir de uma imagem.
+- A tela de importação anuncia **só os formatos que o leitor abre de verdade**.
+  Prometer um formato e falhar depois seria a mesma surpresa que o item 20 manda
+  evitar.
 - Reimportar o mesmo arquivo atualiza, não duplica (chaves naturais).
 - Duas linhas idênticas no mesmo arquivo continuam sendo dois compromissos.
 
@@ -115,13 +123,12 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 | # | Pergunta | Enquanto isso |
 |---|---|---|
 | 1 | O export do **contas a receber** sai com a coluna NOTA FISCAL? | sem ela a ponte não fecha, e as notas caem na tela de sugestões em vez de vincular sozinhas |
-| 2 | Qual sistema só exporta **PDF**, e quais relatórios? | a tela daquela fonte avisa que o PDF ainda não é lido, em vez de aceitar e falhar depois |
-| 3 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
-| 4 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
-| 5 | Existe **meta por vendedor**, além da meta da empresa? | a meta individual já é cadastrável, mas não vem de arquivo |
-| 6 | Quantos dias sem contato um título deve voltar para a fila de cobrança? | hoje são **3 dias** (`RECONTATO_DIAS` em `src/logic/collection.js`) |
-| 7 | A partir de que saldo o caixa é "atenção" e "crítico"? | Ajustes traz R$ 20.000 e R$ 0 como ponto de partida |
-| 8 | Quantos dias antes da emissão ainda vale procurar o pedido? | a janela começa em **90 dias** e é trocável na própria tela |
+| 2 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
+| 3 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
+| 4 | Existe **meta por vendedor**, além da meta da empresa? | a meta individual já é cadastrável, mas não vem de arquivo |
+| 5 | Quantos dias sem contato um título deve voltar para a fila de cobrança? | hoje são **3 dias** (`RECONTATO_DIAS` em `src/logic/collection.js`) |
+| 6 | A partir de que saldo o caixa é "atenção" e "crítico"? | Ajustes traz R$ 20.000 e R$ 0 como ponto de partida |
+| 7 | Quantos dias antes da emissão ainda vale procurar o pedido? | a janela começa em **90 dias** e é trocável na própria tela |
 
 ### Já respondidas
 
@@ -144,7 +151,6 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 |---|---|
 | Tela de orçamento × conversão | a fonte de orçamentos já é importada; falta a tela que compara orçado × virado em pedido |
 | Motivo de perda de venda | seria escolha rápida, não campo livre; depende da tela de conversão |
-| Leitura de PDF | **necessária** — um dos sistemas só exporta PDF. Até ficar pronta, a tela de importação avisa em vez de aceitar o arquivo e falhar |
 | DRE pelo plano de contas | a coluna já é importada do contas a pagar; falta a demonstração |
 | Pasta do mês (dossiê de fechamento) | reúne comissão, faturamento, clientes, a receber, a pagar, DRE e conciliação num lugar só |
 | Sincronização entre aparelhos | exigiria servidor; hoje a migração é por backup JSON |

@@ -80,6 +80,9 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **Faturamento é da NF emitida**, pela data de emissão. Pedido de agosto
   faturado em setembro conta em setembro. Canceladas saem; devoluções entram
   negativas no mês da emissão.
+- **PDF serve.** Um dos sistemas não exporta planilha: o app abre o PDF, remonta
+  a tabela pela posição do texto na página e segue o mesmo caminho de um XLSX.
+  PDF escaneado não — sem OCR e sem chute, o app avisa em vez de inventar.
 - **Nada é obrigatório.** Nenhuma coluna de nenhum relatório. Você exporta como o
   sistema deixa; o app importa o que veio e **avisa** o que faltou, em vez de
   bloquear. Data ilegível vira aviso, não erro — a linha entra assim mesmo.
@@ -181,6 +184,7 @@ navegador já tem:
 | Escrever .xlsx | ZIP sem compressão (método "stored") + CRC32 próprio |
 | Ler XML de NF-e | `DOMParser` |
 | Ler OFX | leitor tolerante (o formato costuma ser SGML) |
+| **Ler PDF** | `DecompressionStream` nos streams + interpretação dos operadores de texto; a tabela sai da posição de cada pedaço na página |
 | Gerar PDF | folha de impressão + `window.print()` |
 | Gráficos | SVG escrito à mão |
 

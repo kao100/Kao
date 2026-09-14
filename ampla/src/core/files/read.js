@@ -11,6 +11,7 @@ import { parseCsv, detectDelimiter } from './csv.js';
 import { parseNfeXml } from './nfe.js';
 import { parseOfx, looksLikeOfx } from './ofx.js';
 import { unzip, textOf } from './zip.js';
+import { readPdf } from './pdf.js';
 
 export const FORMATOS = {
   xlsx: 'Planilha Excel',
@@ -18,6 +19,7 @@ export const FORMATOS = {
   nfe: 'XML de NF-e',
   ofx: 'Extrato OFX',
   zip: 'Pacote de XMLs',
+  pdf: 'Relatório em PDF',
 };
 
 /**
@@ -26,7 +28,7 @@ export const FORMATOS = {
  * exatamente o tipo de surpresa que o item 20 manda evitar.
  */
 export const EXTENSOES_SUPORTADAS = new Set([
-  'xlsx', 'xlsm', 'csv', 'txt', 'xml', 'ofx', 'qfx', 'zip',
+  'xlsx', 'xlsm', 'csv', 'txt', 'xml', 'ofx', 'qfx', 'zip', 'pdf',
 ]);
 
 /** Um formato anunciado por uma fonte é aceito? ('pdf' só quando o leitor souber.) */
@@ -52,6 +54,11 @@ export async function readFile(file) {
 
   if (ext === 'xls') {
     throw new Error('Formato .xls antigo não é lido diretamente. Abra no Excel e salve como .xlsx ou .csv.');
+  }
+
+  if (ext === 'pdf') {
+    const r = await readPdf(await file.arrayBuffer(), nome);
+    return { ...base, formato: 'pdf', planilhas: r.planilhas, aviso: r.aviso };
   }
 
   if (ext === 'ofx' || ext === 'qfx') {
