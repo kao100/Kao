@@ -2,10 +2,15 @@
 
 Este repositório guarda dois aplicativos independentes, cada um na sua pasta:
 
-| App | Pasta | O que é |
-|---|---|---|
-| **Kao Training** | `/` (raiz) | personal training digital e diário de treinamento |
-| **AMPLA** | [`/ampla`](ampla/) | gestão administrativa da AMPLA — faturamento, caixa, cobrança, comissões e conciliação |
+| App | Pasta | Endereço | O que é |
+|---|---|---|---|
+| **Kao Training** | `/` (raiz) | `kao100.github.io/Kao/` | personal training digital e diário de treinamento |
+| **AMPLA** | [`/ampla`](ampla/) | `kao100.github.io/Kao/ampla/` | gestão administrativa da AMPLA — faturamento, caixa, cobrança, comissões e conciliação |
+
+> O AMPLA já se chamou AMPLACON e ficava em `/Kao/amplacon/`. Esse endereço
+> continua respondendo: ele encaminha para o novo, limpa o service worker antigo,
+> e o banco antigo (`amplacon-admin`) é copiado para o novo na primeira abertura.
+> A pasta `amplacon/` existe só para isso.
 
 Os dois são PWAs sem build, com dados locais no aparelho, e não compartilham
 código nem banco.

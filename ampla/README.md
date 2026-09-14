@@ -19,6 +19,7 @@ Não há build, bundler ou dependências: são módulos ES nativos.
 # na raiz do repositório
 python3 -m http.server 8080
 # abra http://localhost:8080/ampla/
+# publicado em: https://kao100.github.io/Kao/ampla/
 ```
 
 Qualquer servidor estático serve. Requisitos: HTTPS (ou `localhost`) para o

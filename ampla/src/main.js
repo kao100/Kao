@@ -7,6 +7,7 @@
 
 import { defineRoutes, initRouter } from './core/router.js';
 import { requestPersistence } from './core/db.js';
+import { migrarDoNomeAntigo } from './core/migrar.js';
 import { montarShell, aoTrocarRota, atualizarAlertas } from './ui/shell.js';
 import { semear } from './data/seed.js';
 
@@ -50,6 +51,8 @@ const ROTAS = [
 async function iniciar() {
   const raiz = document.getElementById('app-root');
   try {
+    // o app se chamava AMPLACON: traz o que ficou no banco antigo
+    const migracao = await migrarDoNomeAntigo();
     await semear();
     const outlet = montarShell(raiz);
     defineRoutes(ROTAS);
@@ -57,6 +60,10 @@ async function iniciar() {
     atualizarAlertas();
     requestPersistence();
     registrarServiceWorker();
+    if (migracao.migrou) {
+      const { ok } = await import('./ui/components/toast.js');
+      ok(`${migracao.registros} registro(s) trazidos do aplicativo antigo.`);
+    }
   } catch (err) {
     console.error(err);
     raiz.innerHTML = `<div class="boot"><div class="boot__logo">AMPLA</div>

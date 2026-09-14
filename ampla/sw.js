@@ -10,7 +10,7 @@ const APP_SHELL = [
   '', 'index.html', 'manifest.webmanifest',
   'src/main.js',
   'src/core/dom.js', 'src/core/router.js', 'src/core/format.js', 'src/core/util.js',
-  'src/core/db.js', 'src/core/store.js',
+  'src/core/db.js', 'src/core/store.js', 'src/core/migrar.js',
   'src/core/files/zip.js', 'src/core/files/xlsx.js', 'src/core/files/xlsxw.js',
   'src/core/files/csv.js', 'src/core/files/nfe.js', 'src/core/files/ofx.js', 'src/core/files/read.js',
   'src/core/files/pdf.js',
