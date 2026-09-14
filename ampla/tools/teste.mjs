@@ -29,6 +29,8 @@ const commission = await import('../src/logic/commission.js');
 const cashflow = await import('../src/logic/cashflow.js');
 const collection = await import('../src/logic/collection.js');
 const routine = await import('../src/logic/routine.js');
+const dre = await import('../src/logic/dre.js');
+const dossie = await import('../src/logic/dossie.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 
@@ -312,6 +314,75 @@ console.log('\n▶ PDF: relatório que não sai em Excel');
   const mapeamento = ingest.sugerirMapeamento('receber', reais[1].map(String));
   ok('as colunas do PDF casam com os campos do app',
     mapeamento.clienteNome === 'Destinado a' && mapeamento.nfNumero === 'Nota Fiscal', JSON.stringify(mapeamento));
+}
+
+
+console.log('\n▶ DRE pelo plano de contas');
+{
+  const d = await dre.dre('2026-09');
+  igual('receita bruta é o faturamento do mês', d.receita.bruta, 50400);
+  igual('CMV veio do custo dos pedidos', d.cmv.valor, 37000);
+  igual('custo conhecido em 100% do faturamento', d.cmv.cobertura.completa, true);
+  igual('lucro bruto = receita - CMV', d.lucroBruto, 13400);
+  ok('despesas agrupadas pelo plano de contas',
+    d.despesas.grupos.length > 0 && d.despesas.grupos.every((g) => g.nome), JSON.stringify(d.despesas.grupos));
+  igual('o resultado fecha', d.resultado, d.lucroBruto - d.despesas.total);
+  ok('a lista de planos de contas sai pronta para marcar',
+    (await dre.planosDeContas()).length > 0, '');
+
+  // marcar uma conta como mercadoria tira ela das despesas
+  const maior = d.despesas.grupos[0];
+  await store.salvarConfig({ dre: { contasDeMercadoria: [maior.nome] } });
+  const d2 = await dre.dre('2026-09');
+  igual('conta marcada como mercadoria sai das despesas',
+    d2.despesas.total, d.despesas.total - maior.valor);
+  igual('e aparece à parte, para não sumir', d2.mercadoria.total, maior.valor);
+  await store.salvarConfig({ dre: { contasDeMercadoria: [] } });
+
+  // uma nota sem custo conhecido: o app não estima, e diz que não estimou
+  await store.nfs.salvar({
+    id: 'nf_teste_sem_custo', numero: '9999', dataEmissao: '2026-09-20', mes: '2026-09',
+    valorTotal: 10000, status: 'autorizada', operacao: 'saida', clienteNome: 'Cliente X',
+  });
+  const d3 = await dre.dre('2026-09');
+  igual('nota sem pedido não recebe custo estimado', d3.cmv.valor, 37000);
+  igual('e o lucro bruto fica em branco em vez de errado', d3.lucroBruto, null);
+  igual('a cobertura deixa claro o quanto tem custo', d3.cmv.cobertura.completa, false);
+  ok('a nota sem custo é nominada, não escondida',
+    d3.cmv.semCusto.some((x) => x.numero === '9999'), JSON.stringify(d3.cmv.semCusto));
+  await store.nfs.remover('nf_teste_sem_custo');
+}
+
+
+console.log('\n▶ Pasta do mês');
+{
+  const p = await dossie.pasta('2026-09');
+  igual('a pasta é do mês pedido', p.mes, '2026-09');
+  const ids = p.documentos.map((d) => d.id);
+  igual('tem os documentos do fechamento', ids,
+    ['dre', 'faturamento', 'comissao', 'receber', 'pagar', 'clientes', 'pendencias']);
+
+  const dreDoc = p.documentos.find((d) => d.id === 'dre');
+  ok('o DRE abre pela receita bruta', dreDoc.linhas[0].conta === 'RECEITA BRUTA', dreDoc.linhas[0].conta);
+  ok('e fecha com o resultado do mês',
+    dreDoc.linhas.some((l) => l.conta === '= RESULTADO DO MÊS'), '');
+
+  const clientesDoc = p.documentos.find((d) => d.id === 'clientes');
+  igual('os clientes do mês somam o faturamento',
+    clientesDoc.total.valor, p.resumo.total);
+  ok('e vêm do maior para o menor',
+    clientesDoc.linhas.every((c, i) => i === 0 || clientesDoc.linhas[i - 1].valor >= c.valor), '');
+
+  const planilhas = dossie.planilhasDaPasta(p);
+  igual('sai uma aba de Excel por documento', planilhas.length, p.documentos.length);
+  ok('cada aba tem nome, colunas e linhas',
+    planilhas.every((x) => x.name && x.columns.length && Array.isArray(x.rows)), '');
+  ok('o nome da aba cabe no limite do Excel',
+    planilhas.every((x) => x.name.length <= 31), JSON.stringify(planilhas.map((x) => x.name)));
+
+  const blocos = dossie.blocosDaPasta(p);
+  ok('e o PDF sai com um bloco por documento',
+    blocos.length === p.documentos.length && blocos.every((b) => b.tipo === 'tabela' && b.titulo), '');
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

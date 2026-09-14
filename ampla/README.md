@@ -69,6 +69,7 @@ Depois disso, qualquer aba responde na hora.
 | 📥 Contas a receber | títulos, saldos e situação |
 | 🏦 Bancos | saldo por conta, extrato e o que não conciliou |
 | ⚠️ Conciliação | só o que exige atenção; resolveu, sai da frente — inclui **Atribuir vendedores**, onde você define o vendedor de cada pedido |
+| 📁 Pasta do mês | o dossiê de fechamento: DRE, faturamento, comissões, a receber, a pagar, clientes e divergências — cada um sai sozinho, ou a pasta inteira de uma vez |
 | 🗂️ Central de arquivos | checklist do dia, importação e histórico |
 
 Simulação de cenários fica dentro do Fluxo de caixa.
@@ -97,6 +98,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência que nunca some:** faturamento fiscal = soma dos vendedores. A
   diferença aparece; o fechamento de comissão fica travado enquanto existir.
+- **DRE sem estimativa:** o CMV vem do "valor do custo" do pedido que gerou cada
+  nota. Nota sem custo conhecido não recebe um custo médio — ela fica de fora, a
+  cobertura aparece na tela e o lucro bruto só sai quando o custo cobre 100% do
+  faturamento.
+- **Nada é contado duas vezes:** as contas do plano que você marcar como compra
+  de mercadoria saem das despesas (o custo já entrou pelo CMV) e aparecem à
+  parte. O app sugere quais parecem ser, mas quem marca é você.
 - **Caixa:** vencido sem promessa não entra na projeção (não há data confiável);
   pagamento vencido entra no primeiro dia (a obrigação continua).
 - **Simulação não toca no real** até você mandar aplicar — e aí fica registrado.

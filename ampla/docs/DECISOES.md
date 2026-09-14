@@ -102,6 +102,26 @@ porque dependem de informação que só a empresa tem.
 - Produto sem custo aparece com margem **em branco** e é contado à parte — o app
   não estima custo.
 
+### DRE e fechamento
+- O **CMV** vem do "valor do custo" do pedido que gerou cada nota. Quando um
+  pedido rendeu mais de uma nota, o custo é dividido na proporção do valor de
+  cada uma — e só quando o pedido informa o valor total, que é o que torna a
+  divisão verificável. Sem isso a nota fica **sem custo**, em vez de receber um
+  rateio inventado.
+- O **lucro bruto só aparece quando o custo cobre 100% do faturamento** do mês.
+  Abaixo disso a tela mostra a cobertura e nomeia as notas sem custo. Um lucro
+  calculado sobre parte do faturamento seria um número aparentemente perfeito
+  com diferença embutida.
+- **Despesas pelo vencimento**, não pelo pagamento: é a data que todo relatório
+  traz.
+- **Compra de mercadoria não entra duas vezes.** Se o plano de contas tiver
+  compras de mercadoria, esse custo já veio pelo CMV. As contas que você marcar
+  saem das despesas operacionais e aparecem como memorando. O app **sugere**
+  quais parecem ser, pela palavra no nome, mas não marca sozinho: só você sabe o
+  que cada conta significa no seu plano.
+- A **pasta do mês** não guarda cópia de nada: é montada na hora, do banco.
+  Assim ela nunca conta uma história diferente da do resto do app.
+
 ### Interface
 - O nome da empresa é **AMPLA**. Ele aparece na abertura, no ícone e no nome do
   app instalado.
@@ -151,8 +171,6 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 |---|---|
 | Tela de orçamento × conversão | a fonte de orçamentos já é importada; falta a tela que compara orçado × virado em pedido |
 | Motivo de perda de venda | seria escolha rápida, não campo livre; depende da tela de conversão |
-| DRE pelo plano de contas | a coluna já é importada do contas a pagar; falta a demonstração |
-| Pasta do mês (dossiê de fechamento) | reúne comissão, faturamento, clientes, a receber, a pagar, DRE e conciliação num lugar só |
 | Sincronização entre aparelhos | exigiria servidor; hoje a migração é por backup JSON |
 | Login e permissões | o app é de uso administrativo em aparelho próprio |
 

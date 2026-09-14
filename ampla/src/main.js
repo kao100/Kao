@@ -22,6 +22,7 @@ import { telaBancos } from './ui/views/bancos.js';
 import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
 import { telaAjustes } from './ui/views/ajustes.js';
+import { telaFechamento } from './ui/views/fechamento.js';
 
 const ROTAS = [
   { path: '/', view: telaEmpresa, titulo: 'Visão da empresa' },
@@ -38,6 +39,7 @@ const ROTAS = [
   { path: '/bancos', view: telaBancos, titulo: 'Bancos e extrato' },
   { path: '/conciliacao', view: telaConciliacao, titulo: 'Conciliação' },
   { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
+  { path: '/fechamento', view: telaFechamento, titulo: 'Pasta do mês' },
   { path: '/arquivos', view: telaArquivos, titulo: 'Central de arquivos' },
   { path: '/arquivos/:fonte', view: telaImportar, titulo: 'Importar' },
   { path: '/ajustes', view: telaAjustes, titulo: 'Ajustes' },

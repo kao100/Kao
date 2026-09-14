@@ -17,6 +17,7 @@ export const MODULOS = [
   { path: '/receber', icone: '📥', label: 'A receber', titulo: 'Contas a receber' },
   { path: '/bancos', icone: '🏦', label: 'Bancos', titulo: 'Bancos e extrato' },
   { path: '/conciliacao', icone: '⚠️', label: 'Conciliação', titulo: 'Conciliação' },
+  { path: '/fechamento', icone: '📁', label: 'Pasta do mês', titulo: 'Pasta do mês' },
   { path: '/arquivos', icone: '🗂️', label: 'Arquivos', titulo: 'Central de arquivos' },
   { path: '/ajustes', icone: '⚙️', label: 'Ajustes', titulo: 'Ajustes' },
 ];
@@ -31,11 +32,12 @@ export function montarShell(raiz) {
 
   const marca = h('span.topo__marca', divisa(24, { cor: 'var(--marca)' }));
 
+  // A Central de Arquivos mora na barra de baixo, e só lá. Ela também tinha um
+  // atalho aqui em cima: o mesmo lugar aparecendo duas vezes na mesma tela.
   const topo = h('header.topo',
     voltar,
     marca,
-    h('div.topo__titulo', titulo, subtitulo),
-    h('button.topo__voltar', { onClick: () => navigate('/arquivos'), title: 'Central de arquivos' }, '🗂️'));
+    h('div.topo__titulo', titulo, subtitulo));
 
   const nav = h('nav.nav', ...MODULOS.map((m) => h('a.nav__item', {
     href: `#${m.path}`,

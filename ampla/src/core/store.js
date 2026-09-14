@@ -46,6 +46,13 @@ export const CONFIG_PADRAO = {
     basePadrao: 'valorProdutos',
     pagarSobreFrete: false,
   },
+  dre: {
+    // contas do plano de contas que são COMPRA DE MERCADORIA. Elas saem das
+    // despesas operacionais porque esse custo já entra pelo CMV — contar as
+    // duas coisas derrubaria o resultado sem motivo. Quem marca é você: o app
+    // não adivinha o que cada conta significa no seu plano.
+    contasDeMercadoria: [],
+  },
 };
 
 export async function config() {
