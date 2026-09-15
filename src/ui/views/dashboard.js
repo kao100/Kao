@@ -6,6 +6,7 @@ import { planForDate, planForWeek, answerFootball, blockSummary, setLocation } f
 import { kneeStatus } from '../../logic/knee.js';
 import { targetsFor, dayTotals } from '../../logic/nutrition.js';
 import { fitsBudget } from '../../logic/duration.js';
+import { extrasPrompt } from './extras.js';
 import { page, topbar, iconAction, sectionTitle, safetyNote } from '../shell.js';
 import { startWorkoutFlow } from './workout.js';
 import { openDayActivitySheet } from './promise.js';
@@ -45,6 +46,8 @@ export async function dashboardView() {
     knee.level !== 'ok' ? kneeAlert(knee) : null,
 
     await weekStats(weekPlans, date),
+
+    await extrasPrompt(date),
 
     foodCard(foodTotals, foodTargets),
 

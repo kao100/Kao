@@ -7,11 +7,21 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v15';
-export const APP_DATE = '2026-09-13';
+export const APP_VERSION = 'kao-v16';
+export const APP_DATE = '2026-09-15';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v16',
+    date: '2026-09-15',
+    items: [
+      'Complementos: ao terminar o treino, o app pergunta se você quer somar um bloco extra — abdômen, braço, ombro, panturrilha, costas ou cardio.',
+      'A sugestão é do dia: leva em conta o que você já treinou, o joelho, o jogo de amanhã e o tempo que sobrou. O que não cabe hoje aparece com o motivo.',
+      'O complemento que rende mais sobe na lista: o grupo com menor volume da sua semana, desde que hoje não seja o dia dele.',
+      'Se o mesmo complemento aparecer 3× em 7 dias, o app avisa que virou volume fixo e sugere pô-lo no programa, onde a progressão o enxerga.',
+    ],
+  },
   {
     version: 'kao-v15',
     date: '2026-09-13',

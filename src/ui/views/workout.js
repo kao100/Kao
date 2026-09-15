@@ -19,6 +19,7 @@ import { toast, toastOk } from '../components/toast.js';
 import { topbar, page, safetyNote, emptyState } from '../shell.js';
 import { exerciseSheet } from './exercise.js';
 import { openKneeCheckSheet } from './knee.js';
+import { extrasPrompt } from './extras.js';
 import { openReadinessSheet } from './readiness.js';
 import { checkSetRecords, checkSessionRecords, celebrationText, sessionAchievements, RECORD_TYPES } from '../../logic/records.js';
 
@@ -706,6 +707,8 @@ export async function workoutSummaryView(session) {
         )),
       ),
     ),
+
+    await extrasPrompt(session.date, { title: 'Quer complementar hoje?' }),
 
     h('button.btn.btn--ghost.btn--block', { onClick: () => openKneeCheckSheet({ context: 'post-workout', date: session.date }) },
       '🦵 Registrar como o joelho ficou'),

@@ -322,6 +322,48 @@ abdutora, panturrilha, pallof, prancha lateral) — nenhum deles compromete o
 Upper A de segunda. A ordem é garantida pela flag `cardioFirst` no template, que
 faz o planejador pôr o cardio na frente quando ele é o treino principal do dia.
 
+## Complementos do dia (décima quarta rodada)
+
+Sua proposta: ter o treino do dia fixo, e ao terminar poder somar um bloco
+extra — cardio, abdômen — no dia em que sobra tempo. É uma boa separação, e
+resolve um problema que o app tinha: sem ela, "sobrou tempo hoje" só podia
+virar mudança permanente no programa, que é o que atrapalha a progressão.
+
+Duas coisas passam a ser distintas:
+
+- **treino do dia** — fixo, progride com carga, sustenta o ciclo de blocos. É
+  nele que a progressão dupla funciona, porque você repete o mesmo exercício
+  semana após semana e compara;
+- **complemento** — do dia e só do dia. Entra quando sobrou tempo, sai quando
+  não sobrou, e não muda o programa.
+
+Onze blocos em `data/extras.js`: três de abdômen (chão, barra, anti-rotação),
+braço, ombro/posterior, panturrilha, costas, três de cardio e mobilidade. Cada
+um declara o que treina, quanto dura, o que exige e um custo de fadiga de 0 a 3.
+
+`logic/extras.js` filtra o que faz sentido **hoje**, e nesta ordem:
+
+1. joelho fora do padrão → fora tudo que carrega o joelho;
+2. jogo amanhã → fora fadiga ≥ 2;
+3. jogou hoje → fora fadiga ≥ 2;
+4. já fez cardio hoje → só mobilidade;
+5. grupo que o dia já cobre desce para o fim — e essa regra **ganha** da de
+   ponto fraco: um grupo pode ser o mais fraco da semana e ainda assim ser o
+   pior lugar para pôr volume hoje, se hoje já é o dia dele;
+6. o grupo com menor volume semanal sobe, quando hoje não o treina.
+
+O que não cabe hoje **aparece assim mesmo**, com o motivo. Esconder a razão
+transforma o app em caixa-preta, e o motivo costuma ser a informação mais útil.
+
+**Guarda-corpo contra volume escondido.** Se o mesmo complemento aparece 3× em
+7 dias, o app avisa: deixou de ser complemento e virou volume fixo — que, por
+estar fora do programa, a progressão de carga não enxerga e o ciclo de blocos
+não conta. A sugestão é promovê-lo a exercício do programa.
+
+As séries do complemento são gravadas como quaisquer outras: contam para
+volume, recordes, relatório semanal e promessa do dia. A sessão fica marcada
+com `extraId` e sem `templateId`, então não interfere na progressão programada.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias
