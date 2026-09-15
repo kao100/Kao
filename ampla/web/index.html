@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ampla Dados</title>
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<div id="login" class="tela-login">
+  <form class="cartao-login" id="form-login">
+    <h1>Ampla <span>Dados</span></h1>
+    <p class="sub">Plataforma interna de consulta</p>
+    <label>E-mail <input type="email" name="email" autocomplete="username" required></label>
+    <label>Senha <input type="password" name="senha" autocomplete="current-password" required></label>
+    <button type="submit">Entrar</button>
+    <p class="erro" id="erro-login" hidden></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="topo">
+    <div class="marca">Ampla <span>Dados</span></div>
+    <nav class="abas">
+      <button data-aba="resumo" class="ativa">Resumo</button>
+      <button data-aba="consultar">Consultar</button>
+      <button data-aba="fontes">Fontes</button>
+      <button data-aba="chaves">Chaves</button>
+      <button data-aba="auditoria">Auditoria</button>
+    </nav>
+    <div class="usuario">
+      <span id="nome-usuario"></span>
+      <button id="btn-sair" class="link">sair</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Resumo -->
+    <section data-painel="resumo">
+      <div class="cartoes" id="cartoes-resumo"></div>
+      <div class="grade-dupla">
+        <div class="cartao">
+          <h2>Consultas por dia (30 dias)</h2>
+          <div id="grafico-serie" class="grafico"></div>
+        </div>
+        <div class="cartao">
+          <h2>De onde veio a resposta</h2>
+          <div id="grafico-origem" class="barras"></div>
+          <p class="nota">
+            Cache e base local resolvem sem tocar em fonte externa. Quanto maior
+            essa fatia, menor a fatura quando houver fonte paga ligada.
+          </p>
+        </div>
+      </div>
+      <div class="cartao">
+        <h2>Por produto</h2>
+        <div id="tabela-produtos"></div>
+      </div>
+    </section>
+
+    <!-- Consultar -->
+    <section data-painel="consultar" hidden>
+      <div class="cartao">
+        <h2>Consulta manual</h2>
+        <form id="form-consulta" class="form-consulta">
+          <label>Produto
+            <select name="produto">
+              <option value="cnpj">CNPJ — empresa completa</option>
+              <option value="cpf">CPF — validação e vínculo societário</option>
+              <option value="compliance">Compliance — PEP, sanções, dívida ativa</option>
+              <option value="processos">Processos judiciais</option>
+              <option value="cep">CEP</option>
+            </select>
+          </label>
+          <label>Documento / termo <input name="valor" required placeholder="00.000.000/0001-00"></label>
+          <label>Nome <small>(exigido para vínculo de CPF)</small>
+            <input name="nome" placeholder="opcional, conforme o produto">
+          </label>
+          <label>Finalidade <small>(obrigatória — LGPD)</small>
+            <input name="finalidade" required placeholder="Ex.: análise de crédito do pedido 1234">
+          </label>
+          <label class="linha-check">
+            <input type="checkbox" name="semFontePaga" checked>
+            Não usar fonte paga nesta consulta
+          </label>
+          <button type="submit">Consultar</button>
+        </form>
+      </div>
+      <div class="cartao" id="cartao-resultado" hidden>
+        <h2>Resultado</h2>
+        <div id="resumo-resultado"></div>
+        <details><summary>Resposta completa (JSON)</summary><pre id="json-resultado"></pre></details>
+      </div>
+    </section>
+
+    <!-- Fontes -->
+    <section data-painel="fontes" hidden>
+      <div class="cartao">
+        <h2>Fontes conectadas</h2>
+        <p class="nota">
+          A cascata roda de cima para baixo: a consulta para na primeira fonte
+          que responde. Fonte paga desligada não é chamada e não gera custo.
+        </p>
+        <div id="lista-fontes"></div>
+      </div>
+    </section>
+
+    <!-- Chaves -->
+    <section data-painel="chaves" hidden>
+      <div class="cartao">
+        <h2>Nova chave de API</h2>
+        <form id="form-chave" class="form-consulta">
+          <label>Nome <input name="nome" required placeholder="Ex.: motor de crédito"></label>
+          <label>Ambiente
+            <select name="ambiente">
+              <option value="producao">produção</option>
+              <option value="sandbox">sandbox</option>
+            </select>
+          </label>
+          <label>Limite diário <input name="limiteDiario" type="number" value="10000" min="1"></label>
+          <button type="submit">Gerar chave</button>
+        </form>
+        <div id="chave-nova" hidden></div>
+      </div>
+      <div class="cartao">
+        <h2>Chaves existentes</h2>
+        <div id="lista-chaves"></div>
+      </div>
+    </section>
+
+    <!-- Auditoria -->
+    <section data-painel="auditoria" hidden>
+      <div class="cartao">
+        <h2>Registro de consultas</h2>
+        <p class="nota">
+          Toda consulta fica registrada com autor, documento e finalidade. É o
+          que responde “por que a Ampla consultou este dado?”.
+        </p>
+        <div class="filtros">
+          <input id="filtro-documento" placeholder="filtrar por documento">
+          <select id="filtro-produto">
+            <option value="">todos os produtos</option>
+            <option value="cnpj">cnpj</option>
+            <option value="cpf">cpf</option>
+            <option value="compliance">compliance</option>
+            <option value="processos">processos</option>
+            <option value="cep">cep</option>
+          </select>
+          <button id="btn-filtrar">Filtrar</button>
+        </div>
+        <div id="lista-auditoria"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

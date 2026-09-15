@@ -1,0 +1,54 @@
+# Sobe a plataforma inteira em uma máquina: API, painel, Postgres e Redis.
+# Nada aqui depende de nuvem — roda em qualquer VM da Ampla.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ampla
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ampla}
+      POSTGRES_DB: ampla_dados
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+    ports: ['5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ampla -d ampla_dados']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # A base da Receita são dezenas de GB; estes ajustes fazem diferença
+    # grande na carga e nas consultas por CNPJ.
+    command: >
+      postgres
+      -c shared_buffers=1GB
+      -c work_mem=64MB
+      -c maintenance_work_mem=1GB
+      -c max_wal_size=4GB
+      -c effective_cache_size=3GB
+
+  redis:
+    image: redis:7-alpine
+    # Cache é descartável: sem persistência, sobe limpo.
+    command: redis-server --save '' --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://ampla:${POSTGRES_PASSWORD:-ampla}@postgres:5432/ampla_dados
+      REDIS_URL: redis://redis:6379
+    ports: ['3000:3000']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      # Onde os dumps da Receita e da PGFN são baixados e descompactados.
+      - ./data:/app/data
+
+volumes:
+  postgres-dados:
