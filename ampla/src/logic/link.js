@@ -525,6 +525,10 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
     if (!nf.vendedorId) {
       const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
+      // A nota cujo pedido já está sendo cobrado não vira uma segunda
+      // pendência: é o mesmo problema, e resolver o pedido resolve a nota.
+      // Contar as duas inflava a lista e o valor envolvido.
+      if (motivo === 'pedido_sem_vendedor') continue;
       nova('nf_sem_vendedor', nf.id, {
         titulo: `NF ${nf.numero}`,
         detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
@@ -629,20 +633,27 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   const meses = new Map();
   for (const nf of nfs) {
     if (!nf.mes || nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
-    if (!meses.has(nf.mes)) meses.set(nf.mes, { fiscal: 0, atribuido: 0 });
+    if (!meses.has(nf.mes)) meses.set(nf.mes, { fiscal: 0, atribuido: 0, semVendedor: 0 });
     const valor = nf.devolucao ? -nf.valorTotal : nf.valorTotal;
     meses.get(nf.mes).fiscal += valor;
     if (nf.vendedorId) meses.get(nf.mes).atribuido += valor;
+    else meses.get(nf.mes).semVendedor += valor;
   }
   for (const [mes, v] of meses) {
-    if (!sameMoney(v.fiscal, v.atribuido, 1)) {
-      nova('divergencia_faturamento', mes, {
-        titulo: `${mes}: diferença de ${money(cents(v.fiscal - v.atribuido))}`,
-        detalhe: `fiscal ${money(v.fiscal)} × vendedores ${money(v.atribuido)}`,
-        valor: cents(v.fiscal - v.atribuido),
-        mes,
-      });
-    }
+    if (sameMoney(v.fiscal, v.atribuido, 1)) continue;
+    const diferenca = cents(v.fiscal - v.atribuido);
+    // A diferença que as notas sem vendedor já explicam não é uma pendência
+    // nova: é o mesmo dinheiro, dito de outro jeito. Só vira pendência o que
+    // sobra DEPOIS de descontá-las — aí sim é algo que ninguém está vendo.
+    const inexplicada = cents(diferenca - (v.semVendedor || 0));
+    if (sameMoney(inexplicada, 0, 1)) continue;
+    nova('divergencia_faturamento', mes, {
+      titulo: `${mes}: diferença de ${money(inexplicada)} sem explicação`,
+      detalhe: `fiscal ${money(v.fiscal)} × vendedores ${money(v.atribuido)}`
+        + (v.semVendedor ? ` · ${money(v.semVendedor)} são notas sem vendedor` : ''),
+      valor: inexplicada,
+      mes,
+    });
   }
 
   // grava: pendências que sumiram são apagadas (resolvidas de fato)

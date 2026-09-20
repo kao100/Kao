@@ -135,6 +135,17 @@ porque dependem de informação que só a empresa tem.
 - A contagem mostra **o que ela mandou**, não o que o app criou de tabela junto:
   4 notas são 4 notas, não 8 registros.
 
+### Um problema é contado uma vez só
+- Um pedido sem vendedor gerava **três** pendências: o pedido, a nota dele e a
+  diferença de faturamento do mês. Era o mesmo dinheiro dito de três jeitos, e o
+  "valor envolvido" saía triplicado — dois pedidos de R$ 30.400 viravam
+  "5 pendências, R$ 91.200".
+- Agora vale a **causa**: a nota cujo pedido já está sendo cobrado não vira
+  pendência própria, porque resolver o pedido resolve a nota.
+- A **divergência de faturamento** só vira pendência pelo que sobra depois de
+  descontar as notas sem vendedor. A parte que elas explicam já está dita; o que
+  sobra é que ninguém está vendo.
+
 ### O app é um gestor, não uma lista de tarefas
 - **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
   trabalho duas vezes, em dois lugares, para justificar a mesma coisa. A baixa

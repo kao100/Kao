@@ -507,5 +507,37 @@ Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/10/2026;Em aberto;2.50
   igual('a base voltou ao que era', (await store.receber.listar()).length, antes);
 }
 
+
+console.log('\n▶ Um problema é contado uma vez só');
+{
+  // Antes: um pedido sem vendedor gerava TRÊS pendências — o pedido, a nota
+  // dele e a diferença de faturamento do mês — e o valor envolvido saía
+  // triplicado. É um problema só, e resolver o pedido resolve tudo.
+  const alvo = (await store.pedidos.listar()).find((p) => p.numero === '1003');
+  const vendedorOriginal = alvo.vendedorId;
+  // como se a coluna VENDEDOR tivesse vindo em branco para este pedido
+  await store.pedidos.salvar({ ...alvo, vendedorId: null, vendedorOrigem: null, vendedorNome: null });
+  await link.recalcular();
+
+  const abertas = (await store.pendencias.listar()).filter((x) => x.status === 'aberta');
+  const doVendedor = abertas.filter((x) => ['pedido_sem_vendedor', 'nf_sem_vendedor', 'divergencia_faturamento'].includes(x.tipo));
+
+  igual('um pedido sem vendedor é uma pendência, não três', doVendedor.length, 1);
+  igual('e ela aponta a causa: o pedido', doVendedor[0].tipo, 'pedido_sem_vendedor');
+
+  const notaDoPedido = (await store.nfs.listar()).find((n) => n.numero === '3003');
+  igual('a nota realmente ficou sem vendedor', notaDoPedido.vendedorId, null);
+  igual('mas o valor é contado uma vez só', doVendedor[0].valor, notaDoPedido.valorTotal);
+
+  // resolver o pedido resolve tudo de uma vez
+  await link.definirVendedorDoPedido(alvo.id, vendedorOriginal, 'teste');
+  await link.recalcular();
+  const depois = (await store.pendencias.listar())
+    .filter((x) => x.status === 'aberta' && ['pedido_sem_vendedor', 'nf_sem_vendedor', 'divergencia_faturamento'].includes(x.tipo));
+  igual('resolvido o pedido, não sobra nenhuma das três', depois.length, 0);
+  igual('e a nota voltou a ter dono',
+    (await store.nfs.listar()).find((n) => n.numero === '3003').vendedorId, vendedorOriginal);
+}
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);
