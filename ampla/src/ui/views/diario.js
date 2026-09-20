@@ -82,10 +82,7 @@ export async function telaDiario({ query }) {
         kpi({ label: 'Dias restantes', valor: String(ritmo.diasRestantes), tamanho: 'p', nota: 'de venda' }))),
 
     recados.length > 0 && card('O que precisa acontecer', null,
-      h('div.empilha', { style: { gap: '8px' } },
-        ...recados.map((x) => h('div.linha', { style: { alignItems: 'flex-start', gap: '8px' } },
-          h('span', x.nivel === 'ok' ? '✅' : x.nivel === 'ruim' ? '🔴' : x.nivel === 'info' ? 'ℹ️' : '⚠️'),
-          h('span.pequeno.crescer', x.texto))))),
+      h('div.empilha', { style: { gap: '8px' } }, ...recados.map(linhaRecado))),
 
     r.serie.length > 1 && card('Dia a dia do mês', null,
       grafLinha(r.serie.map((d) => ({ rotulo: formatDate(d.data, 'short'), valor: d.valor })), { altura: 140 }),
@@ -145,6 +142,26 @@ function linhaVendedor(v, i) {
           ].filter(Boolean).join(' · ')))
       : h('div.mini.muted',
         `${v.dia ? `hoje ${money(v.dia)}` : 'sem venda hoje'} · ${v.notas} NFs · ${pct(v.participacao, 0)} do total`));
+}
+
+/** Um recado. Se tiver rota, vira botão: o aviso e o lugar de resolver juntos. */
+function linhaRecado(x) {
+  const icone = x.nivel === 'ok' ? '✅' : x.nivel === 'ruim' ? '🔴' : x.nivel === 'info' ? 'ℹ️' : '⚠️';
+  const conteudo = [
+    h('span', icone),
+    h('span.pequeno.crescer', x.texto),
+    x.rota && h('span.muted', '›'),
+  ].filter(Boolean);
+
+  return x.rota
+    ? h('button.linha', {
+      style: {
+        alignItems: 'flex-start', gap: '8px', width: '100%', textAlign: 'left',
+        background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer',
+      },
+      onClick: () => navigate(x.rota),
+    }, ...conteudo)
+    : h('div.linha', { style: { alignItems: 'flex-start', gap: '8px' } }, ...conteudo);
 }
 
 function seletorDia(data) {

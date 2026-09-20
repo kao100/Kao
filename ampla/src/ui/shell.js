@@ -5,23 +5,35 @@ import { divisa } from './components/marca.js';
 import * as store from '../core/store.js';
 import { navigate } from '../core/router.js';
 import { formatDate, timestampLabel } from '../core/format.js';
+import { detalhe, fechar as fecharFolha } from './components/sheet.js';
 
+/**
+ * A barra de baixo tem só o que ela abre todo dia. O resto continua existindo,
+ * a um toque, no menu do topo — catorze abas viravam uma barra que rolava para
+ * o lado, e rolar para achar uma aba é o contrário de ver o negócio rápido.
+ */
 export const MODULOS = [
   { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório do dia' },
   { path: '/caixa', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
-  { path: '/cobranca', icone: '🔴', label: 'Inadimplência', titulo: 'Inadimplência' },
+  { path: '/cobranca', icone: '🔴', label: 'Vencidos', titulo: 'Inadimplência' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
-  { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
-  { path: '/produtos', icone: '📦', label: 'Produtos', titulo: 'Produtos e curva ABC' },
+  { path: '/orcamentos', icone: '📝', label: 'Orçados', titulo: 'Orçamentos' },
   { path: '/comissoes', icone: '🎯', label: 'Comissões', titulo: 'Comissões' },
-  { path: '/pagar', icone: '📤', label: 'A pagar', titulo: 'Contas a pagar' },
-  { path: '/receber', icone: '📥', label: 'A receber', titulo: 'Contas a receber' },
-  { path: '/bancos', icone: '🏦', label: 'Bancos', titulo: 'Bancos e extrato' },
-  { path: '/conciliacao', icone: '⚠️', label: 'Conciliação', titulo: 'Conciliação' },
+];
+
+/** O resto do app, no menu — sem sumir e sem ocupar a barra. */
+export const OUTRAS = [
   { path: '/fechamento', icone: '📁', label: 'Pasta do mês', titulo: 'Pasta do mês' },
-  { path: '/arquivos', icone: '🗂️', label: 'Relatórios', titulo: 'Relatórios que você manda' },
+  { path: '/pagar', icone: '💳', label: 'Contas a pagar', titulo: 'Contas a pagar' },
+  { path: '/receber', icone: '📥', label: 'Contas a receber', titulo: 'Contas a receber' },
+  { path: '/bancos', icone: '🏦', label: 'Bancos e extrato', titulo: 'Bancos e extrato' },
+  { path: '/produtos', icone: '📦', label: 'Produtos e curva ABC', titulo: 'Produtos e curva ABC' },
+  { path: '/conciliacao', icone: '⚠️', label: 'O que ficou sem vendedor', titulo: 'Conciliação' },
+  { path: '/empresa', icone: '🏢', label: 'Visão da empresa', titulo: 'Visão da empresa' },
   { path: '/ajustes', icone: '⚙️', label: 'Ajustes', titulo: 'Ajustes' },
 ];
+
+const TODAS = [...MODULOS, ...OUTRAS];
 
 let refs = {};
 
@@ -33,12 +45,21 @@ export function montarShell(raiz) {
 
   const marca = h('span.topo__marca', divisa(24, { cor: 'var(--marca)' }));
 
-  // A Central de Arquivos mora na barra de baixo, e só lá. Ela também tinha um
-  // atalho aqui em cima: o mesmo lugar aparecendo duas vezes na mesma tela.
+  // Mandar os relatórios é o que ela faz todo dia, então fica a um toque de
+  // qualquer tela — sem ocupar uma das seis vagas da barra de baixo.
+  const enviar = h('button.topo__acao', {
+    onClick: () => navigate('/arquivos'),
+    title: 'Mandar os relatórios do dia',
+  }, '📤');
+
+  const menu = h('button.topo__acao', { onClick: abrirMenu, title: 'Mais telas' }, '☰');
+
   const topo = h('header.topo',
     voltar,
     marca,
-    h('div.topo__titulo', titulo, subtitulo));
+    h('div.topo__titulo', titulo, subtitulo),
+    enviar,
+    menu);
 
   const nav = h('nav.nav', ...MODULOS.map((m) => h('a.nav__item', {
     href: `#${m.path}`,
@@ -50,9 +71,21 @@ export function montarShell(raiz) {
   return outlet;
 }
 
+function abrirMenu() {
+  detalhe('Mais telas',
+    h('div.empilha', { style: { gap: '4px' } },
+      ...[{ path: '/arquivos', icone: '📤', label: 'Mandar os relatórios do dia' }, ...OUTRAS]
+        .map((m) => h('button.item.card--clicavel', {
+          onClick: () => { fecharFolha(); navigate(m.path); },
+        },
+        h('span.tarefa__icone', m.icone),
+        h('div.item__corpo', h('div.item__titulo', m.label)),
+        h('span', '›')))));
+}
+
 export function aoTrocarRota(route, params) {
-  const modulo = MODULOS.find((m) => m.path === route.path)
-    || MODULOS.find((m) => m.path !== '/' && route.path.startsWith(m.path));
+  const modulo = TODAS.find((m) => m.path === route.path)
+    || TODAS.find((m) => m.path !== '/' && route.path.startsWith(m.path));
   refs.titulo.textContent = route.titulo || modulo?.titulo || 'AMPLA';
   const naRaiz = modulo && modulo.path === route.path;
   refs.voltar.style.display = naRaiz ? 'none' : 'grid';

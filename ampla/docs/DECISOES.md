@@ -146,6 +146,18 @@ porque dependem de informação que só a empresa tem.
   descontar as notas sem vendedor. A parte que elas explicam já está dita; o que
   sobra é que ninguém está vendo.
 
+### Seis abas, e o resto no menu
+- A barra tinha catorze abas e rolava para o lado. Rolar para achar uma aba é o
+  contrário de abrir o app e saber como a empresa está.
+- Ficam na barra as seis que ela abre todo dia: Relatório, Caixa, Vencidos,
+  Comercial, Orçados e Comissões. O resto continua existindo, a um toque, no
+  menu (☰) do topo.
+- **Mandar os relatórios** é a ação diária dela, então ganhou botão próprio no
+  topo (📤), visível em qualquer tela, sem ocupar uma das seis vagas.
+- A **Conciliação saiu da barra**: quando o relatório vem certo ela fica vazia.
+  O aviso virou um recado dentro do Relatório do dia — "2 pedidos vieram sem
+  vendedor, R$ 30.400" — que leva direto para a tela de resolver.
+
 ### O app é um gestor, não uma lista de tarefas
 - **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
   trabalho duas vezes, em dois lugares, para justificar a mesma coisa. A baixa

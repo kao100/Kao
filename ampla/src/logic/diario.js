@@ -13,6 +13,7 @@ import {
 } from '../core/format.js';
 import { cents, sum } from '../core/util.js';
 import * as revenue from './revenue.js';
+import { pedidosSemVendedor } from './link.js';
 
 /**
  * Conta só os dias em que a empresa vende. Dividir a meta do mês por 30 quando
@@ -35,12 +36,13 @@ export async function relatorio(referencia = today()) {
   const inicio = monthStart(referencia);
   const fim = monthEnd(referencia);
 
-  const [doDia, doMes, metaMes, serie, vendedores] = await Promise.all([
+  const [doDia, doMes, metaMes, serie, vendedores, semDono] = await Promise.all([
     revenue.resumo({ de: referencia, ate: referencia }),
     revenue.resumo({ de: inicio, ate: referencia }),
     store.meta(mes),
     revenue.porDia({ de: inicio, ate: referencia }),
     store.vendedores.listar(),
+    pedidosSemVendedor(),
   ]);
 
   const decorridos = diasDeVenda(inicio, referencia, semana);
@@ -98,6 +100,12 @@ export async function relatorio(referencia = today()) {
       exigeMais: precisaPorDia != null && ritmoAtual > 0 && precisaPorDia > ritmoAtual,
     },
     serie,
+    // o que a aba de conciliação mostrava: agora é um recado aqui
+    semVendedor: {
+      pedidos: semDono.length,
+      valor: cents(sum(semDono, (x) => x.valor)),
+      notas: sum(semDono, (x) => x.notas.length),
+    },
     porVendedor: montarVendedores(doDia, doMes, vendedores, metaMes, restantes, decorridos, totais),
     recados: [],
   };
@@ -213,11 +221,13 @@ export function recados(r) {
     }
   }
 
-  if (r.mesAteHoje.semVendedor?.notas > 0) {
+  if (r.semVendedor?.pedidos > 0) {
     saida.push({
       nivel: 'atencao',
-      texto: `${r.mesAteHoje.semVendedor.notas} nota(s) sem vendedor, somando `
-        + `${moedaCurta(r.mesAteHoje.semVendedor.valor)}. Elas ficam fora do ranking e da comissão.`,
+      rota: '/conciliacao/vendedores',
+      texto: `${r.semVendedor.pedidos} pedido(s) vieram sem vendedor no relatório, somando `
+        + `${moedaCurta(r.semVendedor.valor)}. Enquanto ficarem assim, esse faturamento não entra `
+        + 'no ranking nem na comissão de ninguém.',
     });
   }
 
