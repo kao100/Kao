@@ -12,7 +12,7 @@ import { navigate, href } from '../../core/router.js';
 import * as diario from '../../logic/diario.js';
 import * as quotes from '../../logic/quotes.js';
 import { definirTitulo } from '../shell.js';
-import { kpi, card, botao, aviso, vazio, progresso, rankLinha, chips } from '../components/ui.js';
+import { kpi, card, botao, aviso, vazio, progresso, chips } from '../components/ui.js';
 import { grafLinha } from '../components/chart.js';
 import { tabela } from '../components/table.js';
 import { exportarExcel, imprimir, colunasExcel } from '../../logic/reports.js';
@@ -91,19 +91,13 @@ export async function telaDiario({ query }) {
       grafLinha(r.serie.map((d) => ({ rotulo: formatDate(d.data, 'short'), valor: d.valor })), { altura: 140 }),
       m.diaria != null && h('p.mini.muted', `A meta de cada dia é ${money(m.diaria)}.`)),
 
-    r.porVendedor.length > 0 && card('Vendedores', null,
-      h('div.rank', ...r.porVendedor.map((v, i) => rankLinha({
-        posicao: i + 1,
-        nome: v.nome,
-        valor: v.mes,
-        percentual: v.participacao,
-        sub: [
-          v.dia ? `hoje ${money(v.dia)}` : 'sem venda hoje',
-          `${v.notas} NFs`,
-          v.percentualMeta != null ? `${pct(v.percentualMeta, 0)} da meta` : null,
-        ].filter(Boolean).join(' · '),
-        onClick: () => navigate(`/comercial/${v.vendedorId}`),
-      })))),
+    r.porVendedor.length > 0 && card('Impulso comercial',
+      h('span.mini.muted', 'objetivo de cada um'),
+      h('div.empilha', { style: { gap: '12px' } },
+        ...r.porVendedor.map((v, i) => linhaVendedor(v, i))),
+      r.porVendedor.some((v) => v.alvoEstimado) && h('p.mini.muted', { style: { marginTop: '10px' } },
+        'Onde diz "estimado", o alvo é a fatia da meta da empresa que a pessoa já vem puxando — '
+        + 'o app não inventa meta. Em Ajustes você define a meta de cada vendedor.')),
 
     orc && orc.quantidade > 0 && cardOrcamentos(orc),
 
@@ -113,6 +107,44 @@ export async function telaDiario({ query }) {
       h('div.btn-linha',
         botao('📄 PDF', { tipo: 'primario', onClick: () => imprimirRelatorio(r, recados, orc) }),
         botao('📊 Excel', { onClick: () => excelRelatorio(r, orc) }))));
+}
+
+/**
+ * Uma linha por vendedor: quanto fez, onde deveria estar hoje, quanto precisa
+ * por dia. É o que ela chama de traçar a linha de objetivo de cada um.
+ */
+function linhaVendedor(v, i) {
+  const atrasado = v.diferencaDoRitmo != null && v.diferencaDoRitmo < 0;
+  return h('div',
+    h('div.linha.linha--entre', { style: { alignItems: 'baseline' } },
+      h('button.crescer', {
+        style: {
+          background: 'none', border: 0, padding: 0, textAlign: 'left',
+          font: 'inherit', color: 'inherit', cursor: 'pointer',
+        },
+        onClick: () => navigate(`/comercial/${v.vendedorId}`),
+      },
+      h('strong', `${i + 1}. ${v.nome}`),
+      v.alvoEstimado && h('span.mini.muted', ' · alvo estimado')),
+      h('span.num.forte', money(v.mes))),
+
+    v.alvo
+      ? h('div',
+        progresso({
+          valor: v.mes,
+          total: v.alvo,
+          cor: v.percentualMeta >= 100 ? 'var(--verde)' : atrasado ? 'var(--amarelo)' : 'var(--azul)',
+          esquerda: `${pct(v.percentualMeta, 0)} de ${money(v.alvo)}`,
+          direita: v.falta ? `faltam ${money(v.falta)}` : 'fechou 🎉',
+        }),
+        h('div.mini.muted', { style: { marginTop: '4px' } },
+          [
+            v.dia ? `hoje ${money(v.dia)}` : 'sem venda hoje',
+            v.precisaPorDia ? `precisa ${money(v.precisaPorDia)}/dia` : null,
+            atrasado ? `${money(Math.abs(v.diferencaDoRitmo))} atrás do ritmo` : null,
+          ].filter(Boolean).join(' · ')))
+      : h('div.mini.muted',
+        `${v.dia ? `hoje ${money(v.dia)}` : 'sem venda hoje'} · ${v.notas} NFs · ${pct(v.participacao, 0)} do total`));
 }
 
 function seletorDia(data) {
@@ -203,9 +235,12 @@ const COLUNAS_VENDEDOR = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Hoje', key: 'dia', tipo: 'money', alinhar: 'direita' },
   { header: 'No mês', key: 'mes', tipo: 'money', alinhar: 'direita' },
+  { header: 'Objetivo', key: 'alvo', tipo: 'money', alinhar: 'direita' },
+  { header: '% do objetivo', key: 'percentualMeta', tipo: 'pct', alinhar: 'direita' },
+  { header: 'Falta', key: 'falta', tipo: 'money', alinhar: 'direita' },
+  { header: 'Precisa/dia', key: 'precisaPorDia', tipo: 'money', alinhar: 'direita' },
   { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
   { header: 'Ticket', key: 'ticket', tipo: 'money', alinhar: 'direita' },
-  { header: '% da meta', key: 'percentualMeta', tipo: 'pct', alinhar: 'direita' },
 ];
 
 const COLUNAS_ORCAMENTO = [

@@ -454,8 +454,17 @@ function construirReceber(d, ctx) {
   const pedidoNumero = d.descricao ? docNumber(d.descricao) : null;
   const nfNumero = d.nfNumero ? docNumber(d.nfNumero) : null;
   const referencia = nfNumero || pedidoNumero || daLinha(ctx);
-  const id = unico(`rec_${cliente?.id || 'sem'}_${referencia}_${d.vencimento || 'sv'}`, ctx.usados);
   const valor = d.valor == null ? null : cents(d.valor);
+  // O VENCIMENTO NÃO ENTRA NA CHAVE. Boleto prorrogado é o mesmo boleto com
+  // outra data: se a data identificasse o título, o relatório do dia seguinte
+  // criaria um segundo e o valor apareceria em dobro no caixa e na
+  // inadimplência. Parcelas do mesmo documento se separam pelo valor e, quando
+  // até o valor é igual, pela ordem no arquivo — e aí elas são intercambiáveis,
+  // porque não há mais nada que as diferencie.
+  const id = unico(`rec_${cliente?.id || 'sem'}_${referencia}_${valor ?? 'sv'}`, ctx.usados);
+  // a situação do arquivo é a verdade: a baixa aconteceu no sistema dela
+  const situacao = interpretarStatusTitulo(d.status, null, d.dataRecebimento);
+  const quitado = situacao === 'pago';
 
   return [
     {
@@ -472,13 +481,13 @@ function construirReceber(d, ctx) {
         emissao: d.emissao || null,
         vencimento: d.vencimento || null,
         valor,
-        valorRecebido: null,
-        saldo: valor,
+        valorRecebido: quitado ? valor : null,
+        saldo: quitado ? 0 : valor,
         dataRecebimento: d.dataRecebimento || null,
         formaPagamento: d.formaPagamento || null,
         banco: d.banco || null,
         statusArquivo: d.status || null,
-        status: interpretarStatusTitulo(d.status, null, d.dataRecebimento),
+        status: situacao,
         vendedorId: null,
         origem: 'relatorio',
       },
@@ -496,7 +505,9 @@ function construirPagar(d, ctx) {
   } : null;
   const referencia = d.descricao ? chaveTexto(d.descricao).slice(0, 24)
     : (d.nfNumero ? docNumber(d.nfNumero) : daLinha(ctx));
-  const id = unico(`pag_${fornecedor?.id || 'sem'}_${referencia}_${d.vencimento || 'sv'}`, ctx.usados);
+  const valorPag = d.valor == null ? null : cents(d.valor);
+  // mesmo motivo do contas a receber: conta prorrogada é a mesma conta
+  const id = unico(`pag_${fornecedor?.id || 'sem'}_${referencia}_${valorPag ?? 'sv'}`, ctx.usados);
   const pago = !!(d.dataPagamento || /pago|quitad|liquidad|baixad/i.test(d.status || ''));
 
   return [
@@ -511,7 +522,7 @@ function construirPagar(d, ctx) {
         descricao: d.descricao || null,
         nfNumero: d.nfNumero ? docNumber(d.nfNumero) : null,
         vencimento: d.vencimento || null,
-        valor: d.valor == null ? null : cents(d.valor),
+        valor: valorPag,
         categoria: d.categoria || null,
         formaPagamento: d.formaPagamento || null,
         banco: d.banco || null,
@@ -733,7 +744,7 @@ function novoPreparo(fonteId, leitura) {
     cancelamentos: [],
     avisos: leitura.aviso ? [leitura.aviso] : [],
     periodo: { de: null, ate: null },
-    resumo: { total: 0, novos: 0, atualizados: 0, repetidos: 0 },
+    resumo: { total: 0, principal: 0, novos: 0, atualizados: 0, repetidos: 0 },
   };
 }
 
@@ -774,6 +785,9 @@ async function classificar(preparo, contexto) {
       }
     }
     preparo.resumo.total += mapa.size;
+    // o que ela mandou são notas, ou títulos — os clientes criados de tabela
+    // são consequência. Contar tudo junto faria "4 notas" virar "8 registros".
+    if (nome === FONTES[preparo.fonteId]?.store) preparo.resumo.principal = mapa.size;
     preparo.resumo.novos += detalhe.novos;
     preparo.resumo.atualizados += detalhe.atualizados;
     preparo.resumo.repetidos += detalhe.repetidos;
@@ -863,7 +877,7 @@ export async function confirmar(preparo, { observacao = null } = {}) {
   await store.marcarAtualizacao(preparo.fonteId, {
     arquivo: preparo.arquivo,
     ate: preparo.periodo.ate,
-    registros: preparo.resumo.total,
+    registros: preparo.resumo.principal || preparo.resumo.total,
     erros: preparo.erros.length,
   });
   return registro;

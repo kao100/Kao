@@ -87,6 +87,9 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **PDF serve.** Um dos sistemas não exporta planilha: o app abre o PDF, remonta
   a tabela pela posição do texto na página e segue o mesmo caminho de um XLSX.
   PDF escaneado não — sem OCR e sem chute, o app avisa em vez de inventar.
+- **O relatório que você manda atualiza o que já está aqui**, não vira um
+  relatório novo. Boleto prorrogado continua o mesmo boleto com a data nova, e o
+  que o seu sistema já baixou entra como pago.
 - **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
   trabalho duas vezes. A baixa acontece no sistema; a próxima importação traz o
   resultado. A única exceção é o pedido que vier sem vendedor no relatório.

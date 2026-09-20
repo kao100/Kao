@@ -19,7 +19,7 @@ export const MODULOS = [
   { path: '/bancos', icone: '🏦', label: 'Bancos', titulo: 'Bancos e extrato' },
   { path: '/conciliacao', icone: '⚠️', label: 'Conciliação', titulo: 'Conciliação' },
   { path: '/fechamento', icone: '📁', label: 'Pasta do mês', titulo: 'Pasta do mês' },
-  { path: '/arquivos', icone: '🗂️', label: 'Arquivos', titulo: 'Central de arquivos' },
+  { path: '/arquivos', icone: '🗂️', label: 'Relatórios', titulo: 'Relatórios que você manda' },
   { path: '/ajustes', icone: '⚙️', label: 'Ajustes', titulo: 'Ajustes' },
 ];
 

@@ -434,8 +434,14 @@ export async function pedidosSemVendedor() {
 
 /* -------------------------------------------------------------------- título */
 
+/**
+ * A baixa é dada no sistema dela, não aqui. Então o que o RELATÓRIO diz sobre o
+ * título manda: se veio "Recebido", está recebido — mesmo sem data de
+ * recebimento na planilha, que é o normal em vários exports.
+ */
 export function statusTitulo(titulo) {
   if (titulo.status === 'cancelado') return 'cancelado';
+  if (titulo.status === 'pago') return 'pago';
   if (titulo.dataRecebimento || (titulo.saldo != null && titulo.saldo <= 0)) return 'pago';
   return 'aberto';
 }

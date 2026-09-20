@@ -167,6 +167,9 @@ igual('5 notas importadas', (await store.nfs.listar()).length, 5);
 const vendas = await importar('pedidos', 'vendas.csv', VENDAS);
 igual('"Prazo de Entrega" ficou de fora, como pedido', vendas.mapeamento.prazo, undefined);
 igual('o custo do pedido foi reconhecido', !!vendas.mapeamento.valorCusto, true);
+ok('a contagem diz o que ela mandou, não o que o app criou de tabela',
+  fiscal.preparo.resumo.principal === 5 && fiscal.preparo.resumo.total > 5,
+  `principal ${fiscal.preparo.resumo.principal}, total ${fiscal.preparo.resumo.total}`);
 igual('5 pedidos importados', (await store.pedidos.listar()).length, 5);
 
 await importar('receber', 'receber.csv', RECEBER);
@@ -445,6 +448,63 @@ console.log('\n▶ Relatório do dia: meta e ritmo');
   igual('nem quanto falta', semMeta.meta.falta, null);
   ok('o app pede a meta em vez de chutar',
     diario.recados(semMeta)[0].texto.includes('Nenhuma meta definida'), '');
+}
+
+
+console.log('\n▶ O relatório do dia ATUALIZA, não acumula');
+{
+  const H = 'Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal';
+  const antes = (await store.receber.listar()).length;
+
+  // segunda: dois títulos do mesmo cliente, um deles em duas parcelas iguais
+  await importar('receber', 'seg.csv', `${H}
+Cliente Prorroga Ltda;99888777000166;7001;Boleto;Itaú;20/09/2026;Em aberto;15.000,00;8001
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/09/2026;Em aberto;2.500,00;8002
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/10/2026;Em aberto;2.500,00;8002`);
+  const t1 = (await store.receber.listar()).filter((t) => t.clienteNome === 'Cliente Prorroga Ltda');
+  igual('os três títulos entraram', t1.length, 3);
+
+  // terça: o 8001 foi prorrogado para 30/09 e uma parcela do 8002 foi paga
+  await importar('receber', 'ter.csv', `${H}
+Cliente Prorroga Ltda;99888777000166;7001;Boleto;Itaú;30/09/2026;Em aberto;15.000,00;8001
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/09/2026;Recebido;2.500,00;8002
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/10/2026;Em aberto;2.500,00;8002`);
+  const t2 = (await store.receber.listar()).filter((t) => t.clienteNome === 'Cliente Prorroga Ltda');
+  igual('continuam três: o arquivo atualizou, não acumulou', t2.length, 3);
+
+  const prorrogado = t2.find((t) => t.nfNumero === '8001');
+  igual('o boleto prorrogado é o mesmo, com a data nova', prorrogado.vencimento, '2026-09-30');
+  igual('e o valor não dobrou',
+    t2.reduce((a, t) => a + (t.valor || 0), 0), 20000);
+
+  const pagas = t2.filter((t) => t.nfNumero === '8002' && link.statusTitulo(t) === 'pago');
+  igual('a baixa que ela deu no sistema chegou aqui', pagas.length, 1);
+  igual('e a outra parcela continua em aberto',
+    t2.filter((t) => t.nfNumero === '8002' && link.statusTitulo(t) === 'aberto').length, 1);
+
+  // e o mesmo vale para o contas a pagar
+  const HP = 'Destinado a;CPF/CNPJ;Descrição;Plano de Contas;Forma de Pagamento;Conta Bancária;Data de Vencimento;Situação;Valor Total;Nota Fiscal';
+  await importar('pagar', 'p1.csv', `${HP}
+Fornecedor Prorroga;11999888000155;Compra;Compra de mercadoria;Boleto;Itaú;15/09/2026;Em aberto;9.000,00;5501`);
+  await importar('pagar', 'p2.csv', `${HP}
+Fornecedor Prorroga;11999888000155;Compra;Compra de mercadoria;Boleto;Itaú;25/09/2026;Pago;9.000,00;5501`);
+  const pg = (await store.pagar.listar()).filter((c) => c.fornecedorNome === 'Fornecedor Prorroga');
+  igual('conta a pagar prorrogada também não duplica', pg.length, 1);
+  igual('com a data nova', pg[0].vencimento, '2026-09-25');
+  igual('e já marcada como paga', pg[0].status, 'pago');
+
+  // reimportar o mesmo arquivo de novo não muda nada
+  await importar('receber', 'ter.csv', `${H}
+Cliente Prorroga Ltda;99888777000166;7001;Boleto;Itaú;30/09/2026;Em aberto;15.000,00;8001
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/09/2026;Recebido;2.500,00;8002
+Cliente Prorroga Ltda;99888777000166;7002;Boleto;Itaú;20/10/2026;Em aberto;2.500,00;8002`);
+  igual('e reenviar o mesmo arquivo não muda nada',
+    (await store.receber.listar()).filter((t) => t.clienteNome === 'Cliente Prorroga Ltda').length, 3);
+
+  // limpa para não interferir nos outros blocos
+  for (const t of t2) await store.receber.remover(t.id);
+  for (const c of pg) await store.pagar.remover(c.id);
+  igual('a base voltou ao que era', (await store.receber.listar()).length, antes);
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

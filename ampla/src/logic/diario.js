@@ -98,18 +98,32 @@ export async function relatorio(referencia = today()) {
       exigeMais: precisaPorDia != null && ritmoAtual > 0 && precisaPorDia > ritmoAtual,
     },
     serie,
-    porVendedor: montarVendedores(doDia, doMes, vendedores, metaMes, restantes),
+    porVendedor: montarVendedores(doDia, doMes, vendedores, metaMes, restantes, decorridos, totais),
     recados: [],
   };
 }
 
-/** Junta o dia e o mês de cada vendedor numa linha só. */
-function montarVendedores(doDia, doMes, vendedores, metaMes, restantes) {
+/**
+ * A linha de objetivo de cada vendedor: onde ele está, onde deveria estar hoje
+ * se o mês fosse parelho, e quanto precisa por dia para fechar.
+ *
+ * Quando o vendedor não tem meta própria, o alvo dele é a fatia da meta da
+ * empresa que ele vem puxando — não um número inventado, e sim a participação
+ * que ele mesmo tem no faturamento. Fica marcado como estimado para ninguém
+ * confundir com uma meta combinada.
+ */
+function montarVendedores(doDia, doMes, vendedores, metaMes, restantes, decorridos, diasNoMes) {
   const nomes = new Map(vendedores.map((v) => [v.id, v]));
   const hoje = new Map(doDia.ranking.map((v) => [v.vendedorId, v]));
+
   return doMes.ranking.map((v) => {
     const cadastro = nomes.get(v.vendedorId);
-    const metaPessoal = cadastro?.meta || null;
+    const metaPropria = cadastro?.meta || null;
+    const alvo = metaPropria
+      || (metaMes ? cents((metaMes * (v.participacao || 0)) / 100) : null);
+    const falta = alvo ? Math.max(0, cents(alvo - v.valor)) : null;
+    const esperado = alvo && diasNoMes ? cents((alvo / diasNoMes) * decorridos) : null;
+
     return {
       vendedorId: v.vendedorId,
       nome: v.nome,
@@ -120,14 +134,16 @@ function montarVendedores(doDia, doMes, vendedores, metaMes, restantes) {
       clientes: v.clientes,
       ticket: v.ticket,
       participacao: v.participacao,
-      meta: metaPessoal,
-      percentualMeta: metaPessoal ? (v.valor / metaPessoal) * 100 : null,
-      falta: metaPessoal ? Math.max(0, cents(metaPessoal - v.valor)) : null,
-      precisaPorDia: metaPessoal && restantes > 0
-        ? cents(Math.max(0, metaPessoal - v.valor) / restantes)
-        : null,
-      // participação na meta da empresa, quando não há meta individual
-      metaEmpresa: metaMes || null,
+
+      meta: metaPropria,
+      alvo,
+      alvoEstimado: !metaPropria && alvo != null,
+      percentualMeta: alvo ? (v.valor / alvo) * 100 : null,
+      falta,
+      precisaPorDia: alvo && restantes > 0 ? cents(falta / restantes) : null,
+      ritmo: decorridos ? cents(v.valor / decorridos) : 0,
+      esperadoAteHoje: esperado,
+      diferencaDoRitmo: esperado == null ? null : cents(v.valor - esperado),
     };
   });
 }
@@ -183,12 +199,15 @@ export function recados(r) {
     });
   }
 
+  // só cobra quem tem meta combinada: cobrar alguém por um alvo que o próprio
+  // app estimou seria inventar uma conversa que ninguém teve
   for (const v of r.porVendedor) {
-    if (v.percentualMeta == null || v.falta === 0) continue;
-    if (v.percentualMeta < 70 && v.precisaPorDia) {
+    if (v.alvoEstimado || v.percentualMeta == null || v.falta === 0) continue;
+    if (v.diferencaDoRitmo != null && v.diferencaDoRitmo < 0 && v.precisaPorDia) {
       saida.push({
         nivel: 'atencao',
-        texto: `${v.nome} está em ${pctCurto(v.percentualMeta)} da meta: precisa de `
+        texto: `${v.nome} está em ${pctCurto(v.percentualMeta)} da meta, `
+          + `${moedaCurta(Math.abs(v.diferencaDoRitmo))} atrás do ritmo: precisa de `
           + `${moedaCurta(v.precisaPorDia)} por dia para fechar.`,
       });
     }

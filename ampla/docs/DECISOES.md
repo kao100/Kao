@@ -118,6 +118,23 @@ porque dependem de informação que só a empresa tem.
 - A **pasta do mês** não guarda cópia de nada: é montada na hora, do banco.
   Assim ela nunca conta uma história diferente da do resto do app.
 
+### O relatório que ela manda ATUALIZA — não vira um relatório novo
+- O arquivo do dia é o **estado atual** do sistema dela: já vem com as baixas
+  dadas, os boletos prorrogados e o que continua em aberto. O app absorve isso.
+- Por isso o **vencimento saiu da chave natural** de contas a receber e a pagar.
+  Boleto prorrogado é o mesmo boleto com outra data: com a data na chave, o
+  relatório do dia seguinte criava um segundo título e o valor aparecia em dobro
+  no caixa e na inadimplência. A chave é cliente + referência + valor; parcelas
+  do mesmo documento com o mesmo valor se separam pela ordem no arquivo, e aí
+  são intercambiáveis porque não há mais nada que as diferencie.
+- **A situação do arquivo manda.** Se veio "Recebido", o título está recebido —
+  mesmo sem data de recebimento na planilha, que é o normal em vários exports.
+  Antes o app só olhava saldo e data, e a baixa dada no sistema não chegava aqui.
+- A tela de relatórios diz **com qual arquivo cada fonte está atualizada**, em
+  vez de listar um histórico que só cresce. É um relatório vivo, não uma pilha.
+- A contagem mostra **o que ela mandou**, não o que o app criou de tabela junto:
+  4 notas são 4 notas, não 8 registros.
+
 ### O app é um gestor, não uma lista de tarefas
 - **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
   trabalho duas vezes, em dois lugares, para justificar a mesma coisa. A baixa
@@ -133,6 +150,11 @@ porque dependem de informação que só a empresa tem.
 - **Sem meta definida, o app não inventa uma**: ele pede.
 - O **relatório do dia** é a tela de abertura e sai inteiro em PDF ou Excel —
   é feito para ser lido e mandado para outra pessoa.
+- O **impulso comercial** traça a linha de objetivo de cada vendedor: onde está,
+  onde deveria estar hoje se o mês fosse parelho, e quanto precisa por dia. Sem
+  meta combinada, o alvo é a fatia da meta da empresa que a pessoa já vem
+  puxando, marcada como **estimada** — e ninguém é cobrado por um alvo que o
+  próprio app estimou.
 
 ### Interface
 - O nome da empresa é **AMPLA**. Ele aparece na abertura, no ícone e no nome do

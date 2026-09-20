@@ -11,112 +11,66 @@ import { navigate } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as ingest from '../../logic/ingest.js';
 import { recalcular } from '../../logic/link.js';
-import { rotina, selo as seloRotina, historico } from '../../logic/routine.js';
+import { rotina, selo as seloRotina } from '../../logic/routine.js';
 import { FONTES, FONTES_LISTA, PERIODICIDADE } from '../../data/sources.js';
 import { readFile, detectHeaderRow, rowsToObjects, FORMATOS, formatoSuportado, acceptSuportado } from '../../core/files/read.js';
 import { definirTitulo, seloDados, atualizarAlertas } from '../shell.js';
-import { kpi, card, secao, botao, progresso, aviso, selo } from '../components/ui.js';
-import { detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
+import { kpi, card, secao, botao, aviso, selo } from '../components/ui.js';
 import { ok } from '../components/toast.js';
 import { formatDate, timestampLabel, num } from '../../core/format.js';
 
 /* ------------------------------------------------------- central de arquivos */
 
 export async function telaArquivos() {
-  const [r, selo, ultimas] = await Promise.all([rotina(), seloRotina(), historico({ limite: 12 })]);
-  definirTitulo('Central de arquivos', `${r.diarias.feitas}/${r.diarias.total} fontes do dia`);
+  const [r, selo] = await Promise.all([rotina(), seloRotina()]);
+  definirTitulo('Relatórios que você manda', `${r.diarias.feitas}/${r.diarias.total} atualizados hoje`);
 
-  const pendentes = r.pendentes;
-  const concluidas = r.concluidas;
+  const doDia = r.tarefas.filter((t) => t.periodicidade === 'diaria');
+  const deVezEmQuando = r.tarefas.filter((t) => t.periodicidade !== 'diaria' && t.periodicidade !== 'demanda');
+  const quandoPrecisar = FONTES_LISTA.filter((f) => f.periodicidade === 'demanda');
 
   return h('div.empilha', { style: { gap: '14px' } },
     seloDados(selo),
 
-    card(`Atualização de ${formatDate(r.referencia)}`,
-      h('span.num.forte', `${r.progresso}%`),
-      progresso({
-        valor: concluidas.length,
-        total: r.total,
-        cor: r.progresso === 100 ? 'var(--verde)' : 'var(--azul)',
-        esquerda: `${concluidas.length} de ${r.total} fontes atualizadas`,
-        direita: pendentes.length ? `${pendentes.length} pendente(s)` : 'tudo em dia 🎉',
-      })),
+    aviso('O arquivo que você manda ATUALIZA o que já está aqui — ele não vira um relatório novo. '
+      + 'Boleto prorrogado continua o mesmo boleto com a data nova, e o que o seu sistema já '
+      + 'baixou entra como pago.', 'info'),
 
-    pendentes.length === 0
-      ? h('div.tudo-ok',
-        h('div.tudo-ok__icone', '✅'),
-        h('h3', 'Rotina do dia concluída'),
-        h('p.pequeno.muted', 'Tudo importado e conciliado. Pode abrir qualquer área que os números estão completos.'))
-      : secao('Falta fazer', null, h('div.lista', ...pendentes.map((t) => cardTarefa(t)))),
+    secao('Todo dia', null,
+      h('div.lista', ...doDia.map((t) => cardTarefa(t)))),
 
-    concluidas.length > 0 && secao(`Já atualizadas (${concluidas.length})`, null,
-      h('div.lista', ...concluidas.map((t) => cardTarefa(t)))),
+    deVezEmQuando.length > 0 && secao('De vez em quando', null,
+      h('div.lista', ...deVezEmQuando.map((t) => cardTarefa(t)))),
 
-    secao('Outras fontes', null, h('div.lista',
-      ...FONTES_LISTA.filter((f) => f.periodicidade === 'demanda').map((f) => h('div.tarefa',
+    quandoPrecisar.length > 0 && secao('Quando precisar', null, h('div.lista',
+      ...quandoPrecisar.map((f) => h('div.tarefa',
         h('span.tarefa__icone', f.icone),
         h('div.tarefa__corpo',
           h('div.tarefa__nome', f.nome),
           h('div.tarefa__sub', f.verdadeDe)),
-        botao('Importar', { pequeno: true, onClick: () => navigate(`/arquivos/${f.id}`) }))))),
-
-    secao('Histórico de importações', null,
-      ultimas.length
-        ? h('div.lista', ...ultimas.map((imp) => h('button.item.card--clicavel', { onClick: () => verImportacao(imp) },
-          h('div.item__corpo',
-            h('div.item__titulo', `${FONTES[imp.fonte]?.icone || '📄'} ${imp.arquivo}`),
-            h('div.item__sub',
-              h('span', FONTES[imp.fonte]?.nome || imp.fonte),
-              h('span', timestampLabel(imp.momento)),
-              imp.periodo?.ate && h('span', `até ${formatDate(imp.periodo.ate)}`),
-              imp.totalErros > 0 && h('span.ruim', `${imp.totalErros} erro(s)`))),
-          h('div.empilha',
-            h('div.item__valor', num(imp.resumo.total, 0)),
-            h('div.mini.muted.dir', 'registros')))))
-        : h('p.pequeno.muted', 'Nenhuma importação ainda.')),
-
-    aviso('Reimportar o mesmo arquivo não duplica nada: cada NF, título ou movimento tem uma chave própria '
-      + 'e é atualizado no lugar.', 'info'));
+        botao('Mandar', { pequeno: true, onClick: () => navigate(`/arquivos/${f.id}`) }))))));
 }
 
+/**
+ * Uma linha por relatório, dizendo com qual arquivo ele está atualizado. Não é
+ * um check de tarefa: é a data do dado que está na tela agora.
+ */
 function cardTarefa(t) {
   const classe = ['tarefa', t.feito && 'tarefa--feita', !t.feito && t.atrasada && 'tarefa--atrasada'].filter(Boolean).join('.');
   return h(`div.${classe}`,
-    h('span.tarefa__icone', t.feito ? '✅' : t.icone),
+    h('span.tarefa__icone', t.icone),
     h('div.tarefa__corpo',
       h('div.tarefa__nome', t.nome),
       h('div.tarefa__sub',
-        t.feito && t.ultima
-          ? `${formatDate(t.ultima.data)} às ${timestampLabel(t.ultima.momento).split('às')[1]?.trim() || ''} · ${num(t.ultima.resumo.total, 0)} registros`
-          : t.nunca ? `${t.periodicidadeLabel} · nunca importado`
-            : t.observacao || `${t.periodicidadeLabel} · última vez há ${t.desde} dia(s)`),
+        t.ultima
+          ? `atualizado com o arquivo de ${formatDate(t.ultima.data)} · ${num(t.ultima.resumo.principal || t.ultima.resumo.total, 0)} registros`
+          : 'nunca recebido'),
       t.erros > 0 && h('div.mini.ruim', `⚠️ ${t.erros} registro(s) precisaram de atenção`)),
     t.fonteId === 'conciliacao'
-      ? botao(`Resolver (${t.quantidade})`, { tipo: 'primario', pequeno: true, onClick: () => navigate('/conciliacao') })
-      : botao(t.feito ? 'Atualizar' : 'Importar', {
+      ? botao(`Ver (${t.quantidade})`, { pequeno: true, onClick: () => navigate('/conciliacao') })
+      : botao('Mandar', {
         tipo: t.feito ? undefined : 'primario', pequeno: true, onClick: () => navigate(`/arquivos/${t.fonteId}`),
       }));
-}
-
-function verImportacao(imp) {
-  detalhe(imp.arquivo,
-    linhasDetalhe([
-      ['Fonte', FONTES[imp.fonte]?.nome || imp.fonte],
-      ['Formato', FORMATOS[imp.formato] || imp.formato],
-      ['Importado em', timestampLabel(imp.momento)],
-      ['Período dos dados', imp.periodo?.de ? `${formatDate(imp.periodo.de)} a ${formatDate(imp.periodo.ate)}` : '—'],
-      ['Registros', num(imp.resumo.total, 0)],
-      ['Novos', num(imp.resumo.novos, 0)],
-      ['Atualizados', num(imp.resumo.atualizados, 0)],
-      ['Já existentes (ignorados)', num(imp.resumo.repetidos, 0)],
-      ['Erros', num(imp.totalErros, 0)],
-    ]),
-    imp.erros?.length ? h('div',
-      h('h3', { style: { margin: '8px 0 6px' } }, 'Linhas que não entraram'),
-      h('div.empilha', { style: { gap: '6px' } }, ...imp.erros.slice(0, 40).map((e) => h('div.erro-linha',
-        h('span.erro-linha__n', `L${e.linha}`),
-        h('span', e.motivo))))) : null,
-    imp.avisos?.length ? aviso(imp.avisos.join(' · '), 'atencao') : null);
 }
 
 /* ------------------------------------------------------------- importador */
