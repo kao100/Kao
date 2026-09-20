@@ -17,35 +17,20 @@ porque dependem de informação que só a empresa tem.
   `faturamento fiscal = soma dos vendedores`, com a diferença exposta.
 
 ### Vendedor
-- **Nenhum relatório traz o vendedor.** Foi confirmado pela empresa, e o
-  "vendedor responsável" do cadastro de clientes **não é confiável** — o mesmo
-  cliente compra de vendedores diferentes. Usar aquele campo seria adivinhar.
-- **A ponte é o contas a receber.** Ele traz, na mesma linha, a **nota fiscal** e
-  a **descrição, que é o número do pedido**. Com isso o app fecha
-  `NF → pedido` sozinho, sem confirmação nenhuma. O relatório fiscal não precisa
-  trazer o pedido.
-- **O vendedor é definido no PEDIDO, uma vez.** Todas as notas daquele pedido
-  herdam — inclusive as emitidas depois. É o contrário de marcar nota por nota.
-- **Nunca** há ligação automática por semelhança de nome, valor aproximado ou
-  data próxima.
-- Cada nota mostra **como** o app chegou ao vendedor (relatório fiscal, pedido,
-  ponte do contas a receber, ou definido à mão). A origem fica gravada na nota,
-  então um segundo recálculo não a confunde com outra.
-- Para o que sobra existe a tela **Conciliação → Atribuir vendedores**, que diz o
-  **motivo** de cada nota estar sem vendedor:
-  - *o título não liga a nota a nenhum pedido* → falta a coluna NOTA FISCAL no
-    export do contas a receber;
-  - *pedido X ainda não foi importado* → a tela lista os números que faltam, com
-    botão de copiar, para você exportar só esses;
-  - *o pedido existe mas ainda não tem vendedor* → é o caso normal, e é onde você
-    decide.
-- Quando não há pedido nenhum, o app procura pedidos do mesmo cliente anteriores
-  à emissão e mostra os candidatos. Marca sozinho apenas quando há **um único**
-  pedido com o mesmo valor, e ainda assim só grava com seu clique.
-- **Uma NF tem um vendedor só** (não há rateio, confirmado pela empresa).
-- Vendedor que aparece num arquivo e ainda não existe no cadastro **é criado** —
-  isso é dado do arquivo, não suposição. Nomes diferentes da mesma pessoa se
-  resolvem cadastrando **apelidos**.
+- **O relatório de vendas traz a coluna VENDEDOR.** É ela que faz a comissão
+  fechar sozinha: o vendedor do pedido passa para todas as notas daquele pedido
+  pela ponte do contas a receber, sem marcação nenhuma.
+- O "vendedor responsável" do **cadastro de clientes** continua ignorado: a
+  empresa confirmou que não é confiável, porque o mesmo cliente compra de
+  vendedores diferentes.
+- Linha que vier **sem** vendedor entra assim mesmo e é a única que o app
+  pergunta, uma vez, no pedido. É o único lugar do app em que se marca algo.
+- **Nunca** há ligação por semelhança de nome, valor aproximado ou data próxima.
+- Vendedor que aparece no arquivo e não existe no cadastro **é criado** — isso é
+  dado do arquivo, não suposição. Nomes diferentes da mesma pessoa se resolvem
+  cadastrando **apelidos**.
+- Cada nota guarda **como** o vendedor chegou até ela, e o recálculo não mexe no
+  que veio de uma decisão sua.
 
 ### Caixa
 - Recebimento **vencido sem promessa de pagamento não entra na projeção**: não há
@@ -132,6 +117,22 @@ porque dependem de informação que só a empresa tem.
   que cada conta significa no seu plano.
 - A **pasta do mês** não guarda cópia de nada: é montada na hora, do banco.
   Assim ela nunca conta uma história diferente da do resto do app.
+
+### O app é um gestor, não uma lista de tarefas
+- **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
+  trabalho duas vezes, em dois lugares, para justificar a mesma coisa. A baixa
+  acontece no sistema; a próxima importação traz o resultado.
+- Por isso a **Cobrança virou Inadimplência**: um relatório de quem está
+  devendo, há quanto tempo e quanto, sem botão de cobrei, promessa ou recebi.
+  As ações saíram de `collection.js`; os eventos antigos continuam gravados e
+  continuam sendo lidos, então quem já tinha histórico não perde nada.
+- **Meta do mês vira meta por dia** pelos dias em que a empresa vende (padrão
+  segunda a sábado, configurável). Dividir por 30 quando não se abre domingo dá
+  um alvo diário menor do que o real, e o mês vira sem ninguém perceber que
+  estava atrasado.
+- **Sem meta definida, o app não inventa uma**: ele pede.
+- O **relatório do dia** é a tela de abertura e sai inteiro em PDF ou Excel —
+  é feito para ser lido e mandado para outra pessoa.
 
 ### Interface
 - O nome da empresa é **AMPLA**. Ele aparece na abertura, no ícone e no nome do

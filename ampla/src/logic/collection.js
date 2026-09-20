@@ -182,97 +182,12 @@ function faixasAtraso(vencidos) {
   });
 }
 
-/* --------------------------------------------------------------------- ações */
-
-/** [ COBREI ] — grava data e hora sozinho. */
-export async function registrarCobranca(tituloId, { canal = 'telefone', contato = null, observacao = null } = {}) {
-  return gravarEvento(tituloId, { tipo: 'cobranca', canal, contato, observacao });
-}
-
-/** Teve retorno? Sim/Não — e o que o cliente disse. */
-export async function registrarRetorno(tituloId, { retorno, prometeuPagar = false, promessaData = null, promessaValor = null, observacao = null } = {}) {
-  const evento = await gravarEvento(tituloId, { tipo: 'retorno', retorno, observacao });
-  if (prometeuPagar) {
-    if (!promessaData) throw new Error('Informe a data prometida.');
-    await gravarEvento(tituloId, { tipo: 'promessa', promessaData, promessaValor, observacao: retorno });
-  }
-  return evento;
-}
-
-export async function registrarPromessa(tituloId, { promessaData, promessaValor = null, observacao = null }) {
-  if (!promessaData) throw new Error('Informe a data prometida.');
-  return gravarEvento(tituloId, { tipo: 'promessa', promessaData, promessaValor, observacao });
-}
-
 /**
- * Pagamento: baixa o título e já alimenta o financeiro e o fluxo de caixa —
- * a informação entra uma vez só (item 19).
+ * As ações de cobrança (cobrei / teve retorno / recebi / promessa) foram
+ * removidas: dar baixa aqui e no sistema era o mesmo trabalho duas vezes. A
+ * baixa acontece no sistema, e a próxima importação do contas a receber traz o
+ * resultado. O que sobrou aqui é leitura.
+ *
+ * Os eventos antigos continuam gravados em `cobrancas` e o montar() acima ainda
+ * os lê, então quem já tinha histórico não perde nada.
  */
-export async function registrarPagamento(tituloId, { data = today(), valor, contaId = null, observacao = null }) {
-  const titulo = await store.receber.obter(tituloId);
-  if (!titulo) throw new Error('Título não encontrado.');
-  const valorPago = valor == null ? cents(titulo.saldo ?? titulo.valor) : cents(valor);
-  if (valorPago <= 0) throw new Error('Informe o valor recebido.');
-
-  const recebidoTotal = cents((titulo.valorRecebido || 0) + valorPago);
-  const saldo = cents(titulo.valor - recebidoTotal);
-  const quitado = saldo <= 0.009;
-
-  await store.receber.salvar({
-    ...titulo,
-    valorRecebido: recebidoTotal,
-    saldo: quitado ? 0 : saldo,
-    dataRecebimento: quitado ? data : titulo.dataRecebimento,
-    status: quitado ? 'pago' : 'aberto',
-    contaRecebimentoId: contaId || titulo.contaRecebimentoId || null,
-    baixaManual: true,
-  });
-
-  await gravarEvento(tituloId, {
-    tipo: 'pagamento', data, valorPago, contaId, observacao,
-  });
-  await store.registrar('baixa_titulo', {
-    alvoId: tituloId,
-    alvo: `${titulo.clienteNome} — título ${titulo.documento}`,
-    de: titulo.saldo ?? titulo.valor,
-    para: quitado ? 0 : saldo,
-    motivo: observacao || 'pagamento registrado na cobrança',
-  });
-  return { quitado, saldo: quitado ? 0 : saldo };
-}
-
-async function gravarEvento(tituloId, dados) {
-  const titulo = await store.receber.obter(tituloId);
-  if (!titulo) throw new Error('Título não encontrado.');
-  const evento = {
-    id: uid('cob'),
-    tituloId,
-    clienteId: titulo.clienteId,
-    data: dados.data || today(),
-    momento: Date.now(),
-    usuario: (await store.config()).usuario || 'administração',
-    ...dados,
-  };
-  await store.cobrancas.salvar(evento);
-  return evento;
-}
-
-export async function desfazerEvento(eventoId) {
-  const evento = await store.cobrancas.obter(eventoId);
-  if (!evento) return;
-  if (evento.tipo === 'pagamento') {
-    const titulo = await store.receber.obter(evento.tituloId);
-    if (titulo) {
-      const recebido = cents((titulo.valorRecebido || 0) - (evento.valorPago || 0));
-      await store.receber.salvar({
-        ...titulo,
-        valorRecebido: recebido > 0 ? recebido : null,
-        saldo: cents(titulo.valor - Math.max(recebido, 0)),
-        dataRecebimento: null,
-        status: 'aberto',
-      });
-    }
-  }
-  await store.cobrancas.remover(eventoId);
-  await store.registrar('cobranca_desfeita', { alvoId: evento.tituloId, alvo: evento.tipo, motivo: 'desfeito na tela de cobrança' });
-}

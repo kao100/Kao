@@ -82,7 +82,8 @@ export async function telaAjustes() {
       h('div.crescer',
         h('div.pequeno.forte', 'Incluir títulos vencidos sem promessa na projeção'),
         h('div.mini.muted', 'Desligado (recomendado): o app não chuta quando o vencido vai entrar. '
-          + 'Eles aparecem à parte, e entram no caixa quando houver promessa de pagamento.'))))),
+          + 'Desligado, eles aparecem à parte: já venceram e não há data confiável para prever '
+          + 'o recebimento. Ligado, entram no primeiro dia da projeção.'))))),
 
     secao('Quem está usando', null, card(null, null,
       h('div.linha.linha--entre',

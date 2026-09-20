@@ -72,7 +72,7 @@ export async function telaCaixa({ query }) {
     projecao.valorForaDaProjecao > 0 && h('button.aviso.aviso--atencao', { style: { width: '100%' }, onClick: () => mostrarForaDaProjecao(projecao) },
       h('div.crescer', { style: { textAlign: 'left' } },
         h('strong', `${money(projecao.valorForaDaProjecao)} vencidos fora da projeção`),
-        h('div.mini', `${projecao.foraDaProjecao.length} título(s) vencidos sem promessa de pagamento — o app não chuta a data`)),
+        h('div.mini', `${projecao.foraDaProjecao.length} título(s) já vencidos — sem data prevista, o app não chuta o recebimento`)),
       h('span', '›')),
 
     !projecao.confiavel && aviso(
@@ -140,15 +140,16 @@ function abrirDia(linha, projecao) {
 
 function mostrarForaDaProjecao(projecao) {
   detalhe('Vencidos fora da projeção',
-    h('p.pequeno.muted', 'Estes títulos já venceram e não têm promessa de pagamento. '
-      + 'Eles não entram no caixa projetado porque não há data confiável — registre uma promessa na tela de Cobrança e eles passam a contar.'),
+    h('p.pequeno.muted', 'Estes títulos já venceram. Eles não entram no caixa projetado porque '
+      + 'não há data confiável para o recebimento — o app não chuta. Em Ajustes você pode mandar '
+      + 'contá-los no primeiro dia da projeção.'),
     h('div.lista', ...projecao.foraDaProjecao.map((f) => h('div.item.item--st.st-aberto',
       h('span.ponto'),
       h('div.item__corpo',
         h('div.item__titulo', f.descricao),
         h('div.item__sub', `venceu em ${formatDate(f.vencimento)}`)),
       h('div.item__valor', money(f.valor))))),
-    botao('Ir para a cobrança', { tipo: 'primario', bloco: true, onClick: () => navigate('/cobranca') }));
+    botao('Ver a inadimplência', { tipo: 'primario', bloco: true, onClick: () => navigate('/cobranca') }));
 }
 
 function montarExportacao(projecao, dias) {

@@ -72,20 +72,20 @@ export const FONTES = {
     descricao: 'Relatório de vendas do sistema. Traz custo do pedido — é dele que sai a margem. '
       + 'Só as vendas com situação CONCRETIZADA entram no resultado.',
     formatos: ['xlsx', 'csv', 'pdf'],
-    colunasReais: ['número do pedido', 'cliente', 'data da venda', 'situação', 'valor do custo', 'valor total'],
+    colunasReais: ['número do pedido', 'cliente', 'data da venda', 'vendedor', 'situação', 'valor do custo', 'valor total'],
     campos: [
       campo('numero', 'Número do pedido', 'texto', { chaveNatural: true, sinonimos: ['pedido', 'numero', 'num pedido', 'nro pedido', 'codigo', 'os'] }),
       campo('clienteNome', 'Cliente', 'texto', { sinonimos: ['cliente', 'razao social', 'razão social', 'nome'] }),
       campo('data', 'Data da venda', 'data', { sinonimos: ['data', 'data venda', 'data da venda', 'emissao'] }),
+      // é esta coluna que faz a comissão fechar sem marcação nenhuma
+      campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante', 'consultor', 'vendedor responsavel', 'vendedora'] }),
       campo('status', 'Situação', 'texto', { sinonimos: SITUACAO }),
       campo('valorCusto', 'Valor do custo', 'dinheiro', { sinonimos: ['custo', 'valor custo', 'valor do custo', 'vl custo', 'cmv'] }),
       campo('valorTotal', 'Valor total', 'dinheiro', { sinonimos: VALOR_TOTAL }),
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
-      // o relatório de vendas da AMPLA não traz vendedor; se um dia trouxer, entra aqui
-      campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante', 'consultor', 'vendedor responsavel'] }),
     ],
-    ajuda: 'O vendedor não vem neste relatório. Você define o vendedor de cada pedido dentro do '
-      + 'app (Comercial → Vendedores dos pedidos) e todas as notas daquele pedido herdam.',
+    ajuda: 'Inclua a coluna VENDEDOR no export. É ela que faz a comissão fechar sozinha: o '
+      + 'vendedor do pedido passa para todas as notas daquele pedido, sem você marcar nada.',
   },
 
   orcamentos: {

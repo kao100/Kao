@@ -28,6 +28,12 @@ export const CONFIG_PADRAO = {
   empresa: 'AMPLA',
   metaMensalPadrao: 0,
   metasPorMes: {},
+  /**
+   * Dias da semana em que a empresa vende (0 = domingo … 6 = sábado). É o que
+   * transforma a meta do mês em meta por dia: dividir por 30 quando não se
+   * vende domingo dá um alvo diário mais baixo do que o real.
+   */
+  diasDeVenda: [1, 2, 3, 4, 5, 6],
   caixa: { alertaAtencao: 20000, alertaCritico: 0 },
   faturamento: {
     // devoluções e cancelamentos sempre saem do faturamento; a data usada é a

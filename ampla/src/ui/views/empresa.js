@@ -175,11 +175,11 @@ function corMeta(percentual) {
 function painelAlertas({ abertas, totaisCobranca, projecao, resumoPeriodo, selo }) {
   const alertas = [];
 
-  if (totaisCobranca.cobrarHoje > 0) {
+  if (totaisCobranca.vencido > 0) {
     alertas.push({
-      icone: '📞', cor: 'var(--vermelho)',
-      titulo: `${totaisCobranca.cobrarHoje} cliente(s) para cobrar hoje`,
-      sub: `${money(totaisCobranca.valorCobrarHoje)} em títulos que precisam de contato`,
+      icone: '🔴', cor: 'var(--vermelho)',
+      titulo: `${money(totaisCobranca.vencido)} vencidos`,
+      sub: `${totaisCobranca.titulosVencidos} título(s) passaram do vencimento`,
       rota: '/cobranca',
     });
   }
@@ -203,7 +203,7 @@ function painelAlertas({ abertas, totaisCobranca, projecao, resumoPeriodo, selo 
     alertas.push({
       icone: '🕒', cor: 'var(--amarelo)',
       titulo: `${money(projecao.valorForaDaProjecao)} vencidos fora da projeção`,
-      sub: 'entram no caixa quando houver promessa de pagamento',
+      sub: 'sem data prevista, então não entram na linha do caixa',
       rota: '/cobranca',
     });
   }

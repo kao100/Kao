@@ -36,7 +36,7 @@ pode ser modificado, então quem se adapta é o app.
 | # | Fonte | Periodicidade | É a verdade de | Formatos |
 |---|---|---|---|---|
 | 1 | Notas fiscais (relatório fiscal) | diária | faturamento: valor e data de emissão | XLSX · CSV · PDF · XML · ZIP |
-| 2 | Pedidos de venda (relatório de vendas) | diária | pedidos concretizados, com custo e valor | XLSX · CSV · PDF |
+| 2 | Pedidos de venda (relatório de vendas) | diária | **vendedor**, pedidos concretizados, custo e valor | XLSX · CSV · PDF |
 | 3 | **Contas a receber** | diária | títulos, vencimentos, banco — **e a ponte nota ↔ pedido** | XLSX · CSV · PDF |
 | 4 | Contas a pagar | semanal | compromissos, vencimentos, plano de contas | XLSX · CSV · PDF |
 | 5 | Orçamentos | semanal | quanto foi orçado e quanto virou venda | XLSX · CSV · PDF |
@@ -75,8 +75,8 @@ sistema. Adivinhar número de imagem seria o oposto do item 20.
 
 ## O problema central — e como ele se resolve
 
-Nenhum dos relatórios traz o **vendedor**. E o relatório fiscal **não traz o
-pedido**. Sem uma ponte, não há como dizer de quem é cada faturamento.
+O relatório fiscal **não traz o pedido**, e é do pedido que vem o **vendedor**.
+Sem uma ponte, não há como dizer de quem é cada faturamento.
 
 A ponte é o **contas a receber**: ele tem, na mesma linha, a **nota fiscal** e a
 **descrição, que é o número do pedido**.
@@ -94,9 +94,10 @@ Consequências práticas:
 
 1. **Exporte o contas a receber sempre com a coluna NOTA FISCAL.** Sem ela a
    ponte não fecha e as notas ficam sem vendedor.
-2. **O vendedor é definido no PEDIDO, não em cada nota.** Você define uma vez e
-   todas as notas daquele pedido herdam — inclusive as que forem emitidas
-   depois.
+2. **O vendedor vem na coluna VENDEDOR do relatório de vendas**, no pedido — e
+   dali passa para todas as notas daquele pedido, inclusive as emitidas depois.
+   Linha que vier sem vendedor entra assim mesmo, e é a única que o app
+   pergunta, uma vez.
 3. **O app nunca adivinha.** Se não dá para chegar ao vendedor, a nota vai para
    `⚠️ NFs SEM VENDEDOR` com o motivo exato: sem pedido, pedido não importado,
    ou pedido ainda sem vendedor.
@@ -125,13 +126,13 @@ traz os itens, o que alimenta a Curva ABC.
 
 ## 2. Pedidos de venda (relatório de vendas)
 
-**Colunas reais:** número do pedido · cliente · data da venda · situação ·
-valor do custo · valor total.
+**Colunas reais:** número do pedido · cliente · data da venda · **vendedor** ·
+situação · valor do custo · valor total.
 
 É daqui que vem o **custo** — e portanto a margem. Sem custo, a margem aparece
 em branco e o produto é listado como "sem custo": o app não estima custo.
 
-O vendedor **não** vem neste relatório. Você o define dentro do app, por pedido.
+**Inclua a coluna VENDEDOR no export.** É ela que faz a comissão fechar sozinha.
 
 ## 3. Contas a receber — a fonte mais importante
 

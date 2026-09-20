@@ -60,9 +60,10 @@ Depois disso, qualquer aba responde na hora.
 
 | Aba | Responde |
 |---|---|
+| 📊 Relatório do dia | vendas do dia, mês até hoje, quanto falta para a meta, quanto precisa por dia e quem precisa vender mais — sai em PDF para mandar |
 | 📊 Visão da empresa | como estamos: D-1, mês, meta, receber, pagar, bancos, caixa, alertas |
 | 💧 Fluxo de caixa | quanto teremos em cada dia — acumulado — e em que dia quebra |
-| 📞 Cobrança | quem cobrar hoje, quem não respondeu, quem prometeu pagar |
+| 🔴 Inadimplência | quanto está vencido, há quanto tempo, quem são os maiores e o que vence nos próximos dias — só leitura |
 | 📈 Comercial | faturamento, ranking, ticket, evolução e o detalhe de cada vendedor |
 | 📦 Produtos | curva ABC por faturamento, quantidade, clientes e margem |
 | 📝 Orçamentos | quanto foi orçado, quanto virou venda, o que ainda está em aberto e a conversão por cliente |
@@ -86,16 +87,21 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **PDF serve.** Um dos sistemas não exporta planilha: o app abre o PDF, remonta
   a tabela pela posição do texto na página e segue o mesmo caminho de um XLSX.
   PDF escaneado não — sem OCR e sem chute, o app avisa em vez de inventar.
+- **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
+  trabalho duas vezes. A baixa acontece no sistema; a próxima importação traz o
+  resultado. A única exceção é o pedido que vier sem vendedor no relatório.
+- **Meta do mês vira meta por dia** pelos dias em que a empresa vende (padrão
+  segunda a sábado). Dividir por 30 quando não se abre domingo dá um alvo menor
+  do que o real. Sem meta definida, o app pede em vez de inventar.
 - **Nada é obrigatório.** Nenhuma coluna de nenhum relatório. Você exporta como o
   sistema deixa; o app importa o que veio e **avisa** o que faltou, em vez de
   bloquear. Data ilegível vira aviso, não erro — a linha entra assim mesmo.
-- **Vendedor nunca é adivinhado.** Nenhum relatório traz o vendedor, e o relatório
-  fiscal não traz o pedido. A ponte é o **contas a receber**, que tem a nota e o
-  número do pedido na mesma linha: com ele, `NF → pedido` fecha sozinho. O
-  vendedor você define **uma vez, no pedido**, e todas as notas daquele pedido
-  herdam. O que sobra vai para *Atribuir vendedores*, que diz o motivo de cada
-  nota (título não liga a pedido, pedido não importado, ou pedido ainda sem
-  vendedor) e pergunta em vez de decidir.
+- **Vendedor nunca é adivinhado.** O relatório de vendas traz a coluna VENDEDOR,
+  e o relatório fiscal não traz o pedido. A ponte é o **contas a receber**, que
+  tem a nota e o número do pedido na mesma linha: com ele, `NF → pedido →
+  vendedor` fecha sozinho e a comissão sai sem marcação nenhuma. Linha que vier
+  sem vendedor entra assim mesmo e é a única que o app pergunta, uma vez, no
+  pedido.
 - **Comissão de fábrica:** 2% padrão e 0,5% no cimento (pela palavra na
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência que nunca some:** faturamento fiscal = soma dos vendedores. A

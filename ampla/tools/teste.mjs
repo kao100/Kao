@@ -32,6 +32,7 @@ const routine = await import('../src/logic/routine.js');
 const dre = await import('../src/logic/dre.js');
 const dossie = await import('../src/logic/dossie.js');
 const quotes = await import('../src/logic/quotes.js');
+const diario = await import('../src/logic/diario.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 
@@ -110,13 +111,15 @@ const FISCAL = `Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação
 3004;08/09/2026;José da Silva;12345678901;5.000,00;Autorizada
 3005;09/09/2026;Depósito Beta ME;44555666000199;1.200,00;Cancelada`;
 
-// relatório de vendas: NÃO tem vendedor; tem custo; "prazo de entrega" o app ignora
-const VENDAS = `Número do Pedido;Cliente;Data da Venda;Prazo de Entrega;Situação;Valor do Custo;Valor Total
-1001;Construtora Alfa Ltda;28/08/2026;05/09/2026;Concretizada;11.200,00;15.000,00
-1002;Depósito Beta ME;02/09/2026;06/09/2026;Concretizada;6.100,00;8.400,00
-1003;Obra Gama Ltda;05/09/2026;12/09/2026;Concretizada;15.800,00;22.000,00
-1004;José da Silva;08/09/2026;15/09/2026;Concretizada;3.900,00;5.000,00
-1005;Marcenaria Sigma;10/09/2026;20/09/2026;Em aberto;2.000,00;3.500,00`;
+// relatório de vendas: TEM vendedor (é ele que fecha a comissão sozinha); tem
+// custo; "prazo de entrega" o app ignora. O pedido 1004 vai de propósito sem
+// vendedor, para provar que a linha entra assim mesmo e o app pede só aquela.
+const VENDAS = `Número do Pedido;Cliente;Data da Venda;Prazo de Entrega;Vendedor;Situação;Valor do Custo;Valor Total
+1001;Construtora Alfa Ltda;28/08/2026;05/09/2026;Carlos;Concretizada;11.200,00;15.000,00
+1002;Depósito Beta ME;02/09/2026;06/09/2026;Maria;Concretizada;6.100,00;8.400,00
+1003;Obra Gama Ltda;05/09/2026;12/09/2026;Carlos;Concretizada;15.800,00;22.000,00
+1004;José da Silva;08/09/2026;15/09/2026;;Concretizada;3.900,00;5.000,00
+1005;Marcenaria Sigma;10/09/2026;20/09/2026;Maria;Em aberto;2.000,00;3.500,00`;
 
 // contas a receber: A PONTE — tem nota fiscal E descrição (nº do pedido)
 const RECEBER = `Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal
@@ -204,38 +207,37 @@ const nfs = await store.nfs.listar();
 const nf3001 = nfs.find((n) => n.numero === '3001');
 igual('o relatório fiscal não trazia pedido', FISCAL.includes('Pedido'), false);
 igual('mas a NF 3001 achou o pedido 1001 pelo título', nf3001.pedidoNumero, '1001');
-igual('ainda sem vendedor (nenhum relatório traz)', nf3001.vendedorId, null);
 
-const pendencias = await store.pendencias.listar();
-const pedidoSemVendedor = pendencias.filter((p) => p.tipo === 'pedido_sem_vendedor');
-igual('o app cobra o vendedor no PEDIDO, não em cada nota', pedidoSemVendedor.length >= 4, true);
+console.log('\n▶ O vendedor vem do relatório: você não marca nada');
+const vendedoresCriados = await store.vendedores.listar();
+ok('os vendedores do arquivo foram cadastrados sozinhos',
+  vendedoresCriados.some((v) => v.nome === 'Carlos') && vendedoresCriados.some((v) => v.nome === 'Maria'),
+  JSON.stringify(vendedoresCriados.map((v) => v.nome)));
+const carlos = vendedoresCriados.find((v) => v.nome === 'Carlos');
+const maria = vendedoresCriados.find((v) => v.nome === 'Maria');
 
-console.log('\n▶ Você define o vendedor uma vez, no pedido');
-const carlos = await store.vendedores.salvar({ nome: 'Carlos', apelidos: [], ativo: true });
-const maria = await store.vendedores.salvar({ nome: 'Maria', apelidos: [], ativo: true });
-const pedidos = await store.pedidos.listar();
+igual('a NF 3001 já nasceu com vendedor', nf3001.vendedorId, carlos.id);
+igual('e veio pela ponte do contas a receber', nf3001.vendedorOrigem, 'pedido-titulo');
+igual('a de outro vendedor também', nfs.find((n) => n.numero === '3002').vendedorId, maria.id);
 
-// é esta a lista que a tela cobra: pedido, não nota
+// a única linha sem vendedor no arquivo é a única que o app pergunta
 const cobranca = await link.pedidosSemVendedor();
-ok('o app cobra o vendedor de todo pedido faturado',
-  cobranca.length > 0 && cobranca.every((c) => !c.pedido.vendedorId), `${cobranca.length} pedido(s)`);
-ok('e do maior para o menor, para resolver o que pesa primeiro',
-  cobranca.every((c, i) => i === 0 || cobranca[i - 1].valor >= c.valor),
-  JSON.stringify(cobranca.map((c) => c.valor)));
-ok('cada pedido já vem com as notas que herdam dele',
-  cobranca.find((c) => c.pedido.numero === '1001')?.notas.some((n) => n.numero === '3001'), '');
+igual('só o pedido que veio sem vendedor é cobrado',
+  cobranca.map((c) => c.pedido.numero), ['1004']);
+igual('a nota dele ficou sem dono até isso ser resolvido',
+  nfs.find((n) => n.numero === '3004').vendedorId, null);
 
-await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1001').id, carlos.id, 'conferido');
-await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1002').id, maria.id, 'conferido');
-await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1003').id, carlos.id, 'conferido');
+console.log('\n▶ E o que vier em branco, você resolve uma vez');
+const pedidos = await store.pedidos.listar();
+ok('cada pedido cobrado já vem com as notas que herdam dele',
+  cobranca[0].notas.some((n) => n.numero === '3004'), '');
 await link.definirVendedorDoPedido(pedidos.find((p) => p.numero === '1004').id, maria.id, 'conferido');
 
 const nfs2 = await store.nfs.listar();
-igual('a NF herdou o vendedor do pedido', nfs2.find((n) => n.numero === '3001').vendedorId, carlos.id);
-igual('pela ponte do contas a receber', nfs2.find((n) => n.numero === '3001').vendedorOrigem, 'pedido-titulo');
-igual('e a de outro vendedor também', nfs2.find((n) => n.numero === '3002').vendedorId, maria.id);
-igual('resolvido o pedido, ele sai da lista de cobrança',
-  (await link.pedidosSemVendedor()).filter((c) => ['1001', '1002', '1003', '1004'].includes(c.pedido.numero)).length, 0);
+igual('a NF herdou o vendedor do pedido', nfs2.find((n) => n.numero === '3004').vendedorId, maria.id);
+igual('resolvido o pedido, ele sai da lista', (await link.pedidosSemVendedor()).length, 0);
+igual('e o que veio do relatório continua de pé',
+  nfs2.find((n) => n.numero === '3001').vendedorId, carlos.id);
 
 console.log('\n▶ Faturamento (item 4)');
 const setembro = await revenue.resumo({ de: '2026-09-01', ate: '2026-09-30' });
@@ -405,6 +407,44 @@ console.log('\n▶ Orçamentos: quanto virou venda');
   const serie = await quotes.porMes(3, '2026-09-14');
   igual('a série mensal tem um ponto por mês', serie.length, 3);
   ok('e o último é o mês de referência', serie[serie.length - 1].mes === '2026-09', serie[serie.length - 1].mes);
+}
+
+
+console.log('\n▶ Relatório do dia: meta e ritmo');
+{
+  await store.salvarConfig({ metasPorMes: { '2026-09': 100000 }, diasDeVenda: [1, 2, 3, 4, 5, 6] });
+
+  // setembro de 2026: dia 1 é terça. Até o dia 14 há 12 dias de venda (sem os
+  // domingos 6 e 13); no mês inteiro, 26.
+  igual('conta só os dias em que a empresa vende',
+    diario.diasDeVenda('2026-09-01', '2026-09-14', [1, 2, 3, 4, 5, 6]), 12);
+  igual('e o mês inteiro sem domingo', diario.diasDeVenda('2026-09-01', '2026-09-30', [1, 2, 3, 4, 5, 6]), 26);
+
+  const r = await diario.relatorio('2026-09-14');
+  igual('o mês até hoje é o faturamento do período', r.mesAteHoje.total, 50400);
+  igual('a meta veio do que você definiu', r.meta.valor, 100000);
+  igual('falta o que ainda não foi faturado', r.meta.falta, 49600);
+  ok('o percentual da meta bate', Math.round(r.meta.percentual) === 50, String(r.meta.percentual));
+
+  igual('meta diária = meta do mês / dias de venda', r.meta.diaria, Math.round((100000 / 26) * 100) / 100);
+  igual('dias restantes de venda', r.ritmo.diasRestantes, 14);
+  igual('o quanto precisa por dia para fechar', r.ritmo.precisaPorDia, Math.round((49600 / 14) * 100) / 100);
+  ok('e a projeção usa o ritmo que ela vem tendo',
+    r.ritmo.projecao === Math.round((50400 / 12) * 26 * 100) / 100, String(r.ritmo.projecao));
+
+  const rec = diario.recados(r);
+  ok('os recados dizem o que fazer, com número',
+    rec.some((x) => x.texto.includes('por dia')), JSON.stringify(rec.map((x) => x.texto)));
+  ok('e avisam se o ritmo atual não chega lá',
+    rec.some((x) => x.texto.includes('o mês fecha em')), '');
+
+  // agosto não tem meta definida: o app não inventa uma
+  const semMeta = await diario.relatorio('2026-08-14');
+  igual('sem meta definida, nada de meta é inventado', semMeta.meta.valor, null);
+  igual('e nem meta diária', semMeta.meta.diaria, null);
+  igual('nem quanto falta', semMeta.meta.falta, null);
+  ok('o app pede a meta em vez de chutar',
+    diario.recados(semMeta)[0].texto.includes('Nenhuma meta definida'), '');
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

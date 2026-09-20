@@ -61,7 +61,7 @@ export async function telaReceber({ query }) {
 
     secao(null, h('div.linha',
       exportadores(() => montarExportacao(lista, filtro)),
-      botao('📞 Ir para cobrança', { tipo: 'primario', pequeno: true, onClick: () => navigate('/cobranca') })),
+      botao('Ver a inadimplência', { tipo: 'primario', pequeno: true, onClick: () => navigate('/cobranca') })),
     card(null, null, tabela({
       colunas: [
         { header: 'Cliente', key: 'clienteNome' },
@@ -111,7 +111,7 @@ function abrirDetalhe(titulo) {
       ['Situação no arquivo', titulo.statusArquivo || '—'],
       ['Recebido em', titulo.dataRecebimento ? formatDate(titulo.dataRecebimento) : '—'],
     ]),
-    botao('Abrir na cobrança', { tipo: 'primario', bloco: true, onClick: () => navigate('/cobranca') }));
+    botao('Ver a inadimplência', { tipo: 'primario', bloco: true, onClick: () => navigate('/cobranca') }));
 }
 
 function montarExportacao(lista, filtro) {

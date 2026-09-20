@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v4';
+const CACHE = 'ampla-v5';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -15,7 +15,7 @@ const APP_SHELL = [
   'src/core/files/csv.js', 'src/core/files/nfe.js', 'src/core/files/ofx.js', 'src/core/files/read.js',
   'src/core/files/pdf.js',
   'src/data/sources.js', 'src/data/seed.js',
-  'src/logic/dre.js', 'src/logic/dossie.js', 'src/logic/quotes.js',
+  'src/logic/dre.js', 'src/logic/dossie.js', 'src/logic/quotes.js', 'src/logic/diario.js',
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/collection.js', 'src/logic/cashflow.js', 'src/logic/abc.js', 'src/logic/routine.js',
   'src/logic/reports.js',
@@ -26,7 +26,7 @@ const APP_SHELL = [
   'src/ui/views/comercial.js', 'src/ui/views/produtos.js', 'src/ui/views/comissoes.js',
   'src/ui/views/pagar.js', 'src/ui/views/receber.js', 'src/ui/views/bancos.js',
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
-  'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js',
+  'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',
   'src/styles/theme.css', 'src/styles/base.css', 'src/styles/components.css',
   'src/styles/views.css', 'src/styles/print.css',
 ].map((caminho) => BASE + caminho);

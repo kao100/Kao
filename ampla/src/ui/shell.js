@@ -7,9 +7,9 @@ import { navigate } from '../core/router.js';
 import { formatDate, timestampLabel } from '../core/format.js';
 
 export const MODULOS = [
-  { path: '/', icone: '📊', label: 'Empresa', titulo: 'Visão da empresa' },
+  { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório do dia' },
   { path: '/caixa', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
-  { path: '/cobranca', icone: '📞', label: 'Cobrança', titulo: 'Inadimplência e cobrança' },
+  { path: '/cobranca', icone: '🔴', label: 'Inadimplência', titulo: 'Inadimplência' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
   { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
   { path: '/produtos', icone: '📦', label: 'Produtos', titulo: 'Produtos e curva ABC' },

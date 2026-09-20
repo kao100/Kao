@@ -12,6 +12,7 @@ import { montarShell, aoTrocarRota, atualizarAlertas } from './ui/shell.js';
 import { semear } from './data/seed.js';
 
 import { telaEmpresa } from './ui/views/empresa.js';
+import { telaDiario } from './ui/views/diario.js';
 import { telaCaixa, telaSimulacao } from './ui/views/caixa.js';
 import { telaCobranca } from './ui/views/cobranca.js';
 import { telaComercial, telaVendedor } from './ui/views/comercial.js';
@@ -27,10 +28,12 @@ import { telaFechamento } from './ui/views/fechamento.js';
 import { telaOrcamentos } from './ui/views/orcamentos.js';
 
 const ROTAS = [
-  { path: '/', view: telaEmpresa, titulo: 'Visão da empresa' },
+  { path: '/', view: telaDiario, titulo: 'Relatório do dia' },
+  { path: '/diario', view: telaDiario, titulo: 'Relatório do dia' },
+  { path: '/empresa', view: telaEmpresa, titulo: 'Visão da empresa' },
   { path: '/caixa', view: telaCaixa, titulo: 'Fluxo de caixa' },
   { path: '/caixa/simulacao', view: telaSimulacao, titulo: 'Simulação de cenários' },
-  { path: '/cobranca', view: telaCobranca, titulo: 'Inadimplência e cobrança' },
+  { path: '/cobranca', view: telaCobranca, titulo: 'Inadimplência' },
   { path: '/comercial', view: telaComercial, titulo: 'Comercial' },
   { path: '/comercial/:id', view: telaVendedor, titulo: 'Vendedor' },
   { path: '/orcamentos', view: telaOrcamentos, titulo: 'Orçamentos' },
