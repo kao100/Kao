@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v8';
+const CACHE = 'ampla-v9';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [

@@ -90,6 +90,10 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **O relatório que você manda atualiza o que já está aqui**, não vira um
   relatório novo. Boleto prorrogado continua o mesmo boleto com a data nova, e o
   que o seu sistema já baixou entra como pago.
+- **O vendedor que faltar se resolve na hora de importar.** O sistema de origem
+  não deixa acrescentar vendedor a um pedido já feito, então o app pergunta logo
+  depois de gravar, com o relatório ainda na mão — e dá para criar um vendedor
+  novo ali mesmo.
 - **Não se marca nada no app.** Dar baixa aqui e no sistema seria o mesmo
   trabalho duas vezes. A baixa acontece no sistema; a próxima importação traz o
   resultado. A única exceção é o pedido que vier sem vendedor no relatório.

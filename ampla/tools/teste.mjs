@@ -539,5 +539,46 @@ console.log('\n▶ Um problema é contado uma vez só');
     (await store.nfs.listar()).find((n) => n.numero === '3003').vendedorId, vendedorOriginal);
 }
 
+
+console.log('\n▶ Vendedor em branco: resolver na hora de importar');
+{
+  // No sistema dela não dá para acrescentar vendedor a um pedido já feito, então
+  // o vínculo só pode nascer na importação. O app tem que perceber isso na hora.
+  const V = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  await importar('pedidos', 'novas.csv', `${V}
+2001;Cliente Novo A;12/09/2026;;Concretizada;1.000,00;2.500,00
+2002;Cliente Novo B;12/09/2026;Carlos;Concretizada;800,00;1.900,00`);
+  await link.recalcular();
+
+  const cobrados = await link.pedidosSemVendedor();
+  const numeros = cobrados.map((c) => c.pedido.numero);
+  ok('a importação já sabe qual pedido ficou sem dono',
+    numeros.includes('2001') && !numeros.includes('2002'), JSON.stringify(numeros));
+
+  // é isso que a tela oferece: marcar ali mesmo, inclusive criando um vendedor novo
+  const roberto = await store.vendedores.salvar({ nome: 'Roberto', apelidos: [], ativo: true });
+  const alvo = cobrados.find((c) => c.pedido.numero === '2001');
+  await link.definirVendedorDoPedido(alvo.pedido.id, roberto.id, 'definido na importação');
+
+  igual('marcado na hora, o pedido sai da cobrança',
+    (await link.pedidosSemVendedor()).some((c) => c.pedido.numero === '2001'), false);
+  igual('e fica gravado que a decisão foi sua',
+    (await store.pedidos.listar()).find((p) => p.numero === '2001').vendedorOrigem, 'manual');
+
+  // reenviar o mesmo relatório não apaga o que ela resolveu à mão
+  await importar('pedidos', 'novas.csv', `${V}
+2001;Cliente Novo A;12/09/2026;;Concretizada;1.000,00;2.500,00
+2002;Cliente Novo B;12/09/2026;Carlos;Concretizada;800,00;1.900,00`);
+  await link.recalcular();
+  igual('e reenviar o arquivo não apaga o vendedor que você pôs',
+    (await store.pedidos.listar()).find((p) => p.numero === '2001').vendedorId, roberto.id);
+
+  for (const n of ['2001', '2002']) {
+    const p2 = (await store.pedidos.listar()).find((x) => x.numero === n);
+    if (p2) await store.pedidos.remover(p2.id);
+  }
+  await link.recalcular();
+}
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

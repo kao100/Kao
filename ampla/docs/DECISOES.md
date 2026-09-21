@@ -146,6 +146,18 @@ porque dependem de informação que só a empresa tem.
   descontar as notas sem vendedor. A parte que elas explicam já está dita; o que
   sobra é que ninguém está vendo.
 
+### O vendedor se resolve na hora de importar
+- O sistema de origem **não deixa acrescentar vendedor a um pedido já feito** —
+  nem a uma venda ou nota já emitida. Então o vínculo só pode nascer aqui, e o
+  único momento em que ela está com o relatório na mão é a importação.
+- Por isso, logo depois de gravar, o app mostra os pedidos que vieram sem
+  vendedor e deixa marcar cada um ali mesmo, com um toque. Dá para **criar um
+  vendedor novo na hora**, sem sair da tela.
+- Marcado assim, fica gravado como decisão sua: reenviar o mesmo relatório no
+  dia seguinte não apaga o que ela pôs.
+- "Deixar para depois" existe e diz o preço: aquele faturamento fica fora do
+  ranking e da comissão até alguém resolver.
+
 ### Seis abas, e o resto no menu
 - A barra tinha catorze abas e rolava para o lado. Rolar para achar uma aba é o
   contrário de abrir o app e saber como a empresa está.

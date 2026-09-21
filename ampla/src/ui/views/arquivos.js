@@ -10,14 +10,16 @@ import { h, frag } from '../../core/dom.js';
 import { navigate } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as ingest from '../../logic/ingest.js';
-import { recalcular } from '../../logic/link.js';
+import { recalcular, pedidosSemVendedor, definirVendedorDoPedido } from '../../logic/link.js';
 import { rotina, selo as seloRotina } from '../../logic/routine.js';
 import { FONTES, FONTES_LISTA, PERIODICIDADE } from '../../data/sources.js';
 import { readFile, detectHeaderRow, rowsToObjects, FORMATOS, formatoSuportado, acceptSuportado } from '../../core/files/read.js';
 import { definirTitulo, seloDados, atualizarAlertas } from '../shell.js';
 import { kpi, card, secao, botao, aviso, selo } from '../components/ui.js';
 import { ok } from '../components/toast.js';
-import { formatDate, timestampLabel, num } from '../../core/format.js';
+import { formulario } from '../components/sheet.js';
+import { formatDate, timestampLabel, num, money } from '../../core/format.js';
+import { cents, sum } from '../../core/util.js';
 
 /* ------------------------------------------------------- central de arquivos */
 
@@ -105,6 +107,7 @@ function montarPassos(estado, ctx) {
   if (estado.passo === 'arquivo') return passoArquivo(estado, ctx);
   if (estado.passo === 'mapear') return passoMapear(estado, ctx);
   if (estado.passo === 'conferir') return passoConferir(estado, ctx);
+  if (estado.passo === 'vendedores') return passoVendedores(estado, ctx);
   return [h('p', 'Passo desconhecido.')];
 }
 
@@ -378,6 +381,84 @@ function passoConferir(estado, ctx) {
   ];
 }
 
+/* ----- passo 4: de quem foi esta venda? (só quando faltou vendedor) */
+
+/**
+ * Aparece logo depois de importar, porque é o único momento em que dá para
+ * resolver: o sistema de origem não deixa acrescentar vendedor a um pedido já
+ * feito, então o vínculo só pode nascer aqui, com o relatório na mão.
+ */
+function passoVendedores(estado, ctx) {
+  const { desenhar } = ctx;
+  const pendentes = estado.pendentes || [];
+  const vendedores = estado.vendedores || [];
+  const total = cents(sum(pendentes, (x) => x.valor));
+
+  const marcar = async (item, vendedorId) => {
+    estado.ocupado = true;
+    desenhar();
+    await definirVendedorDoPedido(item.pedido.id, vendedorId,
+      `definido na importação de ${estado.preparo.arquivo}`);
+    estado.pendentes = await pedidosSemVendedor();
+    estado.vendedores = await store.vendedores.listar();
+    estado.ocupado = false;
+    await atualizarAlertas();
+    if (!estado.pendentes.length) {
+      ok('Pronto — todo o faturamento tem dono.');
+      navigate('/arquivos');
+      return;
+    }
+    desenhar();
+  };
+
+  const novoVendedor = async (item) => {
+    const r = await formulario({
+      titulo: 'Quem vendeu?',
+      descricao: `Pedido ${item.pedido.numero || ''} · ${item.pedido.clienteNome || ''}`,
+      campos: [{ chave: 'nome', label: 'Nome do vendedor', tipo: 'texto', obrigatorio: true }],
+    });
+    if (!r?.nome) return;
+    const v = await store.vendedores.salvar({ nome: String(r.nome).trim(), apelidos: [], ativo: true });
+    await marcar(item, v.id);
+  };
+
+  if (!pendentes.length) return [h('p.pequeno.muted', 'Nada pendente.')];
+
+  return [
+    card(`${pendentes.length} venda(s) vieram sem vendedor`,
+      h('span.num.forte', money(total)),
+      h('p.pequeno.dim',
+        'O arquivo não trouxe o vendedor destas. Diga aqui de quem foi cada uma: '
+        + 'todas as notas do pedido recebem o mesmo vendedor, inclusive as próximas.'),
+      h('p.mini.muted', { style: { marginTop: '6px' } },
+        'Se deixar para depois, esse faturamento fica fora do ranking e da comissão até alguém resolver.')),
+
+    ...pendentes.map((item) => h('div.card',
+      h('div.linha.linha--entre', { style: { alignItems: 'flex-start' } },
+        h('div.crescer',
+          h('strong', `Pedido ${item.pedido.numero || '(sem número)'}`),
+          h('div.mini.muted', { style: { marginTop: '2px' } },
+            item.pedido.clienteNome || 'cliente não identificado'),
+          h('div.mini.muted', item.pedido.data ? formatDate(item.pedido.data) : 'sem data')),
+        h('div.empilha', { style: { alignItems: 'flex-end' } },
+          h('span.num.forte', money(item.valor)),
+          h('span.mini.muted', item.notas.length
+            ? `${item.notas.length} NF: ${item.notas.map((n) => n.numero).filter(Boolean).slice(0, 3).join(', ')}`
+            : 'ainda sem NF'))),
+
+      h('div.btn-linha', { style: { marginTop: '10px', flexWrap: 'wrap' } },
+        ...vendedores.map((v) => botao(v.nome, {
+          pequeno: true, desabilitado: estado.ocupado, onClick: () => marcar(item, v.id),
+        })),
+        botao('+ outro', { pequeno: true, desabilitado: estado.ocupado, onClick: () => novoVendedor(item) })))),
+
+    botao('Deixar para depois', {
+      bloco: true,
+      onClick: () => navigate('/arquivos'),
+    }),
+  ];
+}
+
 function rotuloStore(nome) {
   return {
     nfs: 'Notas fiscais', nfItens: 'Itens das notas', pedidos: 'Pedidos', receber: 'Títulos a receber',
@@ -408,7 +489,20 @@ async function confirmarImportacao(estado, ctx) {
 
     await recalcular();
     await atualizarAlertas();
-    ok(`✓ Importado — ${num(registro.resumo.total, 0)} registros.`);
+    ok(`✓ Importado — ${num(registro.resumo.principal || registro.resumo.total, 0)} registros.`);
+
+    // No sistema dela não dá para voltar e pôr o vendedor num pedido já feito.
+    // Então é AGORA, com o arquivo na mão, que ela diz de quem foi cada venda —
+    // depois de sair desta tela ela não teria mais como consertar na origem.
+    const semDono = await pedidosSemVendedor();
+    if (semDono.length) {
+      estado.pendentes = semDono;
+      estado.vendedores = await store.vendedores.listar();
+      estado.passo = 'vendedores';
+      estado.ocupado = false;
+      desenhar();
+      return;
+    }
     navigate('/arquivos');
   } catch (err) {
     estado.aviso = err.message;
