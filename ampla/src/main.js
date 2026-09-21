@@ -8,6 +8,7 @@
 import { defineRoutes, initRouter } from './core/router.js';
 import { requestPersistence } from './core/db.js';
 import { migrarDoNomeAntigo } from './core/migrar.js';
+import { reiniciarSePreciso } from './core/reiniciar.js';
 import { montarShell, aoTrocarRota, atualizarAlertas } from './ui/shell.js';
 import { semear } from './data/seed.js';
 
@@ -54,8 +55,10 @@ const ROTAS = [
 async function iniciar() {
   const raiz = document.getElementById('app-root');
   try {
-    // o app se chamava AMPLACON: traz o que ficou no banco antigo
-    const migracao = await migrarDoNomeAntigo();
+    // recomeço pedido pela empresa: apaga os dados dos primeiros testes, uma
+    // vez só. Vem antes da migração para o banco antigo não trazer tudo de volta.
+    const recomeco = await reiniciarSePreciso();
+    const migracao = recomeco.reiniciou ? { migrou: false } : await migrarDoNomeAntigo();
     await semear();
     const outlet = montarShell(raiz);
     defineRoutes(ROTAS);
@@ -63,7 +66,10 @@ async function iniciar() {
     atualizarAlertas();
     requestPersistence();
     registrarServiceWorker();
-    if (migracao.migrou) {
+    if (recomeco.reiniciou) {
+      const { ok } = await import('./ui/components/toast.js');
+      ok('Aplicativo recomeçado do zero — pode mandar os relatórios.');
+    } else if (migracao.migrou) {
       const { ok } = await import('./ui/components/toast.js');
       ok(`${migracao.registros} registro(s) trazidos do aplicativo antigo.`);
     }

@@ -3,14 +3,14 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v9';
+const CACHE = 'ampla-v10';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
   '', 'index.html', 'manifest.webmanifest',
   'src/main.js',
   'src/core/dom.js', 'src/core/router.js', 'src/core/format.js', 'src/core/util.js',
-  'src/core/db.js', 'src/core/store.js', 'src/core/migrar.js',
+  'src/core/db.js', 'src/core/store.js', 'src/core/migrar.js', 'src/core/reiniciar.js',
   'src/core/files/zip.js', 'src/core/files/xlsx.js', 'src/core/files/xlsxw.js',
   'src/core/files/csv.js', 'src/core/files/nfe.js', 'src/core/files/ofx.js', 'src/core/files/read.js',
   'src/core/files/pdf.js',

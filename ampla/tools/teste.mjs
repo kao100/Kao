@@ -580,5 +580,50 @@ console.log('\n▶ Vendedor em branco: resolver na hora de importar');
   await link.recalcular();
 }
 
+
+console.log('\n▶ Recomeçar do zero (uma vez só)');
+{
+  const reiniciar = await import('../src/core/reiniciar.js');
+  const dbm = await import('../src/core/db.js');
+
+  ok('antes do recomeço existe dado dos testes', (await store.nfs.listar()).length > 0, '');
+
+  // como se ela ainda não tivesse recebido a atualização
+  await dbm.put('kv', { key: 'reinicio', valor: 'marca-antiga', em: Date.now() });
+  store.limparCache();
+
+  const r1 = await reiniciar.reiniciarSePreciso();
+  store.limparCache();
+  igual('o recomeço acontece', r1.reiniciou, true);
+  igual('as notas foram apagadas', (await store.nfs.listar()).length, 0);
+  igual('os títulos também', (await store.receber.listar()).length, 0);
+  igual('os vendedores também', (await store.vendedores.listar()).length, 0);
+  igual('e a configuração voltou ao padrão', (await store.config()).metasPorMes, {});
+
+  // a marca da migração fica gravada: o banco antigo não pode voltar
+  const marcaMig = await dbm.get('kv', reiniciar.MARCA ? 'migracao_amplacon' : 'migracao_amplacon');
+  ok('a migração do AMPLACON fica marcada como feita, para não trazer tudo de volta',
+    !!marcaMig, JSON.stringify(marcaMig));
+
+  // abrir de novo não apaga o que ela mandar depois
+  await store.nfs.salvar({
+    id: 'nf_depois', numero: '9100', dataEmissao: '2026-09-21', mes: '2026-09',
+    valorTotal: 7000, status: 'autorizada', operacao: 'saida',
+  });
+  const r2 = await reiniciar.reiniciarSePreciso();
+  store.limparCache();
+  igual('na segunda abertura ele não apaga de novo', r2.reiniciou, false);
+  igual('e o que ela mandou depois continua lá',
+    (await store.nfs.listar()).map((n) => n.numero), ['9100']);
+
+  // e o de fábrica volta
+  await semear();
+  const regras = await store.regrasComissao.listar();
+  ok('as regras de comissão de fábrica voltam (2% e 0,5%)',
+    regras.some((x) => x.percentual === 2) && regras.some((x) => x.percentual === 0.5),
+    JSON.stringify(regras.map((x) => x.percentual)));
+  ok('e as contas bancárias também', (await store.contas.listar()).length > 0, '');
+}
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

@@ -146,6 +146,19 @@ porque dependem de informação que só a empresa tem.
   descontar as notas sem vendedor. A parte que elas explicam já está dita; o que
   sobra é que ninguém está vendo.
 
+### Recomeço do zero (21/09/2026)
+- A empresa pediu para descartar tudo o que foi mandado nos primeiros testes e
+  começar limpo, com o aplicativo inteiro do jeito que ficou.
+- Os dados moram **no aparelho**, não num servidor: não há como apagá-los de
+  fora. Então quem apaga é o próprio app, na primeira abertura depois da
+  atualização — uma vez só, controlado pela marca em `core/reiniciar.js`.
+- O recomeço vem **antes** da migração e apaga também o banco antigo do
+  AMPLACON, senão a migração traria tudo de volta no recálculo seguinte.
+- Depois disso `semear()` recria o que é de fábrica: as contas bancárias e as
+  regras de comissão (2% padrão, 0,5% no cimento).
+- Trocar a marca dispara um novo recomeço em todos os aparelhos. Só mexer nela
+  quando a intenção for mesmo apagar os dados de quem já está usando.
+
 ### O vendedor se resolve na hora de importar
 - O sistema de origem **não deixa acrescentar vendedor a um pedido já feito** —
   nem a uma venda ou nota já emitida. Então o vínculo só pode nascer aqui, e o
