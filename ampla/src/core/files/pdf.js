@@ -490,35 +490,22 @@ function descobrirColunas(linhas) {
 }
 
 /**
- * Uma célula comprida quebra em várias linhas visuais, e o registro fica
- * espalhado por 2 ou 3 delas. Elas são reunidas só quando o espaçamento é
- * claramente de dois tipos: pequeno dentro do registro, grande entre um
- * registro e o próximo.
+ * UMA LINHA VISUAL É UM REGISTRO.
  *
- * Sem essa separação nítida, cada linha visual continua sendo um registro —
- * juntar por suposição criaria dados que o relatório não tem.
+ * Existe a tentação de juntar linhas pelo espaçamento quando uma célula
+ * comprida quebra em duas. Já tentei, e num relatório de verdade o resultado
+ * foi desastroso: o vão grande entre o cabeçalho da página e a tabela servia de
+ * referência, e as 334 vendas de um mês viravam 16 linhas — uma por página.
+ *
+ * O que junta pedaço agora é juntarQuebras(), que não olha espaçamento: olha
+ * coluna livre. Errar para mais deixa linha a mais, que ela vê na prévia.
+ * Errar para menos apaga venda em silêncio.
  */
-function agruparRegistros(linhas) {
-  if (linhas.length < 4) return linhas.map((l) => [l]);
-  const vaos = [];
-  for (let i = 1; i < linhas.length; i += 1) vaos.push(linhas[i - 1].y - linhas[i].y);
-  const ordenados = [...vaos].sort((a, b) => a - b);
-  const mediana = ordenados[Math.floor(ordenados.length / 2)];
-  const maior = ordenados[ordenados.length - 1];
-  if (!(mediana > 0) || maior < mediana * 1.6) return linhas.map((l) => [l]);
-
-  const corte = (mediana + maior) / 2;
-  const grupos = [[linhas[0]]];
-  for (let i = 1; i < linhas.length; i += 1) {
-    if (vaos[i - 1] >= corte) grupos.push([linhas[i]]);
-    else grupos[grupos.length - 1].push(linhas[i]);
-  }
-  return grupos;
-}
 
 function montarMatriz(linhasVisuais) {
   const colunas = descobrirColunas(linhasVisuais);
   if (!colunas.length) return [];
+
   const indice = (c) => {
     const meio = c.x + c.largura / 2;
     let melhor = 0;
@@ -529,16 +516,89 @@ function montarMatriz(linhasVisuais) {
     });
     return melhor;
   };
-  return agruparRegistros(linhasVisuais).map((grupo) => {
-    const saida = new Array(colunas.length).fill('');
-    for (const l of grupo) {
-      for (const c of l.celulas) {
-        const i = indice(c);
-        saida[i] = saida[i] ? saida[i] + emenda(saida[i], c.texto) + c.texto : c.texto;
-      }
-    }
-    return saida.map((v) => v.trim());
+  const linhas = linhasVisuais.map((l) => {
+    const celulas = Array.from({ length: colunas.length }, () => []);
+    for (const c of l.celulas) celulas[indice(c)].push({ y: l.y, texto: c.texto });
+    return { y: l.y, celulas, preenchidas: celulas.filter((a) => a.length).length };
   });
+
+  return juntarQuebras(linhas).map((l) => l.celulas.map(montarTexto));
+}
+
+/** Os pedaços de uma célula, de cima para baixo, colados na ordem certa. */
+function montarTexto(pedacos) {
+  return [...pedacos]
+    .sort((a, b) => b.y - a.y)
+    .reduce((acc, p) => (acc ? acc + emenda(acc, p.texto) + p.texto : p.texto), '')
+    .trim();
+}
+
+/**
+ * Nome de cliente comprido quebra em duas ou três linhas, e o relatório desenha
+ * o registro no meio delas:
+ *
+ *     ""    | SANTA AGDA IMOB. ADM. DE BENS E |          |     …
+ *     1147  |                                | 22/09/26 | Concretizada …
+ *     ""    | PART. LTDA                     |          |     …
+ *
+ * O sinal é seguro e específico: o pedaço solto ocupa SÓ colunas que estão
+ * vazias no registro. Quando há colisão — duas linhas disputando a mesma
+ * coluna — são dois registros, e nada é juntado.
+ *
+ * Juntar por espaçamento, que era o jeito anterior, transformou as 334 vendas
+ * de um mês em 16 linhas, uma por página. Esta regra não corre esse risco: sem
+ * a coluna vazia do outro lado, ela não junta nada.
+ */
+function juntarQuebras(linhas) {
+  // A moda é medida só entre as linhas com cara de tabela. O cabeçalho do
+  // relatório — título, período, os totais do mês — tem dezenas de linhas de
+  // uma célula só, e contá-las faria "1" virar a largura normal da tabela.
+  const frequencia = new Map();
+  for (const l of linhas) {
+    if (l.preenchidas >= 3) frequencia.set(l.preenchidas, (frequencia.get(l.preenchidas) || 0) + 1);
+  }
+  const comum = [...frequencia.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || 0;
+  // sem um corpo de tabela claro, não há o que reconhecer como quebra
+  if (comum < 3) return linhas.filter((l) => l.preenchidas > 0);
+
+  const limite = Math.max(2, Math.ceil(comum / 2));
+  const fragmento = (l) => l.preenchidas > 0 && l.preenchidas < limite;
+  const registros = linhas.filter((l) => l.preenchidas > 0 && !fragmento(l));
+  if (!registros.length) return linhas.filter((l) => l.preenchidas > 0);
+
+  // as colunas de cada registro ANTES de receber pedaço: é contra elas que a
+  // colisão é medida, senão o primeiro pedaço bloquearia o segundo
+  const originais = new Map(registros.map((r) => [r, r.celulas.map((a) => a.length > 0)]));
+  const absorvidos = new Set();
+
+  const livre = (r, l) => {
+    const ocupadas = originais.get(r);
+    return !l.celulas.some((a, i) => a.length && ocupadas[i]);
+  };
+
+  for (const l of linhas) {
+    if (!fragmento(l)) continue;
+    // O pedaço pertence ao registro de cima ou ao de baixo, nunca a outro. Um
+    // nome de quatro linhas tem pedaço dos dois lados do registro, e o mais
+    // distante cai mais perto do registro vizinho — que já tem o nome dele.
+    // Por isso a escolha é pelo mais próximo COM a coluna livre, e não
+    // simplesmente pelo mais próximo.
+    let acima = null;
+    let abaixo = null;
+    for (const r of registros) {
+      if (r.y > l.y && (!acima || r.y < acima.y)) acima = r;
+      if (r.y < l.y && (!abaixo || r.y > abaixo.y)) abaixo = r;
+    }
+    const candidatos = [acima, abaixo]
+      .filter(Boolean)
+      .sort((a, b) => Math.abs(a.y - l.y) - Math.abs(b.y - l.y));
+    const alvo = candidatos.find((r) => livre(r, l));
+    if (!alvo) continue;
+    l.celulas.forEach((a, i) => { if (a.length) alvo.celulas[i].push(...a); });
+    absorvidos.add(l);
+  }
+
+  return linhas.filter((l) => l.preenchidas > 0 && !absorvidos.has(l));
 }
 
 /**
@@ -565,12 +625,28 @@ function pareceDado(v) {
  * de dados iguais continuam sendo dois compromissos, como manda o item 20.
  */
 function tirarCabecalhosRepetidos(todas) {
-  const candidatos = new Set(
-    todas.slice(0, 8).filter((l) => !l.some(pareceDado)).map((l) => JSON.stringify(l)),
-  );
+  const cheias = (l) => l.filter((v) => v !== '').length;
+
+  // Uma linha que se repete IGUALZINHA e não tem data nem valor é enfeite de
+  // página: o cabeçalho da tabela, o título, o "gerado em". Duas vendas de
+  // verdade não se repetem dez vezes sem nenhum número junto.
+  const quantas = new Map();
+  for (const l of todas) {
+    const k = JSON.stringify(l);
+    quantas.set(k, (quantas.get(k) || 0) + 1);
+  }
+  const candidatos = new Set();
+  for (const [k, n] of quantas) {
+    if (n < 2) continue;
+    const linha = JSON.parse(k);
+    if (!linha.some(pareceDado) || cheias(linha) <= 2) candidatos.add(k);
+  }
+
   const vistos = new Set();
   let repetidos = 0;
   const linhas = todas.filter((l) => {
+    // "Página 3 de 16" muda a cada página, então a repetição nunca a pegaria
+    if (ehMarcaDePagina(l)) { repetidos += 1; return false; }
     const k = JSON.stringify(l);
     if (!candidatos.has(k)) return true;
     if (vistos.has(k)) { repetidos += 1; return false; }
@@ -578,6 +654,34 @@ function tirarCabecalhosRepetidos(todas) {
     return true;
   });
   return { linhas, repetidos };
+}
+
+/**
+ * O que sobrou de pedaço solto depois de juntar o que dava. É quase sempre o
+ * fim de um nome comprido que o relatório quebrou num lugar em que não deu para
+ * religar. Entra como linha, viraria um registro fantasma — então sai, e o
+ * aviso diz quantos foram: esconder seria pior do que contar.
+ */
+function tirarPedacosSoltos(linhas) {
+  const cheias = (l) => l.filter((v) => v !== '').length;
+  const frequencia = new Map();
+  for (const l of linhas) {
+    const n = cheias(l);
+    if (n >= 3) frequencia.set(n, (frequencia.get(n) || 0) + 1);
+  }
+  const comum = [...frequencia.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || 0;
+  if (comum < 3) return { linhas, soltos: 0 };
+
+  const minimo = Math.max(2, Math.ceil(comum / 3));
+  const ficam = linhas.filter((l) => cheias(l) >= minimo);
+  return { linhas: ficam, soltos: linhas.length - ficam.length };
+}
+
+/** Numeração de página sozinha numa linha: enfeite, não registro. */
+function ehMarcaDePagina(linha) {
+  const cheias = linha.filter((v) => v !== '');
+  if (cheias.length !== 1) return false;
+  return /^(p[aá]g(ina)?\.?\s*)?\d+\s*(de|\/)\s*\d+$/i.test(cheias[0].trim());
 }
 
 /**
@@ -593,6 +697,7 @@ export async function readPdf(buffer, nomeArquivo = 'PDF') {
 
   const cacheFonte = new Map();
   const todas = [];
+  let pagina = 0;
 
   for (const [, pag] of paginas) {
     let recursos = pag.dict.match(/\/Resources\s*(<<[\s\S]*)/)?.[1];
@@ -624,21 +729,39 @@ export async function readPdf(buffer, nomeArquivo = 'PDF') {
     for (const r of refs) conteudo += `${await conteudoDe(objetos, r)}\n`;
     if (!conteudo.trim()) continue;
 
-    todas.push(...montarMatriz(montarCelulas(extrairItens(conteudo, fontes))));
+    const visuais = montarCelulas(extrairItens(conteudo, fontes));
+    // As páginas de um relatório são a MESMA tabela. Descobrir as colunas página
+    // a página dava grades diferentes (9 colunas numa, 7 na outra) e as linhas
+    // deixavam de se alinhar: a coluna de valor de uma página caía na de custo
+    // da seguinte. Por isso as linhas de todas as páginas são juntadas antes.
+    // O deslocamento em y mantém cada página no seu bloco, já que o y recomeça
+    // do topo a cada página.
+    const desvio = pagina * 100000;
+    for (const l of visuais) todas.push({ ...l, y: l.y - desvio });
+    pagina += 1;
   }
 
-  if (!todas.length) {
+  const matriz = montarMatriz(todas);
+
+  if (!matriz.length) {
     throw new Error('Este PDF não tem texto — parece ser digitalizado (imagem). '
       + 'O app não tenta adivinhar o conteúdo de uma imagem: exporte o relatório em XLSX, CSV, '
       + 'ou gere o PDF direto do sistema em vez de escanear.');
   }
 
-  const { linhas, repetidos } = tirarCabecalhosRepetidos(todas);
+  const { linhas: semRepetidos, repetidos } = tirarCabecalhosRepetidos(matriz);
+  const { linhas, soltos } = tirarPedacosSoltos(semRepetidos);
+
+  const avisos = [];
+  if (repetidos) avisos.push(`${repetidos} linha(s) de título, cabeçalho repetido e numeração de página ficaram de fora.`);
+  if (soltos) {
+    avisos.push(`${soltos} pedaço(s) de texto não coube(ram) em nenhuma linha da tabela — normalmente o `
+      + 'fim de um nome de cliente muito comprido. O valor e a data das vendas não são afetados; '
+      + 'se o nome completo importar, exporte o relatório em modo paisagem ou em XLSX.');
+  }
 
   return {
     planilhas: [{ nome: nomeArquivo.replace(/\.[^.]+$/, ''), linhas }],
-    aviso: repetidos
-      ? `${repetidos} repetição(ões) do cabeçalho foram descartadas (uma por página).`
-      : null,
+    aviso: avisos.length ? avisos.join(' ') : null,
   };
 }

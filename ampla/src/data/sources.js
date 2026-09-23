@@ -32,6 +32,8 @@ const campo = (chave, label, tipo, opts = {}) => ({
 const DOC = ['cpf', 'cnpj', 'cpf/cnpj', 'cnpj/cpf', 'documento', 'cpf cnpj', 'doc'];
 const SITUACAO = ['situacao', 'situação', 'status', 'estado'];
 const VALOR_TOTAL = ['valor total', 'total', 'vl total', 'valor'];
+// o Gestão Click abrevia a coluna do número como "Nº" em vários relatórios
+const NUMERO_CURTO = ['nº', 'n°', 'nº.', 'n.', 'no', 'num', 'nro', 'n'];
 
 export const FONTES = {
   /* ------------------------------------------------------------------ fiscal */
@@ -74,7 +76,7 @@ export const FONTES = {
     formatos: ['xlsx', 'csv', 'pdf'],
     colunasReais: ['número do pedido', 'cliente', 'data da venda', 'vendedor', 'situação', 'valor do custo', 'valor total'],
     campos: [
-      campo('numero', 'Número do pedido', 'texto', { chaveNatural: true, sinonimos: ['pedido', 'numero', 'num pedido', 'nro pedido', 'codigo', 'os'] }),
+      campo('numero', 'Número do pedido', 'texto', { chaveNatural: true, sinonimos: ['pedido', 'numero', 'num pedido', 'nro pedido', 'codigo', 'os', ...NUMERO_CURTO] }),
       campo('clienteNome', 'Cliente', 'texto', { sinonimos: ['cliente', 'razao social', 'razão social', 'nome'] }),
       campo('data', 'Data da venda', 'data', { sinonimos: ['data', 'data venda', 'data da venda', 'emissao'] }),
       // é esta coluna que faz a comissão fechar sem marcação nenhuma

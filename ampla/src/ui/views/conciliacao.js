@@ -390,7 +390,9 @@ export async function telaVendedores({ query }) {
       aviso('Marque o vendedor e o pedido sai da lista. Todas as notas daquele pedido '
         + 'recebem o mesmo vendedor de uma vez — inclusive as próximas.', 'info'),
 
-      h('div.lista', ...pedidos.map((p) => linhaPedido(p, vendedores)))),
+      h('div.lista', ...pedidos.slice(0, 50).map((p) => linhaPedido(p, vendedores))),
+      pedidos.length > 50 && h('p.pequeno.muted.centro',
+        `Mostrando os 50 maiores de ${pedidos.length}. Resolva estes e os próximos aparecem.`)),
 
     lista.length > 0 && h('div.empilha', { style: { gap: '10px' } },
       h('h2', { style: { marginTop: '6px' } }, `${lista.length} NF(s) que não chegaram a um pedido`),

@@ -298,11 +298,12 @@ console.log('\n▶ PDF: relatório que não sai em Excel');
   const leitura = await readFile(new File([pdfSimples(linhas)], 'receber.pdf', { type: 'application/pdf' }));
   igual('o PDF foi reconhecido como PDF', leitura.formato, 'pdf');
   const lidas = leitura.planilhas[0].linhas;
-  igual('o cabeçalho voltou coluna por coluna', lidas[1],
+  igual('o título do relatório não virou linha', lidas.some((l) => l.join(' ').includes('AMPLA -')), false);
+  igual('o cabeçalho voltou coluna por coluna', lidas[0],
     ['Destinado a', 'CPF/CNPJ', 'Descricao', 'Vencimento', 'Valor Total']);
-  igual('a primeira linha de dados voltou inteira', lidas[2],
+  igual('a primeira linha de dados voltou inteira', lidas[1],
     ['Construtora Alfa Ltda', '11.222.333/0001-81', '1001', '10/09/2026', '15.000,00']);
-  igual('o título não virou uma linha de dados', lidas[0].filter(Boolean).length, 1);
+  igual('e só entraram cabeçalho e as duas vendas', lidas.length, 3);
 
   // e o PDF de verdade, gerado por navegador: fonte embutida, Identity-H, acento
   const daPasta = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'contas-a-receber.pdf');
@@ -311,13 +312,13 @@ console.log('\n▶ PDF: relatório que não sai em Excel');
   ));
   const reais = bytes.planilhas[0].linhas;
   igual('PDF com fonte embutida: cabeçalho com acento',
-    reais[1], ['Destinado a', 'CPF/CNPJ', 'Descrição', 'Vencimento', 'Situação', 'Valor Total', 'Nota Fiscal']);
+    reais[0], ['Destinado a', 'CPF/CNPJ', 'Descrição', 'Vencimento', 'Situação', 'Valor Total', 'Nota Fiscal']);
   igual('PDF com fonte embutida: CNPJ não ganhou espaço na quebra',
-    reais[2][1], '11.222.333/0001-81');
-  igual('PDF com fonte embutida: acento no nome do cliente', reais[3][0], 'João da Silva');
+    reais[1][1], '11.222.333/0001-81');
+  igual('PDF com fonte embutida: acento no nome do cliente', reais[2][0], 'João da Silva');
 
   // e o mapeamento automático funciona igual ao de planilha
-  const mapeamento = ingest.sugerirMapeamento('receber', reais[1].map(String));
+  const mapeamento = ingest.sugerirMapeamento('receber', reais[0].map(String));
   ok('as colunas do PDF casam com os campos do app',
     mapeamento.clienteNome === 'Destinado a' && mapeamento.nfNumero === 'Nota Fiscal', JSON.stringify(mapeamento));
 }
@@ -623,6 +624,56 @@ console.log('\n▶ Recomeçar do zero (uma vez só)');
     regras.some((x) => x.percentual === 2) && regras.some((x) => x.percentual === 0.5),
     JSON.stringify(regras.map((x) => x.percentual)));
   ok('e as contas bancárias também', (await store.contas.listar()).length > 0, '');
+}
+
+
+console.log('\n▶ Relatório de verdade do Gestão Click');
+{
+  // 16 páginas, 334 vendas, nomes de cliente que quebram em três linhas. O
+  // próprio relatório declara os totais no topo — é contra eles que se confere.
+  const caminho = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'gestao-click-vendas.pdf');
+  const leitura = await readFile(new File([readFileSync(caminho)], 'vendas.pdf', { type: 'application/pdf' }));
+  const linhas = leitura.planilhas[0].linhas;
+
+  const cab = linhas.find((l) => l.includes('Nº') && l.includes('Cliente'));
+  igual('o cabeçalho da tabela foi reconhecido', cab,
+    ['Nº', 'Cliente', 'Data', 'Prazo de entrega', '', 'Situação', 'Valor custo', '', 'Valor']);
+
+  const vendas = linhas.filter((l) => /^\d+$/.test(String(l[0] || '').trim()));
+  igual('as 334 vendas que o relatório declara', vendas.length, 334);
+
+  const num = (v) => {
+    const t = String(v || '').trim();
+    return /^[\d.]+,\d{2}$/.test(t) ? Number(t.replace(/\./g, '').replace(',', '.')) : 0;
+  };
+  const iValor = cab.lastIndexOf('Valor');
+  const iCusto = cab.indexOf('Valor custo');
+  const soma = (i) => Math.round(vendas.reduce((a, l) => a + num(l[i]), 0) * 100) / 100;
+  igual('somando o valor, dá o total do relatório', soma(iValor), 685698.19);
+  igual('somando o custo, idem', soma(iCusto), 465000.85);
+
+  igual('nenhuma venda ficou sem cliente',
+    vendas.filter((l) => !String(l[1] || '').trim()).length, 0);
+  ok('nome comprido quebrado em três linhas voltou inteiro',
+    vendas.some((l) => l[1] === 'SANTA AGDA IMOB. ADM. DE BENS E PART. LTDA'),
+    JSON.stringify(vendas.find((l) => l[0] === '1147')));
+  ok('acento preservado', vendas.some((l) => l[1] === 'FÁBIO PEDROSO LUCAS'), '');
+  ok('o rodapé de página não virou registro',
+    !linhas.some((l) => l.join(' ').includes('Página')), '');
+  ok('e o app diz o que deixou de fora', /ficaram de fora/.test(leitura.aviso || ''), leitura.aviso || '');
+
+  // e as colunas casam sozinhas com os campos do app
+  const mapa = ingest.sugerirMapeamento('pedidos', cab.map(String));
+  igual('as colunas do Gestão Click casam sozinhas', mapa, {
+    numero: 'Nº',
+    clienteNome: 'Cliente',
+    data: 'Data',
+    status: 'Situação',
+    valorCusto: 'Valor custo',
+    valorTotal: 'Valor',
+  });
+  ok('e o app não inventa vendedor: este relatório não traz a coluna',
+    mapa.vendedorNome === undefined, JSON.stringify(mapa));
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

@@ -67,6 +67,17 @@ O que ele resolve sozinho:
   hífen, que volta como `11.222.333/0001-81` e não `11.222.333/0001- 81`;
 - coluna de valor alinhada à direita continua sendo uma coluna só.
 
+Conferido contra um relatório de vendas de verdade do **Gestão Click**: 16
+páginas, 334 vendas, nomes de cliente quebrados em até três linhas. O app
+reconstruiu as 334 vendas e as somas bateram na vírgula com os totais que o
+próprio relatório declara no topo — R$ 685.698,19 de valor e R$ 465.000,85 de
+custo. Esse arquivo virou teste fixo.
+
+Duas coisas o app diz em vez de esconder: quantas linhas de título, cabeçalho
+repetido e numeração de página ficaram de fora, e quantos pedaços de texto não
+couberam em nenhuma linha (normalmente o fim de um nome muito comprido — o valor
+e a data não são afetados).
+
 **PDF escaneado (foto do papel) não serve.** Não há OCR e não vai haver chute: o
 app avisa que o arquivo não tem texto e pede o relatório gerado direto do
 sistema. Adivinhar número de imagem seria o oposto do item 20.

@@ -424,6 +424,13 @@ function passoVendedores(estado, ctx) {
 
   if (!pendentes.length) return [h('p.pequeno.muted', 'Nada pendente.')];
 
+  // Um mês inteiro de vendas sem a coluna de vendedor são centenas de cartões:
+  // a tela trava e ninguém resolve 334 de uma vez. Mostra as que mais pesam e
+  // diz onde está o resto.
+  const LOTE = 20;
+  const mostrar = pendentes.slice(0, LOTE);
+  const resto = pendentes.length - mostrar.length;
+
   return [
     card(`${pendentes.length} venda(s) vieram sem vendedor`,
       h('span.num.forte', money(total)),
@@ -433,7 +440,11 @@ function passoVendedores(estado, ctx) {
       h('p.mini.muted', { style: { marginTop: '6px' } },
         'Se deixar para depois, esse faturamento fica fora do ranking e da comissão até alguém resolver.')),
 
-    ...pendentes.map((item) => h('div.card',
+    resto > 0 && aviso(`O arquivo não trouxe a coluna VENDEDOR. São ${pendentes.length} vendas sem dono — `
+      + `aqui estão as ${LOTE} maiores. Se o seu relatório puder sair com a coluna do vendedor, `
+      + 'a comissão fecha sozinha e você não precisa marcar nenhuma.', 'atencao'),
+
+    ...mostrar.map((item) => h('div.card',
       h('div.linha.linha--entre', { style: { alignItems: 'flex-start' } },
         h('div.crescer',
           h('strong', `Pedido ${item.pedido.numero || '(sem número)'}`),
@@ -451,6 +462,9 @@ function passoVendedores(estado, ctx) {
           pequeno: true, desabilitado: estado.ocupado, onClick: () => marcar(item, v.id),
         })),
         botao('+ outro', { pequeno: true, desabilitado: estado.ocupado, onClick: () => novoVendedor(item) })))),
+
+    resto > 0 && h('p.pequeno.muted.centro',
+      `e mais ${resto} — o resto fica no menu ☰ › O que ficou sem vendedor.`),
 
     botao('Deixar para depois', {
       bloco: true,
