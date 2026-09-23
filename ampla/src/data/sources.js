@@ -201,15 +201,18 @@ export const FONTES = {
     periodicidade: 'mensal',
     store: 'produtos',
     verdadeDe: 'Nome, custo e NCM de cada produto.',
-    descricao: 'Relatório de produtos. Do que existe nele, o app usa: código interno, nome, '
-      + 'valor de custo e NCM. CEST, CFOP, grupo e estoque não são usados.',
+    descricao: 'Relatório de produtos. O app usa código interno, nome, valor de custo, NCM e '
+      + 'grupo (que é como a Curva ABC agrupa). Estoque, fornecedor e valor de varejo vêm no '
+      + 'relatório mas ainda não são usados por nenhuma tela.',
     formatos: ['xlsx', 'csv', 'pdf'],
-    colunasReais: ['código interno', 'nome', 'valor de custo', 'NCM'],
+    colunasReais: ['código interno', 'nome', 'valor de custo', 'NCM', 'grupo'],
     campos: [
       campo('codigo', 'Código interno', 'texto', { chaveNatural: true, sinonimos: ['codigo interno', 'código interno', 'codigo', 'cod', 'sku', 'referencia', 'ref'] }),
       campo('descricao', 'Nome', 'texto', { sinonimos: ['nome', 'descricao', 'descrição', 'produto', 'mercadoria'] }),
       campo('custo', 'Valor de custo', 'dinheiro', { sinonimos: ['valor de custo', 'valor custo', 'custo', 'preco custo', 'custo medio'] }),
       campo('ncm', 'NCM', 'texto', { sinonimos: ['ncm'] }),
+      // é por esta coluna que a Curva ABC agrupa por categoria
+      campo('categoria', 'Grupo', 'texto', { sinonimos: ['grupo', 'categoria', 'familia', 'linha', 'departamento'] }),
     ],
   },
 

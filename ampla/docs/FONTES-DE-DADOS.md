@@ -54,7 +54,7 @@ importador usa. Mexer lá muda o app; este documento é só a leitura humana.
 
 ## Os relatórios do Gestão Click já vêm reconhecidos
 
-Seis relatórios do Gestão Click têm o cabeçalho cadastrado em
+Sete relatórios do Gestão Click têm o cabeçalho cadastrado em
 `src/data/perfis.js`. Quando o arquivo bate com um deles, o app **não pergunta
 nada**: acha o cabeçalho no meio do relatório (depois do título e do bloco de
 totais), liga as colunas sozinho e vai direto para a conferência.
@@ -66,12 +66,19 @@ totais), liga as colunas sozinho e vai direto para a conferência.
 | Contas a receber | Contas a receber | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Vencimento · Situação · Valor · Valor total · NF-e |
 | Contas a pagar | Contas a pagar | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Data de vencimento · Situação · Valor · Valor total · NF-e |
 | Orçamentos | Orçamentos | Nº · Cliente · Data · Previsão de entrega · Situação · Valor |
-| Clientes | Clientes | Nome/Razão social · E-mail · CNPJ · CPF · Situação · Vendedor/Responsável |
+| Clientes | Clientes | Nome/Razão social · Documento · E-mail · Nome/Nome Fantasia · Razão Social/Nome Social · CNPJ · CPF · Situação · Vendedor/Responsável |
+| Produtos | Produtos | Cód. interno · Nome · Valor de custo · NCM · Grupo · Estoque · Fornecedor · Vr. Varejo |
 
 Detalhes que valem anotar:
 
 - **CPF e CNPJ vêm em colunas separadas**, e cada linha preenche só a sua. Um
   campo pode ser ligado a uma lista de colunas: vale a primeira preenchida.
+- **`-----` é como o Gestão Click escreve vazio.** O app trata assim; sem isso
+  existiria um grupo de produto chamado "-----" e um fornecedor com o mesmo
+  nome — dado que não existe, com cara de que existe.
+- Do relatório de produtos o app usa código, nome, custo, NCM e **grupo** (é por
+  ele que a Curva ABC agrupa). Estoque, fornecedor e valor de varejo vêm no
+  arquivo mas ainda não são usados por nenhuma tela.
 - A **descrição** do contas a receber é `Venda de nº 70` — o número do pedido
   sai dali, e é ele que fecha a ponte com a nota fiscal.
 - O **relatório de vendas não traz vendedor**, e o **de contas a pagar não traz

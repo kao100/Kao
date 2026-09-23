@@ -85,7 +85,7 @@ function ler(registro, mapeamento, campo) {
   // Um campo pode vir de mais de uma coluna: o Gestão Click separa CPF e CNPJ
   // em duas, e cada linha preenche só a sua. Vale a primeira que tiver valor.
   const colunas = Array.isArray(ligacao) ? ligacao : [ligacao];
-  const coluna = colunas.find((c) => registro[c] != null && String(registro[c]).trim() !== '');
+  const coluna = colunas.find((c) => temConteudo(registro[c]));
   if (!coluna) return { valor: null, ausente: true };
   const bruto = registro[coluna];
 
@@ -101,6 +101,17 @@ function ler(registro, mapeamento, campo) {
   return { valor: String(bruto).trim() };
 }
 
+/**
+ * Célula com conteúdo de verdade. O Gestão Click escreve "-----" no lugar de
+ * vazio, e sem isto o app criaria um grupo de produto chamado "-----" e um
+ * fornecedor com o mesmo nome — dado que não existe, com cara de que existe.
+ */
+function temConteudo(valor) {
+  if (valor == null) return false;
+  const t = String(valor).trim();
+  return t !== '' && !/^[-–—_.]+$/.test(t);
+}
+
 /** Converte uma linha inteira. Devolve o que deu para ler e os avisos do caminho. */
 function lerLinha(fonte, registro, mapeamento) {
   const dados = {};
@@ -111,6 +122,11 @@ function lerLinha(fonte, registro, mapeamento) {
     if (!r.ausente && r.valor != null) dados[campo.chave] = r.valor;
   }
   return { dados, avisos, vazia: Object.keys(dados).length === 0 };
+}
+
+/** Só para o teste: lê uma linha solta sem montar registro nem gravar nada. */
+export function lerParaTeste(fonteId, registro, mapeamento) {
+  return lerLinha(FONTES[fonteId], registro, mapeamento);
 }
 
 /* ------------------------------------------------------------- preparação */

@@ -669,7 +669,7 @@ console.log('\n▶ Relatório paginado, como sai do sistema');
   ok('e o app diz o que deixou de fora', /ficaram de fora/.test(leitura.aviso || ''), leitura.aviso || '');
 }
 
-console.log('\n▶ Os seis relatórios do Gestão Click já vêm ligados');
+console.log('\n▶ Os sete relatórios do Gestão Click já vêm ligados');
 {
   // Ela não liga coluna nenhuma: o app conhece o cabeçalho de cada relatório.
   const esperado = {
@@ -678,9 +678,10 @@ console.log('\n▶ Os seis relatórios do Gestão Click já vêm ligados');
     'gc-receber': 'receber',
     'gc-pagar': 'pagar',
     'gc-orcamentos': 'orcamentos',
+    'gc-produtos': 'produtos',
     'gc-clientes': 'clientes',
   };
-  igual('os seis relatórios estão cadastrados',
+  igual('os sete relatórios estão cadastrados',
     Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
 
   for (const perfil of perfis.PERFIS) {
@@ -699,6 +700,16 @@ console.log('\n▶ Os seis relatórios do Gestão Click já vêm ligados');
       Object.keys(perfil.mapa).filter((k) => !campos.has(k)).join(', '));
   }
 
+
+  // "-----" é como o Gestão Click escreve vazio: não pode virar valor
+  const comTracos = {
+    'Cód. interno': '123', Nome: 'CIMENTO CP2 50KG', 'Valor de custo': '31,50',
+    NCM: '25232910', Grupo: '-----', Estoque: '-1,00', Fornecedor: '-----', 'Vr. Varejo': '39,90',
+  };
+  const lido = ingest.lerParaTeste('produtos', comTracos, perfis.PERFIS.find((p) => p.id === 'gc-produtos').mapa);
+  igual('o traço do Gestão Click não vira grupo de produto', lido.dados.categoria, undefined);
+  igual('mas o que tem valor entra', lido.dados.descricao, 'CIMENTO CP2 50KG');
+  igual('inclusive o custo', lido.dados.custo, 31.5);
   // o cabeçalho de vendas vem com colunas vazias no meio quando sai de PDF
   const comVazias = ['Nº', 'Cliente', 'Data', 'Prazo de entrega', '', 'Situação', 'Valor custo', '', 'Valor'];
   igual('coluna vazia no meio não atrapalha o reconhecimento',
@@ -707,6 +718,49 @@ console.log('\n▶ Os seis relatórios do Gestão Click já vêm ligados');
   // um cabeçalho parecido, mas de outro relatório, NÃO pode casar
   igual('cabeçalho diferente não é reconhecido à força',
     perfis.perfilDoCabecalho(['Nº', 'Cliente', 'Data']), null);
+}
+
+
+console.log('\n▶ Relatório de produtos');
+{
+  // Fixture sintética no formato do relatório de produtos do Gestão Click:
+  // Cód. interno · Nome · Valor de custo · NCM · Grupo · Estoque · Fornecedor ·
+  // Vr. Varejo, com "-----" nos campos vazios e estoque negativo.
+  const caminho = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'relatorio-produtos.pdf');
+  const leitura = await readFile(new File([readFileSync(caminho)], 'produtos.pdf', { type: 'application/pdf' }));
+  const linhas = leitura.planilhas[0].linhas;
+
+  const achado = perfis.reconhecer(linhas);
+  igual('o relatório de produtos é reconhecido', achado?.perfil.id, 'gc-produtos');
+  igual('e vai para a fonte de produtos', achado.perfil.fonte, 'produtos');
+  igual('as oito colunas foram separadas', linhas[achado.headerRow],
+    ['Cód. interno', 'Nome', 'Valor de custo', 'NCM', 'Grupo', 'Estoque', 'Fornecedor', 'Vr. Varejo']);
+
+  const itens = linhas.slice(achado.headerRow + 1).filter((l) => /^\d{10,}$/.test(String(l[0] || '').trim()));
+  igual('os 80 produtos do arquivo', itens.length, 80);
+  igual('todos com nome', itens.filter((l) => l[1]).length, 80);
+
+  const num = (v) => {
+    const t = String(v || '').trim();
+    return /^[\d.]+,\d{2}$/.test(t) ? Number(t.replace(/\./g, '').replace(',', '.')) : 0;
+  };
+  igual('e a soma dos custos bate',
+    Math.round(itens.reduce((a, l) => a + num(l[2]), 0) * 100) / 100, 105455.86);
+
+  // e o que o app grava a partir disso
+  const preparo = await ingest.prepararTabular({
+    fonteId: 'produtos',
+    leitura,
+    planilhaIndex: 0,
+    headerRow: achado.headerRow,
+    mapeamento: achado.perfil.mapa,
+  });
+  const gravados = [...preparo.porStore.produtos.values()];
+  igual('os 80 produtos entram', gravados.length, 80);
+  igual('nenhum grupo "-----" foi inventado',
+    gravados.filter((p) => p.categoria).length, 0);
+  ok('o custo virou número', gravados.every((p) => p.custo == null || typeof p.custo === 'number'), '');
+  ok('e o NCM entrou', gravados.filter((p) => p.ncm).length === 80, '');
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

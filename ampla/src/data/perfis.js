@@ -101,14 +101,30 @@ export const PERFIS = [
     },
   },
   {
+    id: 'gc-produtos',
+    fonte: 'produtos',
+    nome: 'Relatório de produtos',
+    colunas: ['Cód. interno', 'Nome', 'Valor de custo', 'NCM', 'Grupo', 'Estoque',
+      'Fornecedor', 'Vr. Varejo'],
+    mapa: {
+      codigo: 'Cód. interno',
+      descricao: 'Nome',
+      custo: 'Valor de custo',
+      ncm: 'NCM',
+      categoria: 'Grupo',
+    },
+    observacao: 'Estoque, fornecedor e valor de varejo vêm no relatório, mas ainda não são '
+      + 'usados por nenhuma tela — quando forem, entram sem você precisar reenviar nada.',
+  },
+  {
     id: 'gc-clientes',
     fonte: 'clientes',
     nome: 'Relatório de clientes',
-    colunas: ['Nome/Razão social Documento', 'E-mail', 'Nome/Nome Fantasia Razão Social/Nome Social',
-      'CNPJ', 'CPF', 'Situação', 'Vendedor/Responsável'],
+    colunas: ['Nome/Razão social', 'Documento', 'E-mail', 'Nome/Nome Fantasia',
+      'Razão Social/Nome Social', 'CNPJ', 'CPF', 'Situação', 'Vendedor/Responsável'],
     mapa: {
-      nome: 'Nome/Nome Fantasia Razão Social/Nome Social',
-      documento: ['CNPJ', 'CPF'],
+      nome: ['Razão Social/Nome Social', 'Nome/Nome Fantasia', 'Nome/Razão social'],
+      documento: ['CNPJ', 'CPF', 'Documento'],
       email: 'E-mail',
       // "Situação" (Ativo/Inativo) vem no relatório, mas o app ainda não usa
       // status de cliente para nada — ligar um campo que ninguém lê só criaria

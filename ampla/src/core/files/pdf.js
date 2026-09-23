@@ -466,27 +466,67 @@ function montarCelulas(itens) {
 }
 
 /**
- * Descobre as colunas pelo espaço que cada célula ocupa. Agrupar por
- * sobreposição (e não pela borda esquerda) é o que faz a coluna de valor,
- * alinhada à direita, continuar sendo uma coluna só.
+ * Descobre as colunas pelos CORREDORES EM BRANCO da tabela.
  *
- * Só as linhas com cara de tabela entram nessa conta. O título do relatório e
- * a linha de período atravessam a página inteira: se contassem, sobreporiam
- * todas as colunas de uma vez e o relatório viraria uma coluna só.
+ * A primeira versão agrupava por sobreposição: duas células que se tocam viram
+ * a mesma coluna. Funciona em tabela pequena e falha feio em tabela grande —
+ * entre 3.600 produtos basta UM nome comprido encostar na coluna de custo para
+ * as duas virarem uma só no documento inteiro, e a coluna do nome sumir.
+ *
+ * Aqui a conta é por cobertura: para cada faixa de x, quantas linhas têm texto
+ * ali. Onde quase nenhuma tem, é corredor — o espaço branco entre colunas. As
+ * colunas são o que sobra entre um corredor e o outro. Um nome comprido isolado
+ * não apaga um corredor que 3.599 linhas mantêm aberto.
  */
 function descobrirColunas(linhas) {
+  const corpo = linhasDeTabela(linhas);
+  const celulas = corpo.flatMap((l) => l.celulas);
+  if (!celulas.length) return [];
+
+  const inicio = Math.min(...celulas.map((c) => c.x));
+  const fim = Math.max(...celulas.map((c) => c.x + c.largura));
+  const largura = fim - inicio;
+  if (!(largura > 0)) return [{ inicio, fim: fim + 1 }];
+
+  const BINS = 2000;
+  const passo = largura / BINS;
+  const cobertura = new Float64Array(BINS + 1);
+  for (const c of celulas) {
+    const de = Math.max(0, Math.floor((c.x - inicio) / passo));
+    const ate = Math.min(BINS, Math.ceil((c.x + c.largura - inicio) / passo));
+    for (let k = de; k <= ate; k += 1) cobertura[k] += 1;
+  }
+
+  // um corredor de verdade é usado por pouquíssimas linhas; o limite sobe junto
+  // com o tamanho da tabela para uma linha torta não fechar o corredor sozinha
+  const limite = Math.max(1, corpo.length * 0.02);
+
+  const faixas = [];
+  let atual = null;
+  for (let k = 0; k <= BINS; k += 1) {
+    const temTexto = cobertura[k] > limite;
+    if (temTexto && !atual) atual = { inicio: inicio + k * passo, fim: inicio + k * passo };
+    else if (temTexto) atual.fim = inicio + k * passo;
+    else if (atual) { faixas.push(atual); atual = null; }
+  }
+  if (atual) faixas.push(atual);
+  if (!faixas.length) return [{ inicio, fim }];
+
+  // o que ficou de fora do corredor (a linha torta) entra na coluna mais perto
+  faixas[0].inicio = Math.min(faixas[0].inicio, inicio);
+  faixas[faixas.length - 1].fim = Math.max(faixas[faixas.length - 1].fim, fim);
+  return faixas;
+}
+
+/**
+ * As linhas com cara de tabela. O título do relatório e a linha de período
+ * atravessam a página inteira: contá-los taparia todos os corredores de uma vez.
+ */
+function linhasDeTabela(linhas) {
   const contagens = linhas.map((l) => l.celulas.length).sort((a, b) => a - b);
   const maxCelulas = contagens[contagens.length - 1] || 0;
   const corpo = linhas.filter((l) => l.celulas.length >= Math.max(2, Math.ceil(maxCelulas / 2)));
-  const base = corpo.length ? corpo : linhas;
-
-  const faixas = [];
-  for (const c of base.flatMap((l) => l.celulas).sort((a, b) => a.x - b.x)) {
-    const fim = c.x + c.largura;
-    const faixa = faixas.find((f) => c.x < f.fim && fim > f.inicio);
-    if (faixa) { faixa.inicio = Math.min(faixa.inicio, c.x); faixa.fim = Math.max(faixa.fim, fim); } else faixas.push({ inicio: c.x, fim });
-  }
-  return faixas.sort((a, b) => a.inicio - b.inicio);
+  return corpo.length ? corpo : linhas;
 }
 
 /**
@@ -495,16 +535,14 @@ function descobrirColunas(linhas) {
  * de dados com a coluna livre e era colado dentro dela — uma conta a pagar
  * ficou com "Relatório de contas a pagar" no lugar do documento.
  *
- * Vale como enfeite o que se repete igual em várias páginas e o que é
- * numeração de página. Linha de dado não se repete inteira de página em página.
+ * Repetir não basta: "LTDA" sobra dezenas de vezes como fim de nome de empresa,
+ * e apagar isso truncaria o cliente. O que separa um do outro é a ALTURA NA
+ * FOLHA — o carimbo sai sempre na mesma margem, o pedaço de nome cai onde a
+ * venda dele estiver.
  */
 function tirarEnfeitesDePagina(visuais) {
   const texto = (l) => l.celulas.map((c) => c.texto).join('\u0001');
 
-  // Repetir não basta: "LTDA" sobra dezenas de vezes como fim de nome de
-  // empresa, e apagar isso truncaria o cliente. O que separa um do outro é a
-  // ALTURA NA FOLHA — o carimbo sai sempre na mesma margem, o pedaço de nome
-  // cai onde a venda dele estiver.
   const posicoes = new Map();
   for (const l of visuais) {
     const k = texto(l);
@@ -559,7 +597,7 @@ function montarMatriz(linhasVisuais) {
     return { y: l.y, celulas, preenchidas: celulas.filter((a) => a.length).length };
   });
 
-  return juntarQuebras(linhas).map((l) => l.celulas.map(montarTexto));
+  return juntarQuebras(linhas, colunas.length).map((l) => l.celulas.map(montarTexto));
 }
 
 /** Os pedaços de uma célula, de cima para baixo, colados na ordem certa. */
@@ -586,19 +624,14 @@ function montarTexto(pedacos) {
  * de um mês em 16 linhas, uma por página. Esta regra não corre esse risco: sem
  * a coluna vazia do outro lado, ela não junta nada.
  */
-function juntarQuebras(linhas) {
-  // A moda é medida só entre as linhas com cara de tabela. O cabeçalho do
-  // relatório — título, período, os totais do mês — tem dezenas de linhas de
-  // uma célula só, e contá-las faria "1" virar a largura normal da tabela.
-  const frequencia = new Map();
-  for (const l of linhas) {
-    if (l.preenchidas >= 3) frequencia.set(l.preenchidas, (frequencia.get(l.preenchidas) || 0) + 1);
-  }
-  const comum = [...frequencia.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || 0;
-  // sem um corpo de tabela claro, não há o que reconhecer como quebra
-  if (comum < 3) return linhas.filter((l) => l.preenchidas > 0);
+function juntarQuebras(linhas, quantasColunas) {
+  // A referência é o NÚMERO DE COLUNAS da tabela, não a contagem mais comum.
+  // Num relatório em que quase todo nome quebra, os pedaços são mais numerosos
+  // que os registros, e a moda elegia o pedaço como tamanho normal da linha —
+  // aí nada era reconhecido como quebra e nada era juntado.
+  if (quantasColunas < 3) return linhas.filter((l) => l.preenchidas > 0);
 
-  const limite = Math.max(2, Math.ceil(comum / 2));
+  const limite = Math.max(2, Math.ceil(quantasColunas / 2));
   const fragmento = (l) => l.preenchidas > 0 && l.preenchidas < limite;
   const registros = linhas.filter((l) => l.preenchidas > 0 && !fragmento(l));
   if (!registros.length) return linhas.filter((l) => l.preenchidas > 0);
@@ -606,34 +639,58 @@ function juntarQuebras(linhas) {
   // as colunas de cada registro ANTES de receber pedaço: é contra elas que a
   // colisão é medida, senão o primeiro pedaço bloquearia o segundo
   const originais = new Map(registros.map((r) => [r, r.celulas.map((a) => a.length > 0)]));
-  const absorvidos = new Set();
 
   const livre = (r, l) => {
     const ocupadas = originais.get(r);
     return !l.celulas.some((a, i) => a.length && ocupadas[i]);
   };
 
-  for (const l of linhas) {
-    if (!fragmento(l)) continue;
-    // O pedaço pertence ao registro de cima ou ao de baixo, nunca a outro. Um
-    // nome de quatro linhas tem pedaço dos dois lados do registro, e o mais
-    // distante cai mais perto do registro vizinho — que já tem o nome dele.
-    // Por isso a escolha é pelo mais próximo COM a coluna livre, e não
-    // simplesmente pelo mais próximo.
-    let acima = null;
-    let abaixo = null;
-    for (const r of registros) {
-      if (r.y > l.y && (!acima || r.y < acima.y)) acima = r;
-      if (r.y < l.y && (!abaixo || r.y > abaixo.y)) abaixo = r;
+  const emOrdem = [...linhas].filter((l) => l.preenchidas > 0).sort((a, b) => b.y - a.y);
+  const absorvidos = new Set();
+
+  /**
+   * Entre dois registros há uma fila de pedaços: o fim do nome de cima e o
+   * começo do nome de baixo. O corte é no MAIOR vão da fila — dentro de um
+   * nome as linhas são coladas, e entre um produto e o outro entra a folga da
+   * linha da tabela. Era isso que faltava: pela distância pura, um nome de
+   * cinco linhas gruda a ponta no produto vizinho.
+   */
+  const repartir = (fila, acima, abaixo) => {
+    if (!fila.length) return;
+    if (!acima) { fila.forEach((l) => colar(l, abaixo)); return; }
+    if (!abaixo) { fila.forEach((l) => colar(l, acima)); return; }
+
+    const alturas = [acima.y, ...fila.map((l) => l.y), abaixo.y];
+    let corte = 0;
+    let maior = -Infinity;
+    for (let k = 1; k < alturas.length; k += 1) {
+      const vao = alturas[k - 1] - alturas[k];
+      if (vao > maior) { maior = vao; corte = k; }
     }
-    const candidatos = [acima, abaixo]
-      .filter(Boolean)
-      .sort((a, b) => Math.abs(a.y - l.y) - Math.abs(b.y - l.y));
-    const alvo = candidatos.find((r) => livre(r, l));
-    if (!alvo) continue;
+    fila.forEach((l, k) => {
+      const preferido = k < corte - 1 ? acima : abaixo;
+      // se o preferido já tem aquela coluna ocupada, o pedaço é do outro lado:
+      // ele só pode pertencer a um dos dois registros que o cercam
+      if (!colar(l, preferido)) colar(l, preferido === acima ? abaixo : acima);
+    });
+  };
+
+  const colar = (l, alvo) => {
+    if (!alvo || !livre(alvo, l)) return false;
     l.celulas.forEach((a, i) => { if (a.length) alvo.celulas[i].push(...a); });
     absorvidos.add(l);
+    return true;
+  };
+
+  let fila = [];
+  let anterior = null;
+  for (const l of emOrdem) {
+    if (fragmento(l)) { fila.push(l); continue; }
+    repartir(fila, anterior, l);
+    fila = [];
+    anterior = l;
   }
+  repartir(fila, anterior, null);
 
   return linhas.filter((l) => l.preenchidas > 0 && !absorvidos.has(l));
 }
