@@ -490,6 +490,43 @@ function descobrirColunas(linhas) {
 }
 
 /**
+ * Tira o enfeite de página ANTES de juntar pedaço. Enquanto ele ficava, o
+ * cabeçalho repetido de cada página entrava como pedaço solto, achava uma linha
+ * de dados com a coluna livre e era colado dentro dela — uma conta a pagar
+ * ficou com "Relatório de contas a pagar" no lugar do documento.
+ *
+ * Vale como enfeite o que se repete igual em várias páginas e o que é
+ * numeração de página. Linha de dado não se repete inteira de página em página.
+ */
+function tirarEnfeitesDePagina(visuais) {
+  const texto = (l) => l.celulas.map((c) => c.texto).join('\u0001');
+
+  // Repetir não basta: "LTDA" sobra dezenas de vezes como fim de nome de
+  // empresa, e apagar isso truncaria o cliente. O que separa um do outro é a
+  // ALTURA NA FOLHA — o carimbo sai sempre na mesma margem, o pedaço de nome
+  // cai onde a venda dele estiver.
+  const posicoes = new Map();
+  for (const l of visuais) {
+    const k = texto(l);
+    if (!posicoes.has(k)) posicoes.set(k, []);
+    posicoes.get(k).push(l.yPagina ?? l.y);
+  }
+
+  const carimbo = new Set();
+  for (const [k, ys] of posicoes) {
+    if (ys.length < 2) continue;
+    if (Math.max(...ys) - Math.min(...ys) <= 2) carimbo.add(k);
+  }
+
+  const marcaDePagina = /^(p[aá]g(ina)?\.?\s*)?\d+\s*(de|\/)\s*\d+$/i;
+  return visuais.filter((l) => {
+    const cheias = l.celulas.filter((c) => c.texto.trim());
+    if (cheias.length === 1 && marcaDePagina.test(cheias[0].texto.trim())) return false;
+    return !(carimbo.has(texto(l)) && l.celulas.length <= 3);
+  });
+}
+
+/**
  * UMA LINHA VISUAL É UM REGISTRO.
  *
  * Existe a tentação de juntar linhas pelo espaçamento quando uma célula
@@ -737,11 +774,13 @@ export async function readPdf(buffer, nomeArquivo = 'PDF') {
     // O deslocamento em y mantém cada página no seu bloco, já que o y recomeça
     // do topo a cada página.
     const desvio = pagina * 100000;
-    for (const l of visuais) todas.push({ ...l, y: l.y - desvio });
+    // yPagina guarda a altura ORIGINAL na folha: é ela que denuncia o enfeite,
+    // que sai sempre no mesmo lugar da margem em todas as páginas
+    for (const l of visuais) todas.push({ ...l, y: l.y - desvio, yPagina: l.y });
     pagina += 1;
   }
 
-  const matriz = montarMatriz(todas);
+  const matriz = montarMatriz(tirarEnfeitesDePagina(todas));
 
   if (!matriz.length) {
     throw new Error('Este PDF não tem texto — parece ser digitalizado (imagem). '

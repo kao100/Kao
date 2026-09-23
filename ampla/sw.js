@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v11';
+const CACHE = 'ampla-v12';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -14,7 +14,7 @@ const APP_SHELL = [
   'src/core/files/zip.js', 'src/core/files/xlsx.js', 'src/core/files/xlsxw.js',
   'src/core/files/csv.js', 'src/core/files/nfe.js', 'src/core/files/ofx.js', 'src/core/files/read.js',
   'src/core/files/pdf.js',
-  'src/data/sources.js', 'src/data/seed.js',
+  'src/data/sources.js', 'src/data/seed.js', 'src/data/perfis.js',
   'src/logic/dre.js', 'src/logic/dossie.js', 'src/logic/quotes.js', 'src/logic/diario.js',
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/collection.js', 'src/logic/cashflow.js', 'src/logic/abc.js', 'src/logic/routine.js',

@@ -35,6 +35,8 @@ const quotes = await import('../src/logic/quotes.js');
 const diario = await import('../src/logic/diario.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
+const perfis = await import('../src/data/perfis.js');
+const { FONTES } = await import('../src/data/sources.js');
 
 let passou = 0;
 let falhou = 0;
@@ -627,53 +629,84 @@ console.log('\n▶ Recomeçar do zero (uma vez só)');
 }
 
 
-console.log('\n▶ Relatório de verdade do Gestão Click');
+console.log('\n▶ Relatório paginado, como sai do sistema');
 {
-  // 16 páginas, 334 vendas, nomes de cliente que quebram em três linhas. O
-  // próprio relatório declara os totais no topo — é contra eles que se confere.
-  const caminho = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'gestao-click-vendas.pdf');
+  // Fixture SINTÉTICA, com a mesma estrutura do relatório de vendas do Gestão
+  // Click — título, período, bloco de totais, cabeçalho repetido a cada página,
+  // rodapé "Página N de M" e nomes de cliente que quebram em até três linhas.
+  // Os nomes são inventados de propósito: o repositório é público, e relatório
+  // de verdade leva nome, CNPJ e e-mail de cliente junto.
+  const caminho = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'relatorio-vendas-paginado.pdf');
   const leitura = await readFile(new File([readFileSync(caminho)], 'vendas.pdf', { type: 'application/pdf' }));
   const linhas = leitura.planilhas[0].linhas;
 
-  const cab = linhas.find((l) => l.includes('Nº') && l.includes('Cliente'));
-  igual('o cabeçalho da tabela foi reconhecido', cab,
-    ['Nº', 'Cliente', 'Data', 'Prazo de entrega', '', 'Situação', 'Valor custo', '', 'Valor']);
+  const achado = perfis.reconhecer(linhas);
+  ok('o app reconhece o relatório sozinho', !!achado, '(não reconheceu)');
+  igual('e sabe de que fonte ele é', achado.perfil.fonte, 'pedidos');
+
+  const cab = linhas[achado.headerRow];
+  igual('achou o cabeçalho no meio do arquivo, depois do bloco de totais', cab,
+    ['Nº', 'Cliente', 'Data', 'Prazo de entrega', 'Situação', 'Valor custo', 'Valor']);
 
   const vendas = linhas.filter((l) => /^\d+$/.test(String(l[0] || '').trim()));
-  igual('as 334 vendas que o relatório declara', vendas.length, 334);
+  igual('as 120 vendas do arquivo', vendas.length, 120);
 
   const num = (v) => {
     const t = String(v || '').trim();
     return /^[\d.]+,\d{2}$/.test(t) ? Number(t.replace(/\./g, '').replace(',', '.')) : 0;
   };
-  const iValor = cab.lastIndexOf('Valor');
-  const iCusto = cab.indexOf('Valor custo');
   const soma = (i) => Math.round(vendas.reduce((a, l) => a + num(l[i]), 0) * 100) / 100;
-  igual('somando o valor, dá o total do relatório', soma(iValor), 685698.19);
-  igual('somando o custo, idem', soma(iCusto), 465000.85);
+  igual('a soma dos valores bate com o total declarado', soma(cab.lastIndexOf('Valor')), 1068118.26);
+  igual('e a dos custos também', soma(cab.indexOf('Valor custo')), 586746.95);
 
-  igual('nenhuma venda ficou sem cliente',
-    vendas.filter((l) => !String(l[1] || '').trim()).length, 0);
   ok('nome comprido quebrado em três linhas voltou inteiro',
-    vendas.some((l) => l[1] === 'SANTA AGDA IMOB. ADM. DE BENS E PART. LTDA'),
-    JSON.stringify(vendas.find((l) => l[0] === '1147')));
-  ok('acento preservado', vendas.some((l) => l[1] === 'FÁBIO PEDROSO LUCAS'), '');
+    vendas.some((l) => l[1] === 'JACARANDA CONSTRUCOES E EMPREENDIMENTOS IMOBILIARIOS LTDA'),
+    JSON.stringify(vendas.map((l) => l[1]).filter((x) => x.length > 40).slice(0, 2)));
   ok('o rodapé de página não virou registro',
     !linhas.some((l) => l.join(' ').includes('Página')), '');
+  ok('o cabeçalho repetido a cada página entrou uma vez só',
+    linhas.filter((l) => l[0] === 'Nº').length === 1, '');
   ok('e o app diz o que deixou de fora', /ficaram de fora/.test(leitura.aviso || ''), leitura.aviso || '');
+}
 
-  // e as colunas casam sozinhas com os campos do app
-  const mapa = ingest.sugerirMapeamento('pedidos', cab.map(String));
-  igual('as colunas do Gestão Click casam sozinhas', mapa, {
-    numero: 'Nº',
-    clienteNome: 'Cliente',
-    data: 'Data',
-    status: 'Situação',
-    valorCusto: 'Valor custo',
-    valorTotal: 'Valor',
-  });
-  ok('e o app não inventa vendedor: este relatório não traz a coluna',
-    mapa.vendedorNome === undefined, JSON.stringify(mapa));
+console.log('\n▶ Os seis relatórios do Gestão Click já vêm ligados');
+{
+  // Ela não liga coluna nenhuma: o app conhece o cabeçalho de cada relatório.
+  const esperado = {
+    'gc-vendas': 'pedidos',
+    'gc-nfe': 'nfs',
+    'gc-receber': 'receber',
+    'gc-pagar': 'pagar',
+    'gc-orcamentos': 'orcamentos',
+    'gc-clientes': 'clientes',
+  };
+  igual('os seis relatórios estão cadastrados',
+    Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
+
+  for (const perfil of perfis.PERFIS) {
+    const achado = perfis.perfilDoCabecalho(perfil.colunas);
+    ok(`${perfil.nome}: o cabeçalho é reconhecido`, achado?.id === perfil.id, achado?.id || 'nenhum');
+
+    // toda coluna do mapa existe mesmo no cabeçalho, e todo campo existe na fonte
+    const doMapa = Object.values(perfil.mapa).flat();
+    ok(`${perfil.nome}: o mapa só cita colunas que o relatório tem`,
+      doMapa.every((c) => perfil.colunas.includes(c)),
+      doMapa.filter((c) => !perfil.colunas.includes(c)).join(', '));
+
+    const campos = new Set(FONTES[perfil.fonte].campos.map((c) => c.chave));
+    ok(`${perfil.nome}: o mapa só cita campos que a fonte tem`,
+      Object.keys(perfil.mapa).every((k) => campos.has(k)),
+      Object.keys(perfil.mapa).filter((k) => !campos.has(k)).join(', '));
+  }
+
+  // o cabeçalho de vendas vem com colunas vazias no meio quando sai de PDF
+  const comVazias = ['Nº', 'Cliente', 'Data', 'Prazo de entrega', '', 'Situação', 'Valor custo', '', 'Valor'];
+  igual('coluna vazia no meio não atrapalha o reconhecimento',
+    perfis.perfilDoCabecalho(comVazias)?.id, 'gc-vendas');
+
+  // um cabeçalho parecido, mas de outro relatório, NÃO pode casar
+  igual('cabeçalho diferente não é reconhecido à força',
+    perfis.perfilDoCabecalho(['Nº', 'Cliente', 'Data']), null);
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

@@ -52,6 +52,38 @@ importador usa. Mexer lá muda o app; este documento é só a leitura humana.
 
 ---
 
+## Os relatórios do Gestão Click já vêm reconhecidos
+
+Seis relatórios do Gestão Click têm o cabeçalho cadastrado em
+`src/data/perfis.js`. Quando o arquivo bate com um deles, o app **não pergunta
+nada**: acha o cabeçalho no meio do relatório (depois do título e do bloco de
+totais), liga as colunas sozinho e vai direto para a conferência.
+
+| Relatório | Vai para | Colunas |
+|---|---|---|
+| Vendas | Pedidos | Nº · Cliente · Data · Prazo de entrega · Situação · Valor custo · Valor |
+| Notas fiscais (NF-e) | Notas fiscais | Nº · Data · Razão social/Nome · CNPJ/CPF · Total · Situação |
+| Contas a receber | Contas a receber | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Vencimento · Situação · Valor · Valor total · NF-e |
+| Contas a pagar | Contas a pagar | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Data de vencimento · Situação · Valor · Valor total · NF-e |
+| Orçamentos | Orçamentos | Nº · Cliente · Data · Previsão de entrega · Situação · Valor |
+| Clientes | Clientes | Nome/Razão social · E-mail · CNPJ · CPF · Situação · Vendedor/Responsável |
+
+Detalhes que valem anotar:
+
+- **CPF e CNPJ vêm em colunas separadas**, e cada linha preenche só a sua. Um
+  campo pode ser ligado a uma lista de colunas: vale a primeira preenchida.
+- A **descrição** do contas a receber é `Venda de nº 70` — o número do pedido
+  sai dali, e é ele que fecha a ponte com a nota fiscal.
+- O **relatório de vendas não traz vendedor**, e o **de contas a pagar não traz
+  plano de contas** (então o DRE sai sem a divisão por conta).
+- O de clientes traz `Vendedor/Responsável`, mas ele **não é usado** para
+  atribuir faturamento: a empresa confirmou que o mesmo cliente compra de
+  vendedores diferentes.
+- Se o Gestão Click mudar uma coluna, o perfil deixa de casar e o app volta a
+  perguntar — em vez de ligar errado calado.
+
+---
+
 ## PDF também serve
 
 Um dos sistemas não exporta planilha — o relatório sai em PDF e pronto. O app
@@ -67,11 +99,22 @@ O que ele resolve sozinho:
   hífen, que volta como `11.222.333/0001-81` e não `11.222.333/0001- 81`;
 - coluna de valor alinhada à direita continua sendo uma coluna só.
 
-Conferido contra um relatório de vendas de verdade do **Gestão Click**: 16
-páginas, 334 vendas, nomes de cliente quebrados em até três linhas. O app
-reconstruiu as 334 vendas e as somas bateram na vírgula com os totais que o
-próprio relatório declara no topo — R$ 685.698,19 de valor e R$ 465.000,85 de
-custo. Esse arquivo virou teste fixo.
+Conferido contra os seis relatórios de verdade do **Gestão Click** — vendas,
+notas fiscais, contas a receber, contas a pagar, orçamentos e clientes. Cada um
+declara os próprios totais no topo, e todos bateram na vírgula:
+
+| Relatório | Registros | Soma |
+|---|---|---|
+| Contas a receber | 398 | R$ 792.526,47 |
+| Contas a pagar | 388 | R$ 730.696,30 |
+| Orçamentos | 685 | R$ 2.300.243,07 |
+| Notas fiscais | 336 | R$ 706.537,21 |
+| Vendas | 334 | R$ 685.698,19 |
+
+A fixture do teste é **sintética**, com a mesma estrutura (cabeçalho repetido por
+página, rodapé, nomes que quebram em três linhas) e nomes inventados: o
+repositório é público e relatório de verdade leva nome, CNPJ e e-mail de cliente
+junto.
 
 Duas coisas o app diz em vez de esconder: quantas linhas de título, cabeçalho
 repetido e numeração de página ficaram de fora, e quantos pedaços de texto não

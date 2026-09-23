@@ -79,10 +79,15 @@ export function camposSemLigacao(fonteId, mapeamento) {
  * e a linha entra assim mesmo.
  */
 function ler(registro, mapeamento, campo) {
-  const coluna = mapeamento[campo.chave];
+  const ligacao = mapeamento[campo.chave];
+  if (!ligacao) return { valor: null, ausente: true };
+
+  // Um campo pode vir de mais de uma coluna: o Gestão Click separa CPF e CNPJ
+  // em duas, e cada linha preenche só a sua. Vale a primeira que tiver valor.
+  const colunas = Array.isArray(ligacao) ? ligacao : [ligacao];
+  const coluna = colunas.find((c) => registro[c] != null && String(registro[c]).trim() !== '');
   if (!coluna) return { valor: null, ausente: true };
   const bruto = registro[coluna];
-  if (bruto == null || String(bruto).trim() === '') return { valor: null, ausente: true };
 
   if (campo.tipo === 'data') {
     const iso = parseAnyDate(bruto);

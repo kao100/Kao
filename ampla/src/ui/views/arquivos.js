@@ -13,6 +13,7 @@ import * as ingest from '../../logic/ingest.js';
 import { recalcular, pedidosSemVendedor, definirVendedorDoPedido } from '../../logic/link.js';
 import { rotina, selo as seloRotina } from '../../logic/routine.js';
 import { FONTES, FONTES_LISTA, PERIODICIDADE } from '../../data/sources.js';
+import { reconhecer } from '../../data/perfis.js';
 import { readFile, detectHeaderRow, rowsToObjects, FORMATOS, formatoSuportado, acceptSuportado } from '../../core/files/read.js';
 import { definirTitulo, seloDados, atualizarAlertas } from '../shell.js';
 import { kpi, card, secao, botao, aviso, selo } from '../components/ui.js';
@@ -94,6 +95,8 @@ export async function telaImportar({ params }) {
     preparo: null,
     ocupado: false,
     aviso: null,
+    perfil: null,
+    outraFonte: null,
   };
 
   // frag() filtra os nulos das condicionais; replaceChildren() cru viraria
@@ -163,6 +166,18 @@ function passoArquivo(estado, ctx) {
         ...contas.map((c) => h('option', { value: c.id }, c.nome)))),
 
     zona,
+
+    estado.outraFonte && h('div.card.card--alerta',
+      h('h3', `Este arquivo é o ${estado.outraFonte.nome}`),
+      h('p.pequeno.muted', { style: { margin: '4px 0 10px' } },
+        `Você está em "${fonte.nome}". O app reconheceu o relatório e sabe ler as colunas dele — `
+        + 'é só ir para o lugar certo.'),
+      botao(`Importar como ${FONTES[estado.outraFonte.fonte]?.nome || estado.outraFonte.fonte}`, {
+        tipo: 'primario',
+        bloco: true,
+        onClick: () => navigate(`/arquivos/${estado.outraFonte.fonte}`),
+      })),
+
     aindaNao(fonte).length > 0 && aviso(
       `Este relatório também sai em ${maiusc(aindaNao(fonte)).join(', ')}, mas o app `
       + 'ainda não lê esse formato. Por enquanto exporte em '
@@ -207,6 +222,33 @@ async function carregar(arquivo, estado, ctx) {
     } else {
       estado.planilhaIndex = 0;
       const linhas = leitura.planilhas[0].linhas;
+
+      // Relatório conhecido: o app já sabe o cabeçalho e a ligação das colunas,
+      // então não pergunta nada. Era isso que fazia ela ligar coluna toda vez.
+      const conhecido = reconhecer(linhas);
+      if (conhecido && conhecido.perfil.fonte === fonte.id) {
+        estado.headerRow = conhecido.headerRow;
+        estado.mapeamento = conhecido.perfil.mapa;
+        estado.perfil = conhecido.perfil;
+        estado.preparo = await ingest.prepararTabular({
+          fonteId: fonte.id,
+          leitura,
+          planilhaIndex: 0,
+          headerRow: conhecido.headerRow,
+          mapeamento: conhecido.perfil.mapa,
+          contaId: estado.contaId,
+        });
+        estado.passo = 'conferir';
+        return;
+      }
+      // é de outro relatório: manda para a fonte certa em vez de importar torto
+      if (conhecido) {
+        estado.outraFonte = conhecido.perfil;
+        estado.aviso = null;
+        estado.passo = 'arquivo';
+        return;
+      }
+
       estado.headerRow = detectHeaderRow(linhas);
       const { cabecalho } = rowsToObjects(linhas, estado.headerRow);
       const perfil = perfis.find((p) => p.fonte === fonte.id && p.assinatura === assinatura(cabecalho));
@@ -340,6 +382,12 @@ function passoConferir(estado, ctx) {
         h('strong', p.arquivo),
         h('div.mini.muted', `${FORMATOS[p.formato] || p.formato}${p.periodo.de ? ` · ${formatDate(p.periodo.de)} a ${formatDate(p.periodo.ate)}` : ''}`)),
       botao('Voltar', { pequeno: true, onClick: () => { estado.passo = estado.leitura.planilhas.length ? 'mapear' : 'arquivo'; desenhar(); } })),
+
+    estado.perfil && h('div.aviso.aviso--ok',
+      h('div.crescer',
+        h('strong', `Reconheci: ${estado.perfil.nome}`),
+        h('div.mini', 'As colunas já foram ligadas sozinhas — não precisa conferir uma por uma.'),
+        estado.perfil.observacao && h('div.mini.muted', { style: { marginTop: '4px' } }, estado.perfil.observacao))),
 
     h('div.grade.grade--4',
       kpi({ label: 'Novos', valor: num(p.resumo.novos, 0), cor: 'ok', icone: '✨' }),
