@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'ampla-admin';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORES = {
   /** configurações, metas, preferências, marcos de atualização */
@@ -33,6 +33,20 @@ export const STORES = {
   orcamentos: {
     keyPath: 'id',
     indexes: [['byData', 'data'], ['byCliente', 'clienteId'], ['byMes', 'mes']],
+  },
+
+  /**
+   * Relatório de comissão por venda, como o sistema exporta. É a ÚNICA fonte
+   * que liga uma venda ao vendedor, então o app guarda as linhas cruas: assim o
+   * vínculo sobrevive mesmo quando o relatório chega antes dos pedidos.
+   *
+   * A comissão que vem aqui é a que o sistema calculou, POR PEDIDO. O app não a
+   * usa para pagar: ele recalcula sobre a nota fiscal emitida, que é o que a
+   * empresa considera venda do mês. Guardar as duas permite comparar.
+   */
+  comissoesRelatorio: {
+    keyPath: 'id',
+    indexes: [['byNumero', 'numero'], ['byVendedor', 'vendedorNome'], ['byMes', 'mes']],
   },
 
   vendedores: { keyPath: 'id', indexes: [] },

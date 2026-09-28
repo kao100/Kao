@@ -53,6 +53,22 @@ export const PERFIS = [
     },
   },
   {
+    id: 'gc-comissao',
+    fonte: 'comissoes',
+    nome: 'Relatório de comissão por venda',
+    colunas: ['Nº', 'Cliente', 'Vendedor', 'Data de emissão', 'Valor', 'Comissão'],
+    mapa: {
+      numero: 'Nº',
+      clienteNome: 'Cliente',
+      vendedorNome: 'Vendedor',
+      data: 'Data de emissão',
+      valor: 'Valor',
+      comissao: 'Comissão',
+    },
+    observacao: 'É deste relatório que cada venda ganha dono. A comissão que ele traz é a que o '
+      + 'sistema calculou por pedido — o app recalcula sobre a nota emitida e mostra as duas.',
+  },
+  {
     id: 'gc-receber',
     fonte: 'receber',
     nome: 'Relatório de contas a receber',

@@ -26,18 +26,19 @@ import { today, monthKey, money, formatDate } from '../core/format.js';
 import { normalize, docNumber, sameMoney, cents, sum } from '../core/util.js';
 
 export const TIPOS_PENDENCIA = {
-  nf_sem_vendedor: {
-    titulo: 'NF sem vendedor',
-    icone: '🎯',
+  nf_sem_pedido: {
+    titulo: 'Nota sem pedido',
+    icone: '🔗',
     gravidade: 'alta',
-    explicacao: 'A nota está no faturamento, mas ninguém recebe a comissão dela.',
+    explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Quem liga os '
+      + 'dois é o contas a receber: mande um que cubra o período desta nota.',
   },
   pedido_sem_vendedor: {
-    titulo: 'Pedido sem vendedor',
+    titulo: 'Venda sem vendedor',
     icone: '🙋',
     gravidade: 'alta',
-    explicacao: 'Nenhum relatório traz o vendedor: defina uma vez no pedido e todas as '
-      + 'notas dele passam a ter dono.',
+    explicacao: 'O vendedor vem do relatório de comissão por venda. Mande esse relatório e '
+      + 'todas as notas do pedido ganham dono de uma vez.',
   },
   divergencia_faturamento: {
     titulo: 'Faturamento fiscal ≠ soma dos vendedores',
@@ -88,21 +89,47 @@ export const TIPOS_PENDENCIA = {
  * pode ser chamado à mão. Não altera nada que o usuário tenha decidido.
  */
 export async function recalcular() {
-  const [nfs, pedidos, itens, titulos, pagamentos, movimentos, vendedores, produtos] = await Promise.all([
+  const [nfs, pedidos, itens, titulos, pagamentos, movimentos, vendedores, produtos, comissoes] = await Promise.all([
     store.nfs.listar(), store.pedidos.listar(), store.nfItens.listar(), store.receber.listar(),
     store.pagar.listar(), store.extrato.listar(), store.vendedores.listar(), store.produtos.listar(),
+    store.comissoesRelatorio.listar(),
   ]);
+
+  /**
+   * O relatório de comissão é a ÚNICA fonte de vendedor. O número que ele traz
+   * é o do pedido, mas o app confere contra pedido E contra nota: as duas são
+   * comparações exatas de identificador, não palpite, e assim o vínculo fecha
+   * mesmo que o relatório mude de referência um dia.
+   */
+  const vendedorPorNumero = new Map();
+  for (const c of comissoes) {
+    if (!c.numero || !c.vendedorNome) continue;
+    const k = String(docNumber(c.numero) || c.numero);
+    const atual = vendedorPorNumero.get(k);
+    if (atual && normalize(atual) !== normalize(c.vendedorNome)) vendedorPorNumero.set(k, 'ambiguo');
+    else if (!atual) vendedorPorNumero.set(k, c.vendedorNome);
+  }
 
   const porNome = indiceVendedores(vendedores);
   const novosVendedores = [];
 
   /* 1. pedidos: vendedor definido por você vence; senão, o nome que veio no arquivo */
+  const doRelatorioDeComissao = (numero) => {
+    if (!numero) return null;
+    const nome = vendedorPorNumero.get(String(numero));
+    return nome && nome !== 'ambiguo' ? nome : null;
+  };
+
   const pedidosAtualizados = [];
   for (const pedido of pedidos) {
     if (pedido.vendedorOrigem === 'manual') continue;   // decisão sua, não se mexe
-    const achado = resolverVendedor(pedido.vendedorNome, porNome, novosVendedores);
-    if (achado && pedido.vendedorId !== achado.id) {
-      pedidosAtualizados.push({ ...pedido, vendedorId: achado.id, vendedorOrigem: 'relatorio' });
+    // o relatório de comissão manda: é o único que traz vendedor de verdade
+    const daComissao = doRelatorioDeComissao(pedido.numero);
+    const nome = daComissao || pedido.vendedorNome;
+    const achado = resolverVendedor(nome, porNome, novosVendedores);
+    const origem = daComissao ? 'comissao' : 'relatorio';
+    if (achado && (pedido.vendedorId !== achado.id || pedido.vendedorOrigem !== origem)) {
+      pedidosAtualizados.push({ ...pedido, vendedorId: achado.id, vendedorOrigem: origem });
     }
   }
   for (const p of pedidosAtualizados) {
@@ -144,6 +171,7 @@ export async function recalcular() {
     };
     const resolvido = resolverVendedorDaNf(nf, {
       porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, novosVendedores,
+      doRelatorioDeComissao,
     });
     const mes = nf.dataEmissao ? monthKey(nf.dataEmissao) : null;
     if (resolvido.vendedorId !== antes.vendedorId || resolvido.vendedorOrigem !== antes.vendedorOrigem
@@ -288,6 +316,7 @@ function resolverVendedor(nome, porNome, novos) {
  * ou de uma decisão sua.
  */
 export const ORIGEM_VENDEDOR = {
+  comissao: 'relatório de comissão',
   nf: 'relatório fiscal',
   pedido: 'pedido',
   'pedido-titulo': 'pedido (via contas a receber)',
@@ -304,7 +333,7 @@ export function origemVendedor(valor) {
 /** Origens que vieram de uma decisão sua: o recálculo não mexe nelas. */
 const DECIDIDO_POR_VOCE = new Set(['manual', 'pedido-confirmado']);
 
-function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, novosVendedores }) {
+function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, novosVendedores, doRelatorioDeComissao }) {
   if (DECIDIDO_POR_VOCE.has(nf.vendedorOrigem) && nf.vendedorId) {
     return {
       vendedorId: nf.vendedorId,
@@ -320,6 +349,22 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
       return {
         vendedorId: v.id,
         vendedorOrigem: 'nf',
+        pedidoId: nf.pedidoId || null,
+        pedidoNumero: nf.pedidoNumero || null,
+        pedidoOrigem: nf.pedidoOrigem || null,
+      };
+    }
+  }
+
+  // o relatório de comissão pode citar a própria nota: bate identificador com
+  // identificador, então vale mesmo antes da ponte do contas a receber existir
+  const pelaComissao = doRelatorioDeComissao?.(docNumber(nf.numero) || nf.numero);
+  if (pelaComissao) {
+    const v = resolverVendedor(pelaComissao, porNome, novosVendedores);
+    if (v) {
+      return {
+        vendedorId: v.id,
+        vendedorOrigem: 'comissao',
         pedidoId: nf.pedidoId || null,
         pedidoNumero: nf.pedidoNumero || null,
         pedidoOrigem: nf.pedidoOrigem || null,
@@ -521,27 +566,43 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     });
   };
 
+  /**
+   * UMA VENDA, UMA PENDÊNCIA.
+   *
+   * Toda nota fiscal vem de um pedido. Antes o app tratava a nota e o pedido
+   * dela como dois problemas: 336 notas e 334 pedidos viravam quase 700 itens
+   * para resolver, e o "valor envolvido" contava o mesmo dinheiro duas vezes.
+   *
+   * Agora a conta é por venda. A nota que já chegou ao pedido não aparece: quem
+   * responde por ela é o pedido. A nota que NÃO chegou a nenhum pedido aparece
+   * uma vez, e o que ela pede não é vendedor — é o vínculo, que vem do contas a
+   * receber. Cobrar vendedor de uma nota cujo pedido nem se sabe qual é seria
+   * pedir para resolver à mão o que um relatório resolve sozinho.
+   */
+  const pedidoDaNota = (nf) => {
+    if (nf.pedidoId) return true;
+    if (nf.pedidoNumero && pedidoPorNumero.has(String(nf.pedidoNumero))) return true;
+    return false;
+  };
+
   for (const nf of nfs) {
     if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
-    if (!nf.vendedorId) {
-      const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
-      // A nota cujo pedido já está sendo cobrado não vira uma segunda
-      // pendência: é o mesmo problema, e resolver o pedido resolve a nota.
-      // Contar as duas inflava a lista e o valor envolvido.
-      if (motivo === 'pedido_sem_vendedor') continue;
-      nova('nf_sem_vendedor', nf.id, {
-        titulo: `NF ${nf.numero}`,
-        detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
-        valor: nf.valorTotal,
-        mes: nf.mes,
-        motivo,
-        pedidoNumero: nf.pedidoNumero || null,
-        alvo: { store: 'nfs', id: nf.id },
-      });
-    }
+    if (nf.vendedorId) continue;
+    if (pedidoDaNota(nf)) continue;    // o pedido dela responde
+
+    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
+    nova('nf_sem_pedido', nf.id, {
+      titulo: `NF ${nf.numero}`,
+      detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
+      valor: nf.valorTotal,
+      mes: nf.mes,
+      motivo,
+      pedidoNumero: nf.pedidoNumero || null,
+      alvo: { store: 'nfs', id: nf.id },
+    });
   }
 
-  /* pedido sem vendedor: é aqui que você resolve de uma vez só */
+  /* venda sem vendedor: é aqui que o relatório de comissão entra */
   for (const pedido of pedidos || []) {
     if (pedido.vendedorId) continue;
     const notas = nfs.filter((n) => (pedido.id && n.pedidoId === pedido.id)
@@ -570,15 +631,28 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     });
   }
 
+  /**
+   * Título que cita uma nota que não está na base só é divergência quando a
+   * nota DEVERIA estar. O contas a receber vai até o fim do ano e cita notas de
+   * meses que o relatório fiscal importado nem cobre — 324 avisos que não pedem
+   * nada de ninguém. Só entra o que cai dentro da faixa de notas já importadas:
+   * aí sim existe um buraco de verdade.
+   */
+  const numerosDeNota = nfs.map((n) => Number(docNumber(n.numero))).filter(Number.isFinite);
+  const menorNota = numerosDeNota.length ? Math.min(...numerosDeNota) : null;
+  const maiorNota = numerosDeNota.length ? Math.max(...numerosDeNota) : null;
+
   for (const t of titulos) {
-    if (t.nfNumero && !t.nfId) {
-      nova('receber_sem_nf', t.id, {
-        titulo: `Título ${t.documento} cita a NF ${t.nfNumero}`,
-        detalhe: `${t.clienteNome} · vence ${formatDate(t.vencimento)}`,
-        valor: t.valor,
-        alvo: { store: 'receber', id: t.id },
-      });
-    }
+    if (!t.nfNumero || t.nfId) continue;
+    const n = Number(docNumber(t.nfNumero));
+    const dentroDaFaixa = Number.isFinite(n) && menorNota != null && n >= menorNota && n <= maiorNota;
+    if (!dentroDaFaixa) continue;
+    nova('receber_sem_nf', t.id, {
+      titulo: `Título ${t.documento} cita a NF ${t.nfNumero}`,
+      detalhe: `${t.clienteNome} · vence ${formatDate(t.vencimento)}`,
+      valor: t.valor,
+      alvo: { store: 'receber', id: t.id },
+    });
   }
 
   const semVinculo = movimentos.filter((m) => m.conciliacaoStatus === 'pendente');

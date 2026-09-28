@@ -669,19 +669,20 @@ console.log('\n▶ Relatório paginado, como sai do sistema');
   ok('e o app diz o que deixou de fora', /ficaram de fora/.test(leitura.aviso || ''), leitura.aviso || '');
 }
 
-console.log('\n▶ Os sete relatórios do Gestão Click já vêm ligados');
+console.log('\n▶ Os oito relatórios do Gestão Click já vêm ligados');
 {
   // Ela não liga coluna nenhuma: o app conhece o cabeçalho de cada relatório.
   const esperado = {
     'gc-vendas': 'pedidos',
     'gc-nfe': 'nfs',
+    'gc-comissao': 'comissoes',
     'gc-receber': 'receber',
     'gc-pagar': 'pagar',
     'gc-orcamentos': 'orcamentos',
     'gc-produtos': 'produtos',
     'gc-clientes': 'clientes',
   };
-  igual('os sete relatórios estão cadastrados',
+  igual('os oito relatórios estão cadastrados',
     Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
 
   for (const perfil of perfis.PERFIS) {
@@ -761,6 +762,98 @@ console.log('\n▶ Relatório de produtos');
     gravados.filter((p) => p.categoria).length, 0);
   ok('o custo virou número', gravados.every((p) => p.custo == null || typeof p.custo === 'number'), '');
   ok('e o NCM entrou', gravados.filter((p) => p.ncm).length === 80, '');
+}
+
+
+console.log('\n▶ Uma venda, uma pendência');
+{
+  // Toda nota vem de um pedido. Antes o app cobrava a nota E o pedido dela como
+  // dois problemas, e o valor envolvido contava o mesmo dinheiro duas vezes.
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação';
+  const VEND = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  const REC = 'Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal';
+
+  await importar('nfs', 'f.csv', `${FISC}
+7001;02/10/2026;Cliente Um Ltda;11111111000111;10.000,00;Autorizada
+7002;03/10/2026;Cliente Dois Ltda;22222222000122;4.000,00;Autorizada`);
+  await importar('pedidos', 'v.csv', `${VEND}
+5001;Cliente Um Ltda;01/10/2026;;Concretizada;6.000,00;10.000,00
+5002;Cliente Dois Ltda;01/10/2026;;Concretizada;2.500,00;4.000,00`);
+  // só a primeira nota tem ponte
+  await importar('receber', 'r.csv', `${REC}
+Cliente Um Ltda;11111111000111;5001;Boleto;Itaú;10/10/2026;Em aberto;10.000,00;7001`);
+  await link.recalcular();
+
+  const abertas = () => store.pendencias.listar()
+    .then((l) => l.filter((x) => x.status === 'aberta' && ['nf_sem_pedido', 'pedido_sem_vendedor'].includes(x.tipo)
+      && ['7001', '7002', '5001', '5002'].some((n) => (x.titulo || '').includes(n))));
+
+  const antes = await abertas();
+  const tipos = {};
+  for (const x of antes) tipos[x.tipo] = (tipos[x.tipo] || 0) + 1;
+  igual('a nota com pedido não vira pendência própria: quem responde é o pedido',
+    antes.filter((x) => x.titulo.includes('7001')).length, 0);
+  igual('a nota SEM pedido aparece uma vez, e o que ela pede é o vínculo',
+    antes.filter((x) => x.tipo === 'nf_sem_pedido' && x.titulo.includes('7002')).length, 1);
+  igual('e os dois pedidos pedem vendedor', tipos.pedido_sem_vendedor, 2);
+  igual('três pendências para duas vendas — não seis', antes.length, 3);
+
+  // agora o relatório de comissão, que é de onde vem o vendedor
+  const COM = 'Nº;Cliente;Vendedor;Data de emissão;Valor;Comissão';
+  await importar('comissoes', 'c.csv', `${COM}
+5001;Cliente Um Ltda;Rita;02/10/2026;10.000,00;200,00
+5002;Cliente Dois Ltda;Rita;03/10/2026;4.000,00;80,00`);
+  await link.recalcular();
+
+  const depois = await abertas();
+  igual('o relatório de comissão resolve os dois pedidos de uma vez',
+    depois.filter((x) => x.tipo === 'pedido_sem_vendedor').length, 0);
+  ok('a vendedora foi criada a partir do relatório',
+    (await store.vendedores.listar()).some((v) => v.nome === 'Rita'), '');
+
+  const nfs7001 = (await store.nfs.listar()).find((n) => n.numero === '7001');
+  const rita = (await store.vendedores.listar()).find((v) => v.nome === 'Rita');
+  igual('a nota com pedido herdou a vendedora', nfs7001.vendedorId, rita.id);
+  igual('e a origem diz de onde veio', nfs7001.vendedorOrigem, 'pedido-titulo');
+
+  // a nota sem pedido continua sendo o que realmente falta
+  igual('sobra só a nota que não achou o pedido',
+    depois.map((x) => x.tipo), ['nf_sem_pedido']);
+
+  // e o app guarda o que o sistema calculou, para poder comparar depois
+  const doRelatorio = await store.comissoesRelatorio.listar();
+  igual('as linhas do relatório ficam guardadas', doRelatorio.length, 2);
+  igual('com a comissão que o SISTEMA calculou',
+    doRelatorio.find((c) => c.numero === '5001').comissaoRelatorio, 200);
+
+  // limpeza
+  for (const n of ['7001', '7002']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const n of ['5001', '5002']) {
+    const x = (await store.pedidos.listar()).find((y) => y.numero === n);
+    if (x) await store.pedidos.remover(x.id);
+    const c = (await store.comissoesRelatorio.listar()).find((y) => y.numero === n);
+    if (c) await store.comissoesRelatorio.remover(c.id);
+  }
+  for (const t of (await store.receber.listar()).filter((x) => x.nfNumero === '7001')) await store.receber.remover(t.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ Título que cita nota de outro mês não é divergência');
+{
+  const REC = 'Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal';
+  // a base tem notas 3001..3005; o título cita a 1200, de um mês que ela nem importou
+  await importar('receber', 'velha.csv', `${REC}
+Cliente Antigo;33333333000133;900;Boleto;Itaú;20/12/2026;Em aberto;500,00;1200`);
+  await link.recalcular();
+  const p = (await store.pendencias.listar())
+    .filter((x) => x.status === 'aberta' && x.tipo === 'receber_sem_nf' && (x.titulo || '').includes('1200'));
+  igual('nota fora da faixa importada não vira aviso', p.length, 0);
+
+  for (const t of (await store.receber.listar()).filter((x) => x.nfNumero === '1200')) await store.receber.remover(t.id);
+  await link.recalcular();
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

@@ -225,9 +225,9 @@ export function recados(r) {
     saida.push({
       nivel: 'atencao',
       rota: '/conciliacao/vendedores',
-      texto: `${r.semVendedor.pedidos} pedido(s) vieram sem vendedor no relatório, somando `
-        + `${moedaCurta(r.semVendedor.valor)}. Enquanto ficarem assim, esse faturamento não entra `
-        + 'no ranking nem na comissão de ninguém.',
+      texto: `${r.semVendedor.pedidos} venda(s) ainda sem vendedor, somando `
+        + `${moedaCurta(r.semVendedor.valor)}. Mande o relatório de comissão por venda: é dele `
+        + 'que sai o vendedor, e ele resolve todas de uma vez.',
     });
   }
 

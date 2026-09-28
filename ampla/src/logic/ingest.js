@@ -29,6 +29,7 @@ const PRESERVAR = {
   produtos: ['comissaoRegraId', 'categoriaManual'],
   clientes: ['contato', 'telefone', 'email', 'observacao'],
   vendedores: ['apelidos', 'meta', 'ativo'],
+  comissoesRelatorio: ['observacao'],
 };
 
 /* ------------------------------------------------------------- mapeamento */
@@ -323,6 +324,7 @@ async function construir(fonteId, d, ctx) {
   if (fonteId === 'nfItens') return construirItem(d, ctx);
   if (fonteId === 'pedidos') return construirPedido(d, ctx);
   if (fonteId === 'orcamentos') return construirOrcamento(d, ctx);
+  if (fonteId === 'comissoes') return construirComissao(d, ctx);
   if (fonteId === 'receber') return construirReceber(d, ctx);
   if (fonteId === 'pagar') return construirPagar(d, ctx);
   if (fonteId === 'extrato') return construirExtrato(d, ctx);
@@ -462,6 +464,36 @@ function construirOrcamento(d, ctx) {
       valorTotal: d.valorTotal == null ? null : cents(d.valorTotal),
       statusArquivo: d.status || null,
       situacao: situacaoOrcamento(d.status),
+      origem: 'relatorio',
+    },
+  }];
+  if (cliente) saida.push({ store: 'clientes', registro: cliente });
+  return saida;
+}
+
+/**
+ * Uma linha do relatório de comissão. Guardada crua de propósito: é a única
+ * fonte que liga venda a vendedor, e guardar a linha faz o vínculo sobreviver
+ * quando o relatório chega antes dos pedidos ou das notas.
+ */
+function construirComissao(d, ctx) {
+  const numero = d.numero ? (docNumber(d.numero) || String(d.numero)) : null;
+  const cliente = montarCliente(d, { nome: d.clienteNome });
+  const id = numero ? `com_${numero}` : unico(`com_x${daLinha(ctx)}`, ctx.usados);
+
+  const saida = [{
+    store: 'comissoesRelatorio',
+    registro: {
+      id,
+      numero,
+      clienteNome: d.clienteNome || null,
+      clienteId: cliente?.id || null,
+      vendedorNome: d.vendedorNome || null,
+      data: d.data || null,
+      mes: d.data ? monthKey(d.data) : null,
+      valor: d.valor == null ? null : cents(d.valor),
+      // o que o SISTEMA calculou, por pedido. O app recalcula sobre a nota.
+      comissaoRelatorio: d.comissao == null ? null : cents(d.comissao),
       origem: 'relatorio',
     },
   }];

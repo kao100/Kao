@@ -54,7 +54,7 @@ importador usa. Mexer lá muda o app; este documento é só a leitura humana.
 
 ## Os relatórios do Gestão Click já vêm reconhecidos
 
-Sete relatórios do Gestão Click têm o cabeçalho cadastrado em
+Oito relatórios do Gestão Click têm o cabeçalho cadastrado em
 `src/data/perfis.js`. Quando o arquivo bate com um deles, o app **não pergunta
 nada**: acha o cabeçalho no meio do relatório (depois do título e do bloco de
 totais), liga as colunas sozinho e vai direto para a conferência.
@@ -62,6 +62,7 @@ totais), liga as colunas sozinho e vai direto para a conferência.
 | Relatório | Vai para | Colunas |
 |---|---|---|
 | Vendas | Pedidos | Nº · Cliente · Data · Prazo de entrega · Situação · Valor custo · Valor |
+| **Comissão por venda** | Comissões | Nº · Cliente · **Vendedor** · Data de emissão · Valor · Comissão |
 | Notas fiscais (NF-e) | Notas fiscais | Nº · Data · Razão social/Nome · CNPJ/CPF · Total · Situação |
 | Contas a receber | Contas a receber | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Vencimento · Situação · Valor · Valor total · NF-e |
 | Contas a pagar | Contas a pagar | Destinado à · CPF · CNPJ · Descrição · Forma de pagamento · Data de vencimento · Situação · Valor · Valor total · NF-e |
@@ -131,6 +132,54 @@ e a data não são afetados).
 **PDF escaneado (foto do papel) não serve.** Não há OCR e não vai haver chute: o
 app avisa que o arquivo não tem texto e pede o relatório gerado direto do
 sistema. Adivinhar número de imagem seria o oposto do item 20.
+
+---
+
+## Os três relatórios que se completam
+
+Nenhum relatório sozinho responde nada. Três se completam, e é por isso que os
+três precisam chegar:
+
+| Relatório | O que SÓ ele traz |
+|---|---|
+| **Fiscal (NF-e)** | o faturamento de verdade: valor e data de emissão |
+| **Pedidos de venda** | o custo — e portanto a margem |
+| **Comissão por venda** | **o vendedor** |
+
+E um quarto liga tudo: o **contas a receber** traz a nota e o número do pedido
+na mesma linha.
+
+```
+     fiscal            contas a receber          pedidos        comissão
+       NF      ──────►   NF | pedido   ──────►   pedido   ◄──────  vendedor
+    (valor,                                      (custo)
+     data)
+```
+
+**Faturamento é da nota, não do pedido.** Um pedido do mês passado cuja nota saiu
+este mês é venda deste mês. Por isso o app soma NFs e não pedidos — e por isso a
+comissão que o sistema calcula (por pedido) pode divergir da que o app calcula
+(por nota). O app guarda as duas para você comparar.
+
+### Uma venda, uma pendência
+
+Toda nota vem de um pedido. O app nunca cobra a nota E o pedido dela como dois
+problemas — antes disso, 336 notas e 334 pedidos viravam quase 700 itens, com o
+mesmo dinheiro contado duas vezes. Agora:
+
+- nota que já chegou ao pedido → **não aparece**: quem responde é o pedido;
+- nota que não chegou a pedido nenhum → aparece **uma vez**, e o que ela pede é
+  o vínculo (contas a receber), não o vendedor;
+- pedido sem vendedor → aparece **uma vez**, e o que resolve é o relatório de
+  comissão.
+
+### Uma coisa que vale saber sobre o contas a receber
+
+Se o contas a receber que você exporta começa em **hoje**, ele não traz os
+títulos já recebidos — e são justamente eles que ligariam as notas mais antigas
+ao pedido. Para fechar o vínculo de um mês inteiro, mande **uma vez** um contas
+a receber que cubra aquele mês desde o dia 1º. Depois disso, o envio diário
+mantém tudo em dia.
 
 ---
 

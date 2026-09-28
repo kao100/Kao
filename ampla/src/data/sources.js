@@ -111,6 +111,34 @@ export const FONTES = {
     ],
   },
 
+  /**
+   * O relatório que dá dono a cada venda. Nem o fiscal nem o de pedidos trazem
+   * vendedor — é este que traz, e sem ele nenhuma comissão sai.
+   */
+  comissoes: {
+    id: 'comissoes',
+    nome: 'Comissão por venda',
+    icone: '🧮',
+    periodicidade: 'diaria',
+    store: 'comissoesRelatorio',
+    verdadeDe: 'O VENDEDOR de cada venda.',
+    descricao: 'Relatório de comissão por venda. É dele que sai o vendedor. A comissão que vem '
+      + 'aqui é a que o sistema calculou POR PEDIDO; o app recalcula sobre a nota emitida, que é '
+      + 'o que a empresa considera venda do mês, e mostra as duas lado a lado.',
+    formatos: ['xlsx', 'csv', 'pdf'],
+    colunasReais: ['número', 'cliente', 'vendedor', 'data de emissão', 'valor', 'comissão'],
+    campos: [
+      campo('numero', 'Número', 'texto', { chaveNatural: true, sinonimos: ['pedido', 'numero', 'venda', 'num', 'nro', ...NUMERO_CURTO] }),
+      campo('clienteNome', 'Cliente', 'texto', { sinonimos: ['cliente', 'razao social', 'razão social', 'nome'] }),
+      campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante', 'consultor', 'vendedora', 'responsavel'] }),
+      campo('data', 'Data de emissão', 'data', { sinonimos: ['data de emissao', 'data de emissão', 'data', 'emissao', 'emissão'] }),
+      campo('valor', 'Valor', 'dinheiro', { sinonimos: VALOR_TOTAL }),
+      campo('comissao', 'Comissão', 'dinheiro', { sinonimos: ['comissao', 'comissão', 'valor comissao', 'vl comissao'] }),
+    ],
+    ajuda: 'Mande este todo dia junto com os outros. É por ele que cada venda ganha dono — '
+      + 'sem ele, nenhuma comissão sai.',
+  },
+
   /* -------------------------------------------------------------- financeiro */
   receber: {
     id: 'receber',

@@ -202,8 +202,8 @@ export async function calcular(mes = monthKey()) {
   const bloqueios = [];
   if (semVendedor.length) {
     bloqueios.push({
-      tipo: 'nf_sem_vendedor',
-      texto: `${semVendedor.length} NF(s) sem vendedor definido`,
+      tipo: 'sem_vendedor',
+      texto: `${semVendedor.length} NF(s) sem vendedor — mande o relatório de comissão por venda`,
       valor: cents(sum(semVendedor, valorFaturado)),
       rota: '/conciliacao',
     });

@@ -110,16 +110,20 @@ function cardPendencia(p, contexto) {
 function acoes(p, contexto) {
   const botoes = [];
 
-  if (p.tipo === 'nf_sem_vendedor') {
-    botoes.push(botao('Ver sugestões', { tipo: 'primario', pequeno: true, onClick: () => navigate('/conciliacao/vendedores') }));
+  if (p.tipo === 'nf_sem_pedido') {
+    // o que resolve isto é um relatório, não marcação à mão
+    botoes.push(botao('Mandar contas a receber', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/receber') }));
     botoes.push(botao('Definir vendedor', { pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
+  } else if (p.tipo === 'pedido_sem_vendedor') {
+    botoes.push(botao('Mandar comissão por venda', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/comissoes') }));
+    botoes.push(botao('Definir à mão', { pequeno: true, onClick: () => navigate('/conciliacao/vendedores') }));
   } else if (p.tipo === 'extrato_sem_vinculo') {
     botoes.push(botao('Vincular', { tipo: 'primario', pequeno: true, onClick: () => vincularMovimento(p, contexto) }));
   } else if (p.tipo === 'receber_sem_nf') {
     botoes.push(botao('Escolher NF', { tipo: 'primario', pequeno: true, onClick: () => vincularNfDoTitulo(p, contexto) }));
   } else if (p.tipo === 'divergencia_faturamento') {
-    botoes.push(botao('Ver NFs sem vendedor', { tipo: 'primario', pequeno: true, onClick: () => navigate(href('/conciliacao', { t: 'nf_sem_vendedor' })) }));
+    botoes.push(botao('Ver o que falta', { tipo: 'primario', pequeno: true, onClick: () => navigate(href('/conciliacao', { t: 'pedido_sem_vendedor' })) }));
   } else if (p.tipo === 'produto_sem_custo') {
     botoes.push(botao('Importar custos', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/produtos') }));
   } else if (p.tipo === 'item_sem_nf') {
@@ -387,8 +391,12 @@ export async function telaVendedores({ query }) {
         }),
         kpi({ label: 'Valor parado', valor: money(totalPedidos), icone: '💰' })),
 
-      aviso('Marque o vendedor e o pedido sai da lista. Todas as notas daquele pedido '
-        + 'recebem o mesmo vendedor de uma vez — inclusive as próximas.', 'info'),
+      aviso('O jeito certo é mandar o RELATÓRIO DE COMISSÃO POR VENDA: ele traz o vendedor '
+        + 'de todas de uma vez. Marcar aqui é para o que sobrar depois dele.', 'atencao'),
+
+      botao('📤 Mandar comissão por venda', {
+        tipo: 'primario', bloco: true, onClick: () => navigate('/arquivos/comissoes'),
+      }),
 
       h('div.lista', ...pedidos.slice(0, 50).map((p) => linhaPedido(p, vendedores))),
       pedidos.length > 50 && h('p.pequeno.muted.centro',
@@ -396,10 +404,10 @@ export async function telaVendedores({ query }) {
 
     lista.length > 0 && h('div.empilha', { style: { gap: '10px' } },
       h('h2', { style: { marginTop: '6px' } }, `${lista.length} NF(s) que não chegaram a um pedido`),
-      aviso('Aqui o contas a receber não ligou a nota a nenhum pedido. O app procura pedidos '
-        + 'do mesmo cliente, anteriores à emissão, e mostra os candidatos — ele não decide sozinho. '
-        + 'Se puder, reexporte o contas a receber com a coluna NOTA FISCAL: aí o vínculo fecha sem escolha.',
-      'atencao'),
+      aviso('Estas notas não acharam o pedido delas. Toda nota vem de um pedido — quem liga os '
+        + 'dois é o CONTAS A RECEBER, que traz a nota e o número do pedido na mesma linha. Se o '
+        + 'contas a receber que você manda começa em hoje, ele não cobre as notas já recebidas: '
+        + 'mande uma vez um que cubra o mês inteiro e estas se resolvem sozinhas.', 'atencao'),
 
       chips([30, 60, 90, 180].map((d) => ({ id: String(d), label: `${d} dias` })), String(janela),
         (id) => navigate(href('/conciliacao/vendedores', { j: id }))),
