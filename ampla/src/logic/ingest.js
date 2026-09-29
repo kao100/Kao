@@ -167,7 +167,34 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
   }
 
   await classificar(saida, contexto);
+  conferirCoberturaDoReceber(saida);
   return saida;
+}
+
+/**
+ * O CONTAS A RECEBER SÓ COM OS "EM ABERTO".
+ *
+ * É a ponte mais forte entre a nota e o pedido — e a que mais silenciosamente
+ * falha. No relatório de verdade que chegou aqui, os 398 títulos vieram TODOS
+ * com situação "Em aberto": nenhum recebido. Só que o título de uma venda já
+ * recebida é justamente o que ligaria a nota daquele mês ao pedido dela. Sem
+ * eles, das 336 notas do mês apenas 74 tinham por onde atravessar.
+ *
+ * O app não pode consertar o filtro do export, mas pode dizer, na hora, o que
+ * mudar — em vez de deixar a pessoa achar que mandou o relatório certo.
+ */
+function conferirCoberturaDoReceber(preparo) {
+  if (preparo.fonteId !== 'receber') return;
+  const titulos = [...(preparo.porStore.receber?.values() || [])];
+  if (titulos.length < 20) return;   // arquivo pequeno não diz nada sobre filtro
+  const recebidos = titulos.filter((t) => t.status === 'pago' || t.dataRecebimento).length;
+  if (recebidos > 0) return;
+  preparo.avisos.push(
+    `Todos os ${titulos.length} títulos deste arquivo estão EM ABERTO — nenhum recebido. `
+    + 'É o título da venda já recebida que liga a nota fiscal ao pedido; sem ele, as notas do '
+    + 'mês que já foram pagas ficam sem vendedor. Exporte o contas a receber do mês SEM o filtro '
+    + 'de situação (ou com "Recebido" junto) uma vez, e essa ponte fecha de vez.',
+  );
 }
 
 /** NF-e em XML (ou ZIP de XMLs): não precisa de mapeamento, o layout é fixo. */

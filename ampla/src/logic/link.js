@@ -15,9 +15,19 @@
  *   NF ──(contas a receber)──► pedido ──(relatório de comissão)──► vendedor
  *
  * Só que ela tem um limite medido nos arquivos de verdade: de 336 notas do mês,
- * apenas 74 aparecem em algum título. Venda à vista não gera conta a receber, e
- * sem título não existe travessia. Resultado: R$ 624 mil de R$ 706 mil ficavam
- * sem dono, e o relatório por vendedor mostrava um quinto da realidade.
+ * apenas 74 aparecem em algum título. Toda venda gera conta a receber — o que
+ * falta é o EXPORT. O relatório que chega aqui vem só com os títulos EM ABERTO
+ * (no arquivo real, 398 de 398, nenhum recebido), e o título de uma venda já
+ * recebida é justamente o que ligaria a nota daquele mês ao pedido dela. As
+ * notas citadas vão de 3489 a 4199, quase todas abaixo de 3878, que é onde o
+ * relatório fiscal começa: o que sobrou foi o rabo de títulos velhos ainda em
+ * aberto, não o mês. Resultado: R$ 624 mil de R$ 706 mil sem dono, e o relatório
+ * por vendedor mostrando um quinto da realidade.
+ *
+ * Mandar uma vez o contas a receber SEM o filtro de situação fecha essa ponte
+ * para o mês inteiro — e o app avisa isso na importação quando vê um arquivo em
+ * que nenhum título está recebido. Mas depender disso todo dia seria frágil,
+ * então existe a segunda ponte.
  *
  * A segunda ponte fecha esse buraco sem inventar nada. Nota e pedido da mesma
  * venda têm, nos dois relatórios, o MESMO cliente e o MESMO valor até o
@@ -57,7 +67,9 @@ export const TIPOS_PENDENCIA = {
     gravidade: 'alta',
     explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Ele tenta duas '
       + 'pontes: o contas a receber, que traz nota e pedido na mesma linha, e o pedido com '
-      + 'mesmo cliente e mesmo valor. Quando nenhuma fecha com certeza, a nota vem para cá.',
+      + 'mesmo cliente e mesmo valor. Quando nenhuma fecha com certeza, a nota vem para cá. '
+      + 'Se o seu contas a receber sai só com os títulos EM ABERTO, mande uma vez um sem esse '
+      + 'filtro: é o título já recebido que liga a nota do mês ao pedido.',
   },
   pedido_sem_vendedor: {
     titulo: 'Venda sem vendedor',

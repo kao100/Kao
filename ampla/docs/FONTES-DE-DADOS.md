@@ -159,9 +159,24 @@ na mesma linha.
 ```
 
 **Por que duas pontes.** A do contas a receber é a mais forte, e é sempre a
-primeira. Mas ela tem um limite medido nos arquivos de verdade: de 336 notas de
-um mês, só 74 aparecem em algum título — venda à vista não gera conta a receber.
-A segunda ponte cobre o resto sem inventar: nota e pedido da mesma venda têm o
+primeira. O limite dela não é a venda — toda venda gera conta a receber — é o
+**export**. Medido no arquivo real:
+
+| | |
+|---|---|
+| títulos no arquivo | 398 |
+| deles **recebidos** | **0** — o relatório saiu só com os "em aberto" |
+| notas fiscais citadas | 3489 a 4199 (371 das 397 abaixo de 4000) |
+| notas do relatório fiscal | 3878 a 4232 |
+| notas do mês com algum título | **74 de 336** |
+
+O que sobra num export "em aberto" é o rabo de títulos velhos ainda não pagos,
+não o mês corrente: a venda de setembro já recebida sai da lista. **Mandar uma
+vez o contas a receber sem o filtro de situação fecha essa ponte para o mês
+inteiro** — e o app avisa na importação quando vê um arquivo em que nenhum
+título está recebido.
+
+A segunda ponte cobre o que sobrar, sem inventar: nota e pedido da mesma venda têm o
 MESMO cliente e o MESMO valor até o centavo, e o pedido vem antes da nota. Vale
 só quando o par é único, e a janela é de 30 dias. Resultado no mesmo mês: 297 das
 336 notas com dono, R$ 555 mil atribuídos de R$ 706 mil.
@@ -195,13 +210,20 @@ mesmo dinheiro contado duas vezes. Agora:
 - pedido sem vendedor → aparece **uma vez**, e o que resolve é o relatório de
   comissão.
 
-### Uma coisa que vale saber sobre o contas a receber
+### A coisa mais importante a saber sobre o contas a receber
 
-Se o contas a receber que você exporta começa em **hoje**, ele não traz os
-títulos já recebidos — e são justamente eles que ligariam as notas mais antigas
-ao pedido. Para fechar o vínculo de um mês inteiro, mande **uma vez** um contas
-a receber que cubra aquele mês desde o dia 1º. Depois disso, o envio diário
-mantém tudo em dia.
+**Exporte-o sem o filtro de situação, pelo menos uma vez por mês.**
+
+O relatório exportado do jeito de sempre sai só com os títulos **em aberto**. Toda
+venda gera conta a receber — mas a venda já recebida sai da lista, e é exatamente
+o título dela que ligaria a nota fiscal daquele mês ao pedido. No arquivo real:
+398 títulos, **nenhum** recebido, e as notas citadas quase todas de antes do mês
+importado.
+
+Mande **uma vez** um contas a receber do mês **com todas as situações** (ou com
+"Recebido" incluído) e a ponte fecha para o mês inteiro. Depois disso o envio
+diário mantém tudo em dia. O app avisa na importação quando percebe um arquivo em
+que nenhum título está recebido — não fica calado esperando você descobrir.
 
 ---
 

@@ -24,8 +24,9 @@ porque dependem de informação que só a empresa tem.
   receber (nota e pedido na mesma linha) e, quando ele não cobre a nota, o pedido
   com **mesmo cliente e mesmo valor até o centavo**, emitido antes dela, dentro de
   30 dias, e **só quando o par é único**. A segunda existe porque a primeira tem
-  um teto medido: venda à vista não gera conta a receber, e num mês real só 74 de
-  336 notas apareciam em algum título.
+  um teto medido: o export do contas a receber sai só com os títulos **em
+  aberto** (no arquivo real, 398 de 398, nenhum recebido), e é o título da venda
+  já recebida que ligaria a nota do mês ao pedido — só 74 de 336 notas atravessavam.
 - A segunda ponte **não é semelhança**: é comparação exata de dois campos. Dois
   pedidos iguais do mesmo cliente não são escolhidos a dedo — se os dois forem do
   mesmo vendedor, o vendedor é certo mesmo sem saber qual pedido é qual; se não,
@@ -253,7 +254,7 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 | Algum relatório traz o **vendedor**? | **Só o de comissão por venda** | é dele que sai o vendedor de cada pedido; todas as notas daquele pedido herdam |
 | O "vendedor responsável" do cadastro de clientes serve? | **Não, não é confiável** | o campo é ignorado de propósito |
 | O relatório fiscal traz o número do pedido? | **Não** | duas pontes: o contas a receber (nota e pedido na mesma linha) e o pedido único com mesmo cliente e mesmo valor |
-| Venda à vista gera conta a receber? | **Não** | por isso a primeira ponte cobria só 74 de 336 notas — foi o que obrigou a criar a segunda |
+| Venda à vista gera conta a receber? | **Sim, gera** | o que faltava era o export: ele sai só com os "em aberto", e o título já recebido é o que liga a nota do mês ao pedido |
 | Pode haver coluna obrigatória? | **Não** | nada é obrigatório; o app importa o que veio e avisa o que faltou |
 | E o que ficar sem vendedor? | **Você confirma** | a tela "Atribuir vendedores" diz o motivo de cada nota e lista os pedidos que faltam exportar, com botão de copiar |
 | Existe rateio de uma NF entre vendedores? | **Não** | confirmado o modelo de um vendedor por NF; um pedido confirmado resolve a nota inteira |

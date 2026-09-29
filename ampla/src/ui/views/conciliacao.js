@@ -406,8 +406,9 @@ export async function telaVendedores({ query }) {
       h('h2', { style: { marginTop: '6px' } }, `${lista.length} NF(s) que não chegaram a um pedido`),
       aviso('Estas notas não acharam o pedido delas. Toda nota vem de um pedido — quem liga os '
         + 'dois é o CONTAS A RECEBER, que traz a nota e o número do pedido na mesma linha. Se o '
-        + 'contas a receber que você manda começa em hoje, ele não cobre as notas já recebidas: '
-        + 'mande uma vez um que cubra o mês inteiro e estas se resolvem sozinhas.', 'atencao'),
+        + 'seu export sai só com os títulos EM ABERTO, ele deixa de fora justamente a venda já '
+        + 'recebida, que é a que ligaria a nota deste mês ao pedido. Mande uma vez um contas a '
+        + 'receber do mês SEM o filtro de situação e estas se resolvem sozinhas.', 'atencao'),
 
       chips([30, 60, 90, 180].map((d) => ({ id: String(d), label: `${d} dias` })), String(janela),
         (id) => navigate(href('/conciliacao/vendedores', { j: id }))),

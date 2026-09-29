@@ -865,8 +865,9 @@ console.log('\n▶ A segunda ponte: mesmo cliente, mesmo valor, pedido antes da 
 {
   /**
    * De 336 notas de um mês real, só 74 aparecem em algum título do contas a
-   * receber — venda à vista não gera conta a receber, e sem título a primeira
-   * ponte não tem por onde passar. A segunda ponte fecha esse buraco SEM
+   * receber: o export sai só com os títulos EM ABERTO, e o título da venda já
+   * recebida é justamente o que ligaria a nota do mês ao pedido. A segunda
+   * ponte fecha esse buraco SEM
    * inventar: mesmo cliente, mesmo valor até o centavo, pedido antes da nota, e
    * par único. Este bloco é a especificação do que ela aceita e, principalmente,
    * do que ela RECUSA.
@@ -988,6 +989,45 @@ console.log('\n▶ Por nota × por pedido: a conferência por vendedor');
     if (x) await store.pedidos.remover(x.id);
     const y = (await store.comissoesRelatorio.listar()).find((z) => z.numero === n);
     if (y) await store.comissoesRelatorio.remover(y.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ Contas a receber só com os "em aberto": o app avisa');
+{
+  /**
+   * A ponte mais forte entre nota e pedido é o contas a receber. Ela falha calada
+   * quando o export sai só com os títulos EM ABERTO: a venda já recebida sai da
+   * lista, e é o título dela que ligaria a nota daquele mês ao pedido. No arquivo
+   * real foram 398 títulos, nenhum recebido, e só 74 de 336 notas atravessaram.
+   */
+  const REC = 'Destinado a;CPF/CNPJ;Descrição;Forma de Pagamento;Conta Bancária;Vencimento;Situação;Valor Total;Nota Fiscal';
+  const linha = (i, situacao) => `Cliente Filtro ${i} Ltda;6666666600${String(i).padStart(4, '0')};`
+    + `Venda de nº ${9300 + i};Boleto;Itaú;${String((i % 28) + 1).padStart(2, '0')}/01/2027;${situacao};`
+    + `1.000,00;${9400 + i}`;
+
+  const soAbertos = await importar('receber', 'filtro.csv',
+    [REC, ...Array.from({ length: 25 }, (_, i) => linha(i, 'Em aberto'))].join('\n'));
+  ok('avisa quando nenhum título do arquivo está recebido',
+    soAbertos.preparo.avisos.some((a) => /EM ABERTO/.test(a)),
+    JSON.stringify(soAbertos.preparo.avisos));
+  ok('e diz o que fazer: exportar sem o filtro de situação',
+    soAbertos.preparo.avisos.some((a) => /sem o filtro/i.test(a)), '');
+
+  const comRecebidos = await importar('receber', 'filtro2.csv',
+    [REC, ...Array.from({ length: 24 }, (_, i) => linha(i, 'Em aberto')), linha(24, 'Recebido')].join('\n'));
+  ok('não avisa quando o arquivo traz recebidos também',
+    !comRecebidos.preparo.avisos.some((a) => /EM ABERTO/.test(a)),
+    JSON.stringify(comRecebidos.preparo.avisos));
+
+  // arquivo pequeno não diz nada sobre filtro nenhum: não inventa aviso
+  const pequeno = await importar('receber', 'filtro3.csv',
+    [REC, linha(90, 'Em aberto'), linha(91, 'Em aberto')].join('\n'));
+  ok('e não acusa filtro num arquivo de duas linhas',
+    !pequeno.preparo.avisos.some((a) => /EM ABERTO/.test(a)), '');
+
+  for (const t of (await store.receber.listar()).filter((x) => /Cliente Filtro/.test(x.clienteNome || ''))) {
+    await store.receber.remover(t.id);
   }
   await link.recalcular();
 }

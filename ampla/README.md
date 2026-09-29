@@ -107,9 +107,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   relatório fiscal não traz o pedido, e o vendedor vem do relatório de comissão.
   Duas pontes levam da nota ao pedido, nesta ordem:
   1. **contas a receber** — traz a nota e o número do pedido na mesma linha. É a
-     prova mais forte, e é sempre a primeira tentada. Só que venda à vista não
-     gera conta a receber: num mês real, de 336 notas apenas 74 apareciam em
-     algum título, e R$ 624 mil de R$ 706 mil ficavam sem dono.
+     prova mais forte, e é sempre a primeira tentada. O limite dela não é a
+     venda, é o **export**: o relatório costuma sair só com os títulos **em
+     aberto**, e é o título da venda **já recebida** que ligaria a nota do mês ao
+     pedido. Num arquivo real, 398 títulos e nenhum recebido — de 336 notas,
+     apenas 74 tinham por onde atravessar. Mandar uma vez o contas a receber sem
+     o filtro de situação fecha essa ponte para o mês inteiro, e o app avisa na
+     importação quando percebe o filtro.
   2. **mesmo cliente + mesmo valor até o centavo + pedido antes da nota**, e só
      quando o par é **único**. Não é semelhança: é comparação exata de dois
      campos. Dois pedidos iguais do mesmo cliente? O app não escolhe — se os dois
