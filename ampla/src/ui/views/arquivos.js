@@ -25,7 +25,9 @@ import { cents, sum } from '../../core/util.js';
 /* ------------------------------------------------------- central de arquivos */
 
 export async function telaArquivos() {
-  const [r, selo] = await Promise.all([rotina(), seloRotina()]);
+  const [r, selo, quantasNotas] = await Promise.all([
+    rotina(), seloRotina(), store.nfs.listar().then((l) => l.length),
+  ]);
   definirTitulo('Relatórios que você manda', `${r.diarias.feitas}/${r.diarias.total} atualizados hoje`);
 
   const doDia = r.tarefas.filter((t) => t.periodicidade === 'diaria');
@@ -34,6 +36,23 @@ export async function telaArquivos() {
 
   return h('div.empilha', { style: { gap: '14px' } },
     seloDados(selo),
+
+    // base vazia é o momento de dizer a ordem e o detalhe do contas a receber:
+    // mandar na ordem certa poupa um recálculo, e o filtro de situação é o que
+    // decide se a ponte forte fecha ou não
+    quantasNotas === 0 && card('Começando do zero — por onde ir',
+      h('span.mini.muted', 'nenhuma nota importada ainda'),
+      h('p.pequeno.dim', 'Qualquer ordem funciona (o app refaz os vínculos a cada arquivo), '
+        + 'mas nesta aqui nada precisa ser refeito:'),
+      h('ol.mini', { style: { margin: '10px 0 0', paddingLeft: '18px', lineHeight: '1.7' } },
+        h('li', h('strong', 'Pedidos de venda'), ' — traz o custo, e portanto a margem'),
+        h('li', h('strong', 'Comissão por venda'), ' — é o único que traz o VENDEDOR'),
+        h('li', h('strong', 'Notas fiscais'), ' — o faturamento de verdade'),
+        h('li', h('strong', 'Contas a receber'), ' — liga a nota ao pedido')),
+      h('p.mini.muted', { style: { marginTop: '10px' } },
+        'No contas a receber, exporte SEM o filtro de situação (com os já recebidos junto), '
+        + 'pelo menos nesta primeira vez. É o título da venda já recebida que liga a nota '
+        + 'do mês ao pedido dela — só com os "em aberto", o mês corrente fica de fora.')),
 
     aviso('O arquivo que você manda ATUALIZA o que já está aqui — ele não vira um relatório novo. '
       + 'Boleto prorrogado continua o mesmo boleto com a data nova, e o que o seu sistema já '

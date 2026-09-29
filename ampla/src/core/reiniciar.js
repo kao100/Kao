@@ -5,9 +5,14 @@
  * de fora. Então quem apaga é o próprio app, na primeira vez que abrir depois
  * desta atualização.
  *
- * A empresa pediu para descartar tudo o que foi mandado nos primeiros testes e
- * começar limpo, com o aplicativo inteiro do jeito que ficou. É isso que este
- * arquivo faz, e só isso:
+ * A empresa pediu isso duas vezes, e as duas por um motivo bom:
+ *
+ *  • 21/09 — descartar o que foi mandado nos primeiros testes;
+ *  • 29/09 — recomeçar depois das duas pontes entre nota e pedido, para tudo ser
+ *    lido de novo pelas regras novas em vez de ficar convivendo com vínculos
+ *    calculados pelas antigas.
+ *
+ * É isso que este arquivo faz, e só isso:
  *
  *  • apaga todas as tabelas, inclusive as configurações;
  *  • apaga também o banco antigo do AMPLACON, para ele não voltar pela
@@ -26,7 +31,7 @@ import { NOME_ANTIGO, MARCA as MARCA_MIGRACAO } from './migrar.js';
  * Trocar esta marca dispara UM novo recomeço em todos os aparelhos. Só mude
  * quando a intenção for mesmo apagar os dados de quem já está usando.
  */
-export const MARCA = 'recomeco-2026-09-21';
+export const MARCA = 'recomeco-2026-09-29';
 
 /**
  * @returns {Promise<{reiniciou: boolean, erro?: string}>}

@@ -55,8 +55,9 @@ const ROTAS = [
 async function iniciar() {
   const raiz = document.getElementById('app-root');
   try {
-    // recomeço pedido pela empresa: apaga os dados dos primeiros testes, uma
-    // vez só. Vem antes da migração para o banco antigo não trazer tudo de volta.
+    // recomeço pedido pela empresa: apaga tudo o que já foi importado, uma vez
+    // só por marca. Vem antes da migração para o banco antigo não trazer tudo
+    // de volta.
     const recomeco = await reiniciarSePreciso();
     const migracao = recomeco.reiniciou ? { migrou: false } : await migrarDoNomeAntigo();
     await semear();
