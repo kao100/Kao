@@ -62,6 +62,8 @@ export async function telaComissoes({ query }) {
           h('div.mini', `fiscal ${money(calculo.conferencia.fiscal)} × vendedores ${money(calculo.conferencia.atribuido)}`)),
         h('span', '›')),
 
+    cardConferenciaVendedores(calculo),
+
     calculo.bloqueios.length > 0 && card('Resolver antes de fechar', null,
       h('div.lista', ...calculo.bloqueios.map((b) => h('button.alerta', {
         style: { '--cor': 'var(--vermelho)' }, onClick: () => navigate(b.rota),
@@ -109,6 +111,45 @@ export async function telaComissoes({ query }) {
             calculo.status !== 'aprovada' && botao('Marcar como revisada', { onClick: () => mudarStatus(mes, 'revisada') }),
             botao('Aprovar', { onClick: () => mudarStatus(mes, 'aprovada') }),
             botao('🔒 Fechar mês', { tipo: 'ok', desabilitado: !calculo.podeFechar, onClick: () => fecharMes(mes) }))))));
+}
+
+/**
+ * "EU SEI QUE UM VENDEDOR VENDEU BEM MAIS DO QUE TÁ NO RELATÓRIO."
+ *
+ * Este bloco existe para ela poder conferir isso sem confiar na nossa palavra.
+ * De um lado o que o app atribuiu por NOTA emitida — que é como a comissão é
+ * paga. Do outro o que o próprio relatório de comissão traz por vendedor, que é
+ * por PEDIDO. Os dois não têm que ser iguais (pedido de um mês fatura no outro),
+ * mas a diferença mostra de quem é o faturamento que ainda está sem dono.
+ */
+function cardConferenciaVendedores(calculo) {
+  const linhas = calculo.conferenciaVendedores || [];
+  if (!linhas.length) return null;
+  const faltando = calculo.semVendedor?.valor || 0;
+
+  return card('Por nota × por pedido',
+    faltando ? h('span.mini.muted', `${money(faltando)} sem dono`) : h('span.mini.muted', 'tudo atribuído'),
+    h('p.mini.muted',
+      'Esquerda: o que o app atribuiu por NOTA emitida, que é a base da comissão. '
+      + 'Direita: o que o relatório de comissão traz por vendedor, que é por PEDIDO. '
+      + 'Diferença não é erro — pedido de um mês fatura no outro — mas é onde procurar '
+      + 'quando um vendedor parece menor do que é.'),
+    h('div.empilha', { style: { gap: '4px', marginTop: '10px' } },
+      ...linhas.map((v) => h('div.linha.linha--entre', { style: { alignItems: 'baseline' } },
+        h('span.crescer', v.nome),
+        h('span.num', money(v.porNota)),
+        h('span.mini.muted', { style: { minWidth: '92px', textAlign: 'right' } },
+          v.porPedido == null ? 'não veio no relatório' : money(v.porPedido)),
+        h('span.mini', {
+          style: {
+            minWidth: '86px', textAlign: 'right',
+            color: v.diferenca == null ? 'var(--texto-fraco)'
+              : v.diferenca < -0.005 ? 'var(--vermelho)' : 'var(--verde)',
+          },
+        }, v.diferenca == null ? '—' : money(v.diferenca))))),
+    faltando > 0 && h('p.mini.muted', { style: { marginTop: '8px' } },
+      `Há ${money(faltando)} em notas sem vendedor neste mês. Enquanto elas não tiverem dono, `
+      + 'a coluna da esquerda fica menor do que a realidade — e é essa a diferença que você está vendo.'));
 }
 
 function cardVendedor(v, mes, fechada, calculo) {

@@ -13,7 +13,7 @@ import {
 } from '../core/format.js';
 import { cents, sum } from '../core/util.js';
 import * as revenue from './revenue.js';
-import { pedidosSemVendedor } from './link.js';
+import { vendasSemVendedor } from './link.js';
 
 /**
  * Conta só os dias em que a empresa vende. Dividir a meta do mês por 30 quando
@@ -42,7 +42,7 @@ export async function relatorio(referencia = today()) {
     store.meta(mes),
     revenue.porDia({ de: inicio, ate: referencia }),
     store.vendedores.listar(),
-    pedidosSemVendedor(),
+    vendasSemVendedor(),
   ]);
 
   const decorridos = diasDeVenda(inicio, referencia, semana);
@@ -104,7 +104,7 @@ export async function relatorio(referencia = today()) {
     semVendedor: {
       pedidos: semDono.length,
       valor: cents(sum(semDono, (x) => x.valor)),
-      notas: sum(semDono, (x) => x.notas.length),
+      notas: semDono.filter((x) => x.tipo === 'nota').length,
     },
     porVendedor: montarVendedores(doDia, doMes, vendedores, metaMes, restantes, decorridos, totais),
     recados: [],

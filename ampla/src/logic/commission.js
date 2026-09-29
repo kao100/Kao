@@ -14,7 +14,7 @@
 
 import * as store from '../core/store.js';
 import { monthKey, today } from '../core/format.js';
-import { cents, sum, sortBy, uid } from '../core/util.js';
+import { cents, sum, sortBy, uid, normalize } from '../core/util.js';
 import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
 export const STATUS_PERIODO = {
@@ -101,9 +101,10 @@ function contemTermo(termo, categoria, descricao) {
  * vendas + regras + ajustes (o que evita número "congelado" sem rastreabilidade).
  */
 export async function calcular(mes = monthKey()) {
-  const [nfs, itens, produtos, vendedores, regras, ajustes, periodo, cfg] = await Promise.all([
+  const [nfs, itens, produtos, vendedores, regras, ajustes, periodo, cfg, doRelatorio] = await Promise.all([
     store.nfs.listar(), store.nfItens.listar(), store.produtos.listar(), store.vendedores.listar(),
     store.regrasComissao.listar(), store.ajustesComissao.listar(), store.periodosComissao.obter(mes), store.config(),
+    store.comissoesRelatorio.listar(),
   ]);
 
   const regrasTodas = regras.length ? regras : [regraPadrao(cfg.comissao.percentualPadrao)];
@@ -217,6 +218,39 @@ export async function calcular(mes = monthKey()) {
     });
   }
 
+  /**
+   * A CONFERÊNCIA QUE ELA PEDIU: "eu sei que um vendedor vendeu bem mais do que
+   * tá no relatório".
+   *
+   * Dois números por vendedor, lado a lado:
+   *   - por NOTA emitida, que é como a comissão é paga (o que o app calcula);
+   *   - por PEDIDO, que é o que o relatório de comissão traz por vendedor.
+   *
+   * Eles NÃO têm que ser iguais: pedido de um mês pode ser faturado no outro, e
+   * ela mesma explicou isso. Mas quando o número do app fica muito abaixo, a
+   * diferença mostra exatamente quanto ainda está sem dono, por vendedor — em
+   * vez de deixar ela descobrir olhando e desconfiando.
+   */
+  const porNomeRelatorio = new Map();
+  for (const linha of doRelatorio) {
+    if (!linha.vendedorNome) continue;
+    if (linha.data && monthKey(linha.data) !== mes) continue;
+    const k = normalize(linha.vendedorNome);
+    porNomeRelatorio.set(k, cents((porNomeRelatorio.get(k) || 0) + (linha.valor || 0)));
+  }
+  const conferenciaVendedores = porNomeRelatorio.size
+    ? [...porVendedor.values()].map((v) => {
+      const doSistema = porNomeRelatorio.get(normalize(v.nome));
+      return {
+        vendedorId: v.vendedorId,
+        nome: v.nome,
+        porNota: v.faturamento,
+        porPedido: doSistema ?? null,
+        diferenca: doSistema == null ? null : cents(v.faturamento - doSistema),
+      };
+    }).sort((a, b) => (a.diferenca ?? 0) - (b.diferenca ?? 0))
+    : [];
+
   return {
     mes,
     status: periodo?.status || 'calculada',
@@ -228,6 +262,7 @@ export async function calcular(mes = monthKey()) {
     faturamentoFiscal: fiscal,
     conferencia: { fiscal, atribuido, diferenca: cents(fiscal - atribuido), ok: Math.abs(cents(fiscal - atribuido)) < 0.01 },
     semVendedor: { quantidade: semVendedor.length, valor: cents(sum(semVendedor, valorFaturado)), notas: semVendedor },
+    conferenciaVendedores,
     avisos,
     bloqueios,
     podeFechar: bloqueios.length === 0,

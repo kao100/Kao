@@ -7,7 +7,7 @@ import { h } from '../../core/dom.js';
 import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import {
-  TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, pedidosSemVendedor,
+  TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -344,24 +344,24 @@ async function refazer() {
 /**
  * A tela que responde "olha Maria, está faltando o vendedor destes aqui".
  *
- * A unidade de trabalho é o PEDIDO, não a nota: nenhum relatório traz o
- * vendedor, então você define uma vez por pedido e todas as notas daquele
- * pedido herdam — inclusive as que forem emitidas depois. Um toque no nome
- * resolve e a linha sai da frente.
- *
- * As notas que nem chegaram a um pedido ficam embaixo, no bloco de sugestões:
- * ali o app mostra candidatos, mas quem decide continua sendo você.
+ * Quando dá, a unidade de trabalho é o PEDIDO: você define uma vez e todas as
+ * notas daquele pedido herdam, inclusive as que forem emitidas depois. Quando a
+ * nota não chegou a pedido nenhum — as duas pontes falharam — ela entra na mesma
+ * lista e recebe vendedor direto. Um toque no nome resolve e a linha sai da
+ * frente.
  */
 export async function telaVendedores({ query }) {
   const janela = Number(query.j || suggest.JANELA_PADRAO);
   const [pedidos, lista, vendedores, faltando] = await Promise.all([
-    pedidosSemVendedor(),
+    vendasSemVendedor(),
     suggest.sugestoes({ janelaDias: janela }),
     store.vendedores.listar(),
     suggest.pedidosFaltando(),
   ]);
+  const quantosPedidos = pedidos.filter((x) => x.tipo === 'pedido').length;
+  const quantasNotas = pedidos.length - quantosPedidos;
   definirTitulo('De quem foi esta venda?',
-    `${pedidos.length} pedido(s) · ${lista.length} NF(s) sem pedido`);
+    `${quantosPedidos} pedido(s) · ${quantasNotas} nota(s)`);
 
   if (!pedidos.length && !lista.length && !faltando.length) {
     return h('div.empilha', { style: { gap: '14px' } },
@@ -387,7 +387,7 @@ export async function telaVendedores({ query }) {
     pedidos.length > 0 && h('div.empilha', { style: { gap: '10px' } },
       h('div.grade.grade--2',
         kpi({
-          label: 'Pedidos sem vendedor', valor: String(pedidos.length), icone: '🧾', cor: 'atencao',
+          label: 'Vendas sem dono', valor: String(pedidos.length), icone: '🧾', cor: 'atencao',
         }),
         kpi({ label: 'Valor parado', valor: money(totalPedidos), icone: '💰' })),
 
@@ -398,7 +398,7 @@ export async function telaVendedores({ query }) {
         tipo: 'primario', bloco: true, onClick: () => navigate('/arquivos/comissoes'),
       }),
 
-      h('div.lista', ...pedidos.slice(0, 50).map((p) => linhaPedido(p, vendedores))),
+      h('div.lista', ...pedidos.slice(0, 50).map((p) => linhaVenda(p, vendedores))),
       pedidos.length > 50 && h('p.pequeno.muted.centro',
         `Mostrando os 50 maiores de ${pedidos.length}. Resolva estes e os próximos aparecem.`)),
 
@@ -422,29 +422,26 @@ export async function telaVendedores({ query }) {
  * Uma linha por pedido, com os vendedores como botões: em telefone, um toque
  * resolve mais rápido que abrir uma lista e escolher.
  */
-function linhaPedido(item, vendedores) {
-  const { pedido, notas, valor } = item;
+function linhaVenda(item, vendedores) {
   const marcar = async (v) => {
-    await definirVendedorDoPedido(pedido.id, v.id,
-      `definido na tela de vendedores · ${notas.length} NF(s) herdaram`);
+    const motivo = 'definido na tela de vendedores';
+    if (item.tipo === 'pedido') await definirVendedorDoPedido(item.pedido.id, v.id, motivo);
+    else await definirVendedorDaNf(item.nf.id, v.id, motivo);
     await atualizarAlertas();
-    ok(`Pedido ${pedido.numero || ''} é de ${v.nome}${notas.length ? ` · ${notas.length} NF(s) atualizadas` : ''}.`);
+    ok(`${item.titulo} é de ${v.nome}.`);
     refresh();
   };
 
   return h('div.card',
     h('div.linha.linha--entre', { style: { alignItems: 'flex-start' } },
       h('div.crescer',
-        h('strong', `Pedido ${pedido.numero || '(sem número)'}`),
-        h('div.mini.muted', { style: { marginTop: '2px' } },
-          pedido.clienteNome || 'cliente não identificado'),
-        h('div.mini.muted',
-          pedido.data ? `venda em ${formatDate(pedido.data)}` : 'sem data de venda')),
+        h('strong', item.titulo),
+        h('div.mini.muted', { style: { marginTop: '2px' } }, item.cliente),
+        h('div.mini.muted', item.data ? formatDate(item.data) : 'sem data'),
+        h('div.mini.muted', { style: { marginTop: '2px' } }, item.explicacao)),
       h('div.empilha', { style: { alignItems: 'flex-end' } },
-        h('span.num.forte', money(valor)),
-        h('span.mini.muted', notas.length
-          ? `${notas.length} NF: ${notas.map((n) => n.numero).filter(Boolean).slice(0, 3).join(', ')}`
-          : 'ainda sem NF'))),
+        h('span.num.forte', money(item.valor)),
+        h('span.mini.muted', item.nota))),
 
     h('div.btn-linha', { style: { marginTop: '10px', flexWrap: 'wrap' } },
       ...vendedores.map((v) => botao(v.nome, { pequeno: true, onClick: () => marcar(v) }))));

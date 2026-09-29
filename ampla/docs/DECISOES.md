@@ -17,9 +17,22 @@ porque dependem de informação que só a empresa tem.
   `faturamento fiscal = soma dos vendedores`, com a diferença exposta.
 
 ### Vendedor
-- **O relatório de vendas traz a coluna VENDEDOR.** É ela que faz a comissão
-  fechar sozinha: o vendedor do pedido passa para todas as notas daquele pedido
-  pela ponte do contas a receber, sem marcação nenhuma.
+- **O vendedor vem do relatório de comissão por venda**, que traz número do
+  pedido, cliente e vendedor. É ele que faz a comissão fechar sozinha: o vendedor
+  do pedido passa para todas as notas daquele pedido.
+- **Duas pontes levam da nota ao pedido**, nesta ordem de confiança: o contas a
+  receber (nota e pedido na mesma linha) e, quando ele não cobre a nota, o pedido
+  com **mesmo cliente e mesmo valor até o centavo**, emitido antes dela, dentro de
+  30 dias, e **só quando o par é único**. A segunda existe porque a primeira tem
+  um teto medido: venda à vista não gera conta a receber, e num mês real só 74 de
+  336 notas apareciam em algum título.
+- A segunda ponte **não é semelhança**: é comparação exata de dois campos. Dois
+  pedidos iguais do mesmo cliente não são escolhidos a dedo — se os dois forem do
+  mesmo vendedor, o vendedor é certo mesmo sem saber qual pedido é qual; se não,
+  vira pendência com os números dos candidatos escritos.
+- **Vínculo derivado é refeito a cada recálculo**, nunca fica pendurado: se um
+  pedido novo faz um par deixar de ser único, o vínculo cai em vez de continuar
+  valendo por inércia.
 - O "vendedor responsável" do **cadastro de clientes** continua ignorado: a
   empresa confirmou que não é confiável, porque o mesmo cliente compra de
   vendedores diferentes.
@@ -224,7 +237,7 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 
 | # | Pergunta | Enquanto isso |
 |---|---|---|
-| 1 | O export do **contas a receber** sai com a coluna NOTA FISCAL? | sem ela a ponte não fecha, e as notas caem na tela de sugestões em vez de vincular sozinhas |
+| 1 | O export do **contas a receber** sai com a coluna NOTA FISCAL? | sem ela a primeira ponte não fecha; a segunda (mesmo cliente + mesmo valor) ainda resolve a maioria |
 | 2 | O relatório de itens traz **custo**? | sem custo, margem e ABC por margem ficam vazios |
 | 3 | Itaú e Bradesco exportam **OFX**? | com planilha funciona, mas sem o identificador único do banco |
 | 4 | Existe **meta por vendedor**, além da meta da empresa? | a meta individual já é cadastrável, mas não vem de arquivo |
@@ -237,9 +250,10 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 | Pergunta | Resposta | O que mudou no app |
 |---|---|---|
 | O relatório de pedidos traz a NF gerada? | **Não** | a ligação vai pelo caminho inverso, via contas a receber |
-| Algum relatório traz o **vendedor**? | **Nenhum** | o vendedor é definido no app, uma vez por pedido, e todas as notas daquele pedido herdam |
+| Algum relatório traz o **vendedor**? | **Só o de comissão por venda** | é dele que sai o vendedor de cada pedido; todas as notas daquele pedido herdam |
 | O "vendedor responsável" do cadastro de clientes serve? | **Não, não é confiável** | o campo é ignorado de propósito |
-| O relatório fiscal traz o número do pedido? | **Não** | quem faz a ponte é o contas a receber, que tem nota e pedido na mesma linha |
+| O relatório fiscal traz o número do pedido? | **Não** | duas pontes: o contas a receber (nota e pedido na mesma linha) e o pedido único com mesmo cliente e mesmo valor |
+| Venda à vista gera conta a receber? | **Não** | por isso a primeira ponte cobria só 74 de 336 notas — foi o que obrigou a criar a segunda |
 | Pode haver coluna obrigatória? | **Não** | nada é obrigatório; o app importa o que veio e avisa o que faltou |
 | E o que ficar sem vendedor? | **Você confirma** | a tela "Atribuir vendedores" diz o motivo de cada nota e lista os pedidos que faltam exportar, com botão de copiar |
 | Existe rateio de uma NF entre vendedores? | **Não** | confirmado o modelo de um vendedor por NF; um pedido confirmado resolve a nota inteira |

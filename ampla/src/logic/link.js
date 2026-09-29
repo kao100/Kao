@@ -6,19 +6,44 @@
  * não consegue ligar com certeza, NÃO inventa: gera uma pendência para resolver
  * à mão na tela de Conciliação.
  *
- * A PONTE: nenhum relatório da AMPLA traz o vendedor, e o relatório fiscal não
- * traz o pedido. Quem liga os dois é o CONTAS A RECEBER, que tem a nota fiscal e
- * a descrição (número do pedido) na mesma linha. Daí:
+ * AS DUAS PONTES: nenhum relatório da AMPLA traz o vendedor, e o relatório
+ * fiscal não traz o pedido.
  *
- *   NF ──(contas a receber)──► pedido ──(você define)──► vendedor
+ * A primeira ponte é o CONTAS A RECEBER, que tem a nota fiscal e a descrição
+ * (número do pedido) na mesma linha:
+ *
+ *   NF ──(contas a receber)──► pedido ──(relatório de comissão)──► vendedor
+ *
+ * Só que ela tem um limite medido nos arquivos de verdade: de 336 notas do mês,
+ * apenas 74 aparecem em algum título. Venda à vista não gera conta a receber, e
+ * sem título não existe travessia. Resultado: R$ 624 mil de R$ 706 mil ficavam
+ * sem dono, e o relatório por vendedor mostrava um quinto da realidade.
+ *
+ * A segunda ponte fecha esse buraco sem inventar nada. Nota e pedido da mesma
+ * venda têm, nos dois relatórios, o MESMO cliente e o MESMO valor até o
+ * centavo — e o pedido vem antes da nota. Então:
+ *
+ *   NF ──(mesmo cliente + mesmo valor + pedido anterior)──► pedido
+ *
+ * É comparação exata de dois campos, não semelhança: nada de nome parecido,
+ * nada de valor aproximado, nada de "o mais próximo". E só vale quando o par é
+ * ÚNICO na base inteira. Dois pedidos iguais do mesmo cliente na janela? O app
+ * não escolhe: ou os dois são do mesmo vendedor (e então o vendedor é certo
+ * mesmo sem saber qual pedido é qual), ou vira pendência.
+ *
+ * A prova de que a ponte está certa está nas datas: dos 292 pares únicos, 237
+ * são do MESMO DIA e 54 caem em até sete dias. Nenhum pedido depois da nota.
+ * Coincidência de valor não se comporta assim.
  *
  * Ordem de confiança para descobrir o vendedor de uma NF:
  *   1. decidido por você no app (vence tudo, e fica registrado)
  *   2. vendedor que veio no próprio relatório de NFs
- *   3. pedido informado na NF → vendedor do pedido
- *   4. título do contas a receber que cita a NF → pedido → vendedor
- *   5. pedido que aponta para esta NF → vendedor do pedido
- *   6. nenhuma das anteriores → ⚠️ NF SEM PEDIDO IDENTIFICADO
+ *   3. relatório de comissão que cita o número desta nota
+ *   4. pedido informado na NF → vendedor do pedido
+ *   5. título do contas a receber que cita a NF → pedido → vendedor
+ *   6. pedido que aponta para esta NF → vendedor do pedido
+ *   7. pedido único com mesmo cliente e mesmo valor → vendedor do pedido
+ *   8. nenhuma das anteriores → ⚠️ NF SEM PEDIDO IDENTIFICADO
  */
 
 import * as store from '../core/store.js';
@@ -30,8 +55,9 @@ export const TIPOS_PENDENCIA = {
     titulo: 'Nota sem pedido',
     icone: '🔗',
     gravidade: 'alta',
-    explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Quem liga os '
-      + 'dois é o contas a receber: mande um que cubra o período desta nota.',
+    explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Ele tenta duas '
+      + 'pontes: o contas a receber, que traz nota e pedido na mesma linha, e o pedido com '
+      + 'mesmo cliente e mesmo valor. Quando nenhuma fecha com certeza, a nota vem para cá.',
   },
   pedido_sem_vendedor: {
     titulo: 'Venda sem vendedor',
@@ -160,6 +186,19 @@ export async function recalcular() {
     else pedidoDaNfPeloTitulo.set(k, String(t.pedidoNumero));
   }
 
+  /**
+   * A segunda ponte: pedidos indexados por cliente + valor exato. Só entra
+   * pedido com os dois campos preenchidos — meia chave ligaria tudo em todo
+   * mundo, que é exatamente o que este projeto não faz.
+   */
+  const pedidoPorClienteValor = new Map();
+  for (const pedido of pedidos) {
+    const k = chaveClienteValor(pedido.clienteNome, pedido.valorTotal);
+    if (!k) continue;
+    if (!pedidoPorClienteValor.has(k)) pedidoPorClienteValor.set(k, []);
+    pedidoPorClienteValor.get(k).push(pedido);
+  }
+
   /* 3. NFs: vendedor e mês de faturamento */
   const nfsAtualizadas = [];
   for (const nf of nfs) {
@@ -170,15 +209,15 @@ export async function recalcular() {
       pedidoOrigem: nf.pedidoOrigem,
     };
     const resolvido = resolverVendedorDaNf(nf, {
-      porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, novosVendedores,
-      doRelatorioDeComissao,
+      porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor,
+      novosVendedores, doRelatorioDeComissao,
     });
     const mes = nf.dataEmissao ? monthKey(nf.dataEmissao) : null;
+    const mudouNumero = String(resolvido.pedidoNumero ?? '') !== String(nf.pedidoNumero ?? '');
     if (resolvido.vendedorId !== antes.vendedorId || resolvido.vendedorOrigem !== antes.vendedorOrigem
       || resolvido.pedidoId !== antes.pedidoId || resolvido.pedidoOrigem !== antes.pedidoOrigem
-      || nf.mes !== mes
-      || (resolvido.pedidoNumero && resolvido.pedidoNumero !== nf.pedidoNumero)) {
-      nfsAtualizadas.push({ ...nf, ...resolvido, pedidoNumero: resolvido.pedidoNumero || nf.pedidoNumero, mes });
+      || nf.mes !== mes || mudouNumero) {
+      nfsAtualizadas.push({ ...nf, ...resolvido, mes });
     }
   }
   for (const n of nfsAtualizadas) {
@@ -258,6 +297,7 @@ export async function recalcular() {
     movimentos: conciliacao.movimentos.length ? mesclarPorId(movimentos, conciliacao.movimentos) : movimentos,
     produtos,
     pedidoPorNumero,
+    pedidoPorClienteValor,
     pedidos,
   });
 
@@ -320,10 +360,84 @@ export const ORIGEM_VENDEDOR = {
   nf: 'relatório fiscal',
   pedido: 'pedido',
   'pedido-titulo': 'pedido (via contas a receber)',
+  'pedido-valor': 'pedido com mesmo cliente e mesmo valor',
   'pedido-nf': 'pedido → NF',
   'pedido-confirmado': 'pedido que você confirmou',
+  'vendedor-valor': 'pedidos iguais, todos do mesmo vendedor',
   manual: 'definido à mão',
 };
+
+/** De onde veio o número do pedido → como isso se chama no rótulo do vendedor. */
+const ORIGEM_DO_PEDIDO = {
+  titulo: 'pedido-titulo',
+  valor: 'pedido-valor',
+  'pedido-nf': 'pedido-nf',
+  relatorio: 'pedido',
+};
+
+/**
+ * Quantos dias a nota pode sair depois do pedido para o par ainda valer.
+ * Nos arquivos de verdade nenhum par legítimo passou de 8 dias; trinta é folga
+ * para quem fatura com prazo de entrega. Janela maior não liga mais nota
+ * nenhuma — só faz aparecer um segundo candidato, e aí o app se recusa a
+ * escolher, que é o comportamento certo.
+ */
+export const JANELA_PEDIDO_NOTA = 30;
+
+/**
+ * A chave da segunda ponte: cliente normalizado + valor em centavos. Devolve
+ * null quando falta qualquer um dos dois — sem os dois não existe chave.
+ */
+export function chaveClienteValor(cliente, valor) {
+  const nome = normalize(cliente);
+  if (!nome || valor == null || valor === '') return null;
+  return `${nome}|${cents(valor)}`;
+}
+
+function diasEntre(de, ate) {
+  if (!de || !ate) return null;
+  const a = new Date(`${de}T12:00`);
+  const b = new Date(`${ate}T12:00`);
+  if (Number.isNaN(+a) || Number.isNaN(+b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+/**
+ * Pedidos que podem ser a origem desta nota: mesmo cliente, mesmo valor até o
+ * centavo, e emitidos ANTES dela (ou no mesmo dia), dentro da janela. A ordem
+ * cronológica não é detalhe: pedido depois da nota não é a venda dela, é outra
+ * venda com o mesmo valor.
+ */
+export function candidatosPorClienteValor(nf, indice) {
+  const k = chaveClienteValor(nf.clienteNome, nf.valorTotal);
+  if (!k || !indice) return [];
+  const todos = indice.get(k) || [];
+  if (!nf.dataEmissao) return [];
+  return todos.filter((pedido) => {
+    const d = diasEntre(pedido.data, nf.dataEmissao);
+    return d != null && d >= 0 && d <= JANELA_PEDIDO_NOTA;
+  });
+}
+
+/**
+ * A segunda ponte em si. Três respostas possíveis, e nenhuma delas é um palpite:
+ *
+ *  - um único candidato  → é o pedido desta nota
+ *  - vários, mas todos do mesmo vendedor → não se sabe QUAL pedido, e não
+ *    importa: o vendedor é o mesmo de qualquer jeito
+ *  - vários de vendedores diferentes, ou nenhum → o app não escolhe
+ */
+function pontePorClienteValor(nf, indice) {
+  const candidatos = candidatosPorClienteValor(nf, indice);
+  if (candidatos.length === 1) return { pedido: candidatos[0] };
+  if (candidatos.length > 1) {
+    const donos = new Set(candidatos.map((c) => c.vendedorId).filter(Boolean));
+    if (donos.size === 1 && candidatos.every((c) => c.vendedorId)) {
+      return { vendedorId: [...donos][0], quantos: candidatos.length };
+    }
+  }
+  return null;
+}
 
 /** Rótulo legível da origem, com travessão quando ainda não há vendedor. */
 export function origemVendedor(valor) {
@@ -333,7 +447,7 @@ export function origemVendedor(valor) {
 /** Origens que vieram de uma decisão sua: o recálculo não mexe nelas. */
 const DECIDIDO_POR_VOCE = new Set(['manual', 'pedido-confirmado']);
 
-function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, novosVendedores, doRelatorioDeComissao }) {
+function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor, novosVendedores, doRelatorioDeComissao }) {
   if (DECIDIDO_POR_VOCE.has(nf.vendedorOrigem) && nf.vendedorId) {
     return {
       vendedorId: nf.vendedorId,
@@ -346,13 +460,7 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
   if (nf.vendedorNome) {
     const v = resolverVendedor(nf.vendedorNome, porNome, novosVendedores);
     if (v) {
-      return {
-        vendedorId: v.id,
-        vendedorOrigem: 'nf',
-        pedidoId: nf.pedidoId || null,
-        pedidoNumero: nf.pedidoNumero || null,
-        pedidoOrigem: nf.pedidoOrigem || null,
-      };
+      return { vendedorId: v.id, vendedorOrigem: 'nf', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
     }
   }
 
@@ -362,13 +470,7 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
   if (pelaComissao) {
     const v = resolverVendedor(pelaComissao, porNome, novosVendedores);
     if (v) {
-      return {
-        vendedorId: v.id,
-        vendedorOrigem: 'comissao',
-        pedidoId: nf.pedidoId || null,
-        pedidoNumero: nf.pedidoNumero || null,
-        pedidoOrigem: nf.pedidoOrigem || null,
-      };
+      return { vendedorId: v.id, vendedorOrigem: 'comissao', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
     }
   }
 
@@ -379,8 +481,16 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
   const numero = String(docNumber(nf.numero) || nf.numero || '');
   const peloTitulo = pedidoDaNfPeloTitulo?.get(numero);
   const doTitulo = peloTitulo && peloTitulo !== 'ambiguo' ? String(peloTitulo) : null;
-  const numeroPedido = nf.pedidoNumero || doTitulo;
-  const pedidoOrigem = nf.pedidoNumero
+  /**
+   * Vínculo DERIVADO (a ponte do contas a receber, a ponte de cliente + valor)
+   * é refeito em cada recálculo: se um pedido novo fizer o par deixar de ser
+   * único, o vínculo cai em vez de ficar pendurado de um cálculo antigo. Só o
+   * pedido que veio escrito no arquivo é dado, e dado não se recalcula.
+   */
+  const derivado = nf.pedidoOrigem === 'valor' || nf.pedidoOrigem === 'titulo';
+  const numeroDoArquivo = derivado ? null : (nf.pedidoNumero || null);
+  const numeroPedido = numeroDoArquivo || doTitulo;
+  const pedidoOrigem = numeroDoArquivo
     ? (nf.pedidoOrigem || 'relatorio')
     : (doTitulo ? 'titulo' : null);
 
@@ -389,20 +499,12 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
     if (pedido?.vendedorId) {
       return {
         vendedorId: pedido.vendedorId,
-        vendedorOrigem: pedidoOrigem === 'titulo' ? 'pedido-titulo' : 'pedido',
+        vendedorOrigem: ORIGEM_DO_PEDIDO[pedidoOrigem] || 'pedido',
         pedidoId: pedido.id,
         pedidoNumero: String(numeroPedido),
         pedidoOrigem,
       };
     }
-    // achou o pedido mas ele ainda não tem vendedor: guarda o vínculo mesmo assim
-    return {
-      vendedorId: null,
-      vendedorOrigem: null,
-      pedidoId: pedido?.id || null,
-      pedidoNumero: String(numeroPedido),
-      pedidoOrigem,
-    };
   }
 
   const porNf = pedidoPorNf.get(numero);
@@ -415,13 +517,90 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
       pedidoOrigem: 'pedido-nf',
     };
   }
-  return {
-    vendedorId: null,
-    vendedorOrigem: null,
-    pedidoId: null,
-    pedidoNumero: nf.pedidoNumero || null,
-    pedidoOrigem: nf.pedidoOrigem || null,
-  };
+
+  /**
+   * Último recurso antes de virar pendência: a segunda ponte. Vem depois de
+   * TODAS as outras porque é a única que não usa um número de documento — e
+   * número é sempre melhor prova do que dois campos iguais, mesmo exatos.
+   *
+   * Ela também é a rede de quem tem número que não leva a lugar nenhum: o
+   * contas a receber às vezes cita um pedido de mês anterior, ou um número que
+   * não existe na base. Antes isso bloqueava a nota inteira — havia um número,
+   * então o app parava ali, sem pedido e sem vendedor. Agora o número que não
+   * resolve simplesmente não conta.
+   */
+  const porValor = pontePorClienteValor(nf, pedidoPorClienteValor);
+  if (porValor?.pedido?.vendedorId) {
+    return {
+      vendedorId: porValor.pedido.vendedorId,
+      vendedorOrigem: 'pedido-valor',
+      pedidoId: porValor.pedido.id,
+      pedidoNumero: porValor.pedido.numero ? String(porValor.pedido.numero) : null,
+      pedidoOrigem: 'valor',
+    };
+  }
+  if (porValor?.vendedorId) {
+    // sabe de quem é a venda, mas não qual pedido: guarda só o vendedor
+    return {
+      vendedorId: porValor.vendedorId,
+      vendedorOrigem: 'vendedor-valor',
+      pedidoId: null,
+      pedidoNumero: null,
+      pedidoOrigem: null,
+    };
+  }
+
+  // nada deu vendedor: fica com o melhor vínculo que existir, para a tela de
+  // pendências saber dizer o que faltou
+  if (numeroPedido) {
+    const pedido = pedidoPorNumero.get(String(numeroPedido));
+    return {
+      vendedorId: null,
+      vendedorOrigem: null,
+      pedidoId: pedido?.id || null,
+      pedidoNumero: String(numeroPedido),
+      pedidoOrigem,
+    };
+  }
+  if (porValor?.pedido) {
+    return {
+      vendedorId: null,
+      vendedorOrigem: null,
+      pedidoId: porValor.pedido.id,
+      pedidoNumero: porValor.pedido.numero ? String(porValor.pedido.numero) : null,
+      pedidoOrigem: 'valor',
+    };
+  }
+  return { vendedorId: null, vendedorOrigem: null, pedidoId: null, pedidoNumero: null, pedidoOrigem: null };
+}
+
+/**
+ * O pedido de uma nota que já tem vendedor por outro caminho. O vendedor não
+ * muda, mas o vínculo com o pedido continua valendo: é dele que vem o custo, e
+ * com ele a margem. Mesma ordem de confiança das pontes.
+ */
+function vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) {
+  const derivado = nf.pedidoOrigem === 'valor' || nf.pedidoOrigem === 'titulo';
+  const doArquivo = derivado ? null : (nf.pedidoNumero || null);
+  if (doArquivo) {
+    const pedido = pedidoPorNumero?.get(String(doArquivo));
+    return { pedidoId: pedido?.id || null, pedidoNumero: String(doArquivo), pedidoOrigem: nf.pedidoOrigem || 'relatorio' };
+  }
+  const numero = String(docNumber(nf.numero) || nf.numero || '');
+  const peloTitulo = pedidoDaNfPeloTitulo?.get(numero);
+  if (peloTitulo && peloTitulo !== 'ambiguo') {
+    const pedido = pedidoPorNumero?.get(String(peloTitulo));
+    return { pedidoId: pedido?.id || null, pedidoNumero: String(peloTitulo), pedidoOrigem: 'titulo' };
+  }
+  const porValor = pontePorClienteValor(nf, pedidoPorClienteValor);
+  if (porValor?.pedido) {
+    return {
+      pedidoId: porValor.pedido.id,
+      pedidoNumero: porValor.pedido.numero ? String(porValor.pedido.numero) : null,
+      pedidoOrigem: 'valor',
+    };
+  }
+  return { pedidoId: null, pedidoNumero: null, pedidoOrigem: null };
 }
 
 /**
@@ -475,6 +654,74 @@ export async function pedidosSemVendedor() {
     });
   }
   return saida.sort((a, b) => b.valor - a.valor);
+}
+
+/**
+ * As NOTAS que ficaram sem dono. Antes esta lista não existia porque a regra era
+ * "quem responde pela nota é o pedido dela" — só que quando NENHUMA das duas
+ * pontes fecha não existe pedido para responder, e o faturamento ficava órfão
+ * sem ninguém para cobrar. Agora a nota aparece aqui e pode receber vendedor
+ * direto, que é o único caminho: o sistema de origem não deixa acrescentar
+ * vendedor a uma nota já emitida.
+ */
+export async function notasSemVendedor() {
+  const [nfs, pedidos] = await Promise.all([store.nfs.listar(), store.pedidos.listar()]);
+  const pedidoPorNumero = new Map();
+  const pedidoPorClienteValor = new Map();
+  for (const pedido of pedidos) {
+    if (pedido.numero) pedidoPorNumero.set(String(pedido.numero), pedido);
+    const k = chaveClienteValor(pedido.clienteNome, pedido.valorTotal);
+    if (!k) continue;
+    if (!pedidoPorClienteValor.has(k)) pedidoPorClienteValor.set(k, []);
+    pedidoPorClienteValor.get(k).push(pedido);
+  }
+  const saida = [];
+  for (const nf of nfs) {
+    if (nf.vendedorId || nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
+    // nota cujo pedido está na base e tem vendedor não cai aqui: ela já tem dono
+    const pedido = nf.pedidoNumero ? pedidoPorNumero.get(String(nf.pedidoNumero)) : null;
+    if (pedido?.vendedorId) continue;
+    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);
+    saida.push({ nf, pedido: pedido || null, valor: nf.valorTotal || 0, motivo, explicacao });
+  }
+  return saida.sort((a, b) => b.valor - a.valor);
+}
+
+/**
+ * Tudo que está sem dono, numa lista só, do que mais pesa para o que menos
+ * pesa: pedido sem vendedor (resolve todas as notas dele de uma vez) e nota que
+ * não chegou a pedido nenhum (resolve só ela). É esta a lista que o app cobra
+ * depois de cada importação.
+ */
+export async function vendasSemVendedor() {
+  const [pedidos, notas] = await Promise.all([pedidosSemVendedor(), notasSemVendedor()]);
+  const itens = [
+    ...pedidos.map((x) => ({
+      tipo: 'pedido',
+      chave: `ped:${x.pedido.id}`,
+      titulo: `Pedido ${x.pedido.numero || '(sem número)'}`,
+      cliente: x.pedido.clienteNome || 'cliente não identificado',
+      data: x.pedido.data || null,
+      valor: x.valor,
+      nota: x.notas.length
+        ? `${x.notas.length} NF: ${x.notas.map((n) => n.numero).filter(Boolean).slice(0, 3).join(', ')}`
+        : 'ainda sem NF',
+      explicacao: 'o relatório não trouxe o vendedor deste pedido',
+      pedido: x.pedido,
+    })),
+    ...notas.map((x) => ({
+      tipo: 'nota',
+      chave: `nf:${x.nf.id}`,
+      titulo: `NF ${x.nf.numero || '(sem número)'}`,
+      cliente: x.nf.clienteNome || 'cliente não identificado',
+      data: x.nf.dataEmissao || null,
+      valor: x.valor,
+      nota: 'nota emitida',
+      explicacao: x.explicacao,
+      nf: x.nf,
+    })),
+  ];
+  return itens.sort((a, b) => b.valor - a.valor);
 }
 
 /* -------------------------------------------------------------------- título */
@@ -547,7 +794,7 @@ function empilharChave(mapa, chave, valor) {
 
 /* --------------------------------------------------------------- pendências */
 
-async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos, pedidoPorNumero, pedidos }) {
+async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos, pedidoPorNumero, pedidoPorClienteValor, pedidos }) {
   const anteriores = await store.pendencias.listar();
   const ignoradas = new Map(anteriores.filter((p) => p.status === 'ignorada').map((p) => [p.id, p]));
   const encontradas = [];
@@ -590,7 +837,7 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     if (nf.vendedorId) continue;
     if (pedidoDaNota(nf)) continue;    // o pedido dela responde
 
-    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
+    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);
     nova('nf_sem_pedido', nf.id, {
       titulo: `NF ${nf.numero}`,
       detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
@@ -747,10 +994,25 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
  * Por que esta NF ficou sem vendedor? A resposta muda o que você precisa fazer:
  * importar o relatório do período certo, ou escolher o pedido na mão.
  */
-export function porQueSemVendedor(nf, pedidoPorNumero) {
+export function porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor) {
   const numero = nf.pedidoNumero ? String(nf.pedidoNumero) : null;
   if (!numero) {
-    return { motivo: 'sem_pedido', explicacao: 'a NF não informa o pedido' };
+    // a segunda ponte achou candidatos e se recusou a escolher: diga isso, e
+    // diga quais são. Duas linhas de relatório resolvem melhor do que um palpite.
+    const candidatos = candidatosPorClienteValor(nf, pedidoPorClienteValor);
+    if (candidatos.length > 1) {
+      const numeros = candidatos.map((c) => c.numero).filter(Boolean);
+      const quais = numeros.slice(0, 4).join(', ') + (numeros.length > 4 ? '…' : '');
+      return {
+        motivo: 'pedidos_iguais',
+        explicacao: `${candidatos.length} pedidos deste cliente com este mesmo valor (${quais}) — `
+          + 'de vendedores diferentes, então o app não escolhe',
+      };
+    }
+    return {
+      motivo: 'sem_pedido',
+      explicacao: 'a NF não informa o pedido, e nenhum pedido tem este cliente com este mesmo valor',
+    };
   }
   const pedido = pedidoPorNumero?.get(numero);
   if (!pedido) {

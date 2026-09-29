@@ -152,9 +152,29 @@ na mesma linha.
 ```
      fiscal            contas a receber          pedidos        comissão
        NF      ──────►   NF | pedido   ──────►   pedido   ◄──────  vendedor
-    (valor,                                      (custo)
-     data)
+    (valor,              └ 1ª ponte              (custo)
+     data)      ──────►  mesmo cliente
+                         + mesmo valor  ──────►
+                         └ 2ª ponte
 ```
+
+**Por que duas pontes.** A do contas a receber é a mais forte, e é sempre a
+primeira. Mas ela tem um limite medido nos arquivos de verdade: de 336 notas de
+um mês, só 74 aparecem em algum título — venda à vista não gera conta a receber.
+A segunda ponte cobre o resto sem inventar: nota e pedido da mesma venda têm o
+MESMO cliente e o MESMO valor até o centavo, e o pedido vem antes da nota. Vale
+só quando o par é único, e a janela é de 30 dias. Resultado no mesmo mês: 297 das
+336 notas com dono, R$ 555 mil atribuídos de R$ 706 mil.
+
+O que a segunda ponte **recusa**, e por quê:
+
+| Situação | O que o app faz |
+|---|---|
+| dois pedidos iguais, vendedores diferentes | não escolhe — vira pendência com os números dos candidatos |
+| dois pedidos iguais, mesmo vendedor | atribui o **vendedor**, mas não finge saber qual pedido |
+| pedido depois da nota | ignora — não é a venda dela |
+| um centavo de diferença | ignora — não é o mesmo valor |
+| pedido de mais de 30 dias antes | fora da janela |
 
 **Faturamento é da nota, não do pedido.** Um pedido do mês passado cuja nota saiu
 este mês é venda deste mês. Por isso o app soma NFs e não pedidos — e por isso a
@@ -168,8 +188,10 @@ problemas — antes disso, 336 notas e 334 pedidos viravam quase 700 itens, com 
 mesmo dinheiro contado duas vezes. Agora:
 
 - nota que já chegou ao pedido → **não aparece**: quem responde é o pedido;
-- nota que não chegou a pedido nenhum → aparece **uma vez**, e o que ela pede é
-  o vínculo (contas a receber), não o vendedor;
+- nota que não chegou a pedido nenhum → aparece **uma vez**, com o motivo escrito
+  (as duas pontes falharam, e o texto diz qual das duas e por quê), e recebe
+  vendedor direto: o sistema de origem não deixa acrescentar vendedor a uma nota
+  já emitida, então este é o único lugar onde isso pode acontecer;
 - pedido sem vendedor → aparece **uma vez**, e o que resolve é o relatório de
   comissão.
 

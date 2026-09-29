@@ -793,10 +793,12 @@ Cliente Um Ltda;11111111000111;5001;Boleto;Itaú;10/10/2026;Em aberto;10.000,00;
   for (const x of antes) tipos[x.tipo] = (tipos[x.tipo] || 0) + 1;
   igual('a nota com pedido não vira pendência própria: quem responde é o pedido',
     antes.filter((x) => x.titulo.includes('7001')).length, 0);
-  igual('a nota SEM pedido aparece uma vez, e o que ela pede é o vínculo',
-    antes.filter((x) => x.tipo === 'nf_sem_pedido' && x.titulo.includes('7002')).length, 1);
+  // a 7002 não tem título nenhum, mas o pedido 5002 é do mesmo cliente com o
+  // mesmo valor: a segunda ponte fecha, e quem responde por ela é o pedido
+  igual('a nota sem título achou o pedido pela segunda ponte',
+    antes.filter((x) => x.tipo === 'nf_sem_pedido' && x.titulo.includes('7002')).length, 0);
   igual('e os dois pedidos pedem vendedor', tipos.pedido_sem_vendedor, 2);
-  igual('três pendências para duas vendas — não seis', antes.length, 3);
+  igual('duas pendências para duas vendas — não seis', antes.length, 2);
 
   // agora o relatório de comissão, que é de onde vem o vendedor
   const COM = 'Nº;Cliente;Vendedor;Data de emissão;Valor;Comissão';
@@ -812,13 +814,16 @@ Cliente Um Ltda;11111111000111;5001;Boleto;Itaú;10/10/2026;Em aberto;10.000,00;
     (await store.vendedores.listar()).some((v) => v.nome === 'Rita'), '');
 
   const nfs7001 = (await store.nfs.listar()).find((n) => n.numero === '7001');
+  const nfs7002 = (await store.nfs.listar()).find((n) => n.numero === '7002');
   const rita = (await store.vendedores.listar()).find((v) => v.nome === 'Rita');
   igual('a nota com pedido herdou a vendedora', nfs7001.vendedorId, rita.id);
   igual('e a origem diz de onde veio', nfs7001.vendedorOrigem, 'pedido-titulo');
+  igual('a nota sem título também tem dono', nfs7002.vendedorId, rita.id);
+  igual('e a origem diz que foi pela segunda ponte', nfs7002.vendedorOrigem, 'pedido-valor');
+  igual('com o pedido certo', nfs7002.pedidoNumero, '5002');
 
-  // a nota sem pedido continua sendo o que realmente falta
-  igual('sobra só a nota que não achou o pedido',
-    depois.map((x) => x.tipo), ['nf_sem_pedido']);
+  // as duas vendas fecharam: não sobra nada
+  igual('não sobra pendência nenhuma', depois.map((x) => x.tipo), []);
 
   // e o app guarda o que o sistema calculou, para poder comparar depois
   const doRelatorio = await store.comissoesRelatorio.listar();
@@ -853,6 +858,137 @@ Cliente Antigo;33333333000133;900;Boleto;Itaú;20/12/2026;Em aberto;500,00;1200`
   igual('nota fora da faixa importada não vira aviso', p.length, 0);
 
   for (const t of (await store.receber.listar()).filter((x) => x.nfNumero === '1200')) await store.receber.remover(t.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ A segunda ponte: mesmo cliente, mesmo valor, pedido antes da nota');
+{
+  /**
+   * De 336 notas de um mês real, só 74 aparecem em algum título do contas a
+   * receber — venda à vista não gera conta a receber, e sem título a primeira
+   * ponte não tem por onde passar. A segunda ponte fecha esse buraco SEM
+   * inventar: mesmo cliente, mesmo valor até o centavo, pedido antes da nota, e
+   * par único. Este bloco é a especificação do que ela aceita e, principalmente,
+   * do que ela RECUSA.
+   */
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação';
+  const VEND = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+
+  await importar('pedidos', 'pv.csv', `${VEND}
+6101;Ponte Unica Ltda;05/11/2026;Alberto;Concretizada;500,00;1.111,11
+6102;Ponte Dois Donos Ltda;05/11/2026;Alberto;Concretizada;900,00;2.222,22
+6103;Ponte Dois Donos Ltda;06/11/2026;Beatriz;Concretizada;900,00;2.222,22
+6104;Ponte Mesmo Dono Ltda;05/11/2026;Alberto;Concretizada;900,00;3.333,33
+6105;Ponte Mesmo Dono Ltda;06/11/2026;Alberto;Concretizada;900,00;3.333,33
+6106;Ponte Depois Ltda;20/11/2026;Alberto;Concretizada;900,00;4.444,44
+6107;Ponte Centavo Ltda;05/11/2026;Alberto;Concretizada;900,00;5.555,55
+6108;Ponte Longe Ltda;01/09/2026;Alberto;Concretizada;900,00;6.666,66`);
+  await importar('nfs', 'pn.csv', `${FISC}
+8101;07/11/2026;Ponte Unica Ltda;44444444000144;1.111,11;Autorizada
+8102;07/11/2026;Ponte Dois Donos Ltda;44444444000255;2.222,22;Autorizada
+8103;07/11/2026;Ponte Mesmo Dono Ltda;44444444000366;3.333,33;Autorizada
+8104;07/11/2026;Ponte Depois Ltda;44444444000477;4.444,44;Autorizada
+8105;07/11/2026;Ponte Centavo Ltda;44444444000588;5.555,56;Autorizada
+8106;07/11/2026;Ponte Longe Ltda;44444444000699;6.666,66;Autorizada`);
+  await link.recalcular();
+
+  const nota = async (n) => (await store.nfs.listar()).find((x) => x.numero === n);
+  const nomeDo = async (nf) => (nf.vendedorId
+    ? (await store.vendedores.listar()).find((v) => v.id === nf.vendedorId)?.nome
+    : null);
+
+  const unica = await nota('8101');
+  igual('par único: liga no pedido', unica.pedidoNumero, '6101');
+  igual('e a origem não mente sobre como foi', unica.vendedorOrigem, 'pedido-valor');
+  igual('com o vendedor do pedido', await nomeDo(unica), 'Alberto');
+
+  const doisDonos = await nota('8102');
+  igual('dois pedidos iguais de vendedores diferentes: não escolhe', doisDonos.vendedorId, null);
+  igual('e não inventa vínculo com nenhum dos dois', doisDonos.pedidoNumero, null);
+
+  const mesmoDono = await nota('8103');
+  igual('dois pedidos iguais do MESMO vendedor: o vendedor é certo',
+    await nomeDo(mesmoDono), 'Alberto');
+  igual('e a origem diz que o pedido continua indefinido', mesmoDono.vendedorOrigem, 'vendedor-valor');
+  igual('sem escolher um pedido no lugar do outro', mesmoDono.pedidoNumero, null);
+
+  const depois = await nota('8104');
+  igual('pedido DEPOIS da nota não é a venda dela', depois.vendedorId, null);
+
+  const centavo = await nota('8105');
+  igual('um centavo de diferença não é o mesmo valor', centavo.vendedorId, null);
+
+  const longe = await nota('8106');
+  igual('pedido de dois meses antes está fora da janela', longe.vendedorId, null);
+
+  // e o que sobrou é cobrado: a nota entra na lista de vendas sem dono, com o
+  // motivo escrito, porque é ela que precisa de vendedor — não um pedido
+  const semDono = await link.vendasSemVendedor();
+  const cobradas = semDono.filter((x) => x.tipo === 'nota' && ['8102', '8104', '8105', '8106']
+    .some((n) => x.titulo.includes(n)));
+  igual('as quatro recusadas viram trabalho para resolver', cobradas.length, 4);
+  ok('e a nota dos dois donos explica por que o app não escolheu',
+    /2 pedidos deste cliente com este mesmo valor/.test(
+      cobradas.find((x) => x.titulo.includes('8102')).explicacao),
+    cobradas.find((x) => x.titulo.includes('8102')).explicacao);
+
+  // recalcular de novo não muda nada: vínculo derivado é refeito, não acumulado
+  await link.recalcular();
+  igual('recalcular duas vezes dá o mesmo resultado',
+    (await nota('8101')).pedidoNumero, '6101');
+  igual('e não gruda vínculo em quem foi recusada', (await nota('8102')).pedidoNumero, null);
+
+  // limpeza
+  for (const n of ['8101', '8102', '8103', '8104', '8105', '8106']) {
+    const x = await nota(n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const n of ['6101', '6102', '6103', '6104', '6105', '6106', '6107', '6108']) {
+    const x = (await store.pedidos.listar()).find((y) => y.numero === n);
+    if (x) await store.pedidos.remover(x.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ Por nota × por pedido: a conferência por vendedor');
+{
+  /**
+   * "Eu sei que um vendedor vendeu bem mais do que tá no relatório."
+   * A tela de comissões põe os dois números lado a lado para ela poder checar
+   * sozinha, em vez de desconfiar.
+   */
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação';
+  const VEND = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  const COM = 'Nº;Cliente;Vendedor;Data de emissão;Valor;Comissão';
+
+  await importar('pedidos', 'cv.csv', `${VEND}
+7201;Confere Um Ltda;03/12/2026;;Concretizada;500,00;10.000,00
+7202;Confere Dois Ltda;03/12/2026;;Concretizada;500,00;7.000,00`);
+  await importar('comissoes', 'cc.csv', `${COM}
+7201;Confere Um Ltda;Sílvia;03/12/2026;10.000,00;200,00
+7202;Confere Dois Ltda;Sílvia;03/12/2026;7.000,00;140,00`);
+  // só a primeira virou nota: a segunda venda não tem nota nenhuma no mês
+  await importar('nfs', 'cn.csv', `${FISC}
+9201;04/12/2026;Confere Um Ltda;55555555000155;10.000,00;Autorizada`);
+  await link.recalcular();
+
+  const c = await commission.calcular('2026-12');
+  const silvia = c.conferenciaVendedores.find((v) => v.nome === 'Sílvia');
+  igual('por nota emitida: só a nota que existe', silvia.porNota, 10000);
+  igual('por pedido: o que o relatório de comissão traz', silvia.porPedido, 17000);
+  igual('e a diferença é a venda que ainda não virou nota', silvia.diferenca, -7000);
+
+  // limpeza
+  for (const n of ['9201']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const n of ['7201', '7202']) {
+    const x = (await store.pedidos.listar()).find((y) => y.numero === n);
+    if (x) await store.pedidos.remover(x.id);
+    const y = (await store.comissoesRelatorio.listar()).find((z) => z.numero === n);
+    if (y) await store.comissoesRelatorio.remover(y.id);
+  }
   await link.recalcular();
 }
 

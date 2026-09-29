@@ -103,12 +103,24 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 - **Nada é obrigatório.** Nenhuma coluna de nenhum relatório. Você exporta como o
   sistema deixa; o app importa o que veio e **avisa** o que faltou, em vez de
   bloquear. Data ilegível vira aviso, não erro — a linha entra assim mesmo.
-- **Vendedor nunca é adivinhado.** O relatório de vendas traz a coluna VENDEDOR,
-  e o relatório fiscal não traz o pedido. A ponte é o **contas a receber**, que
-  tem a nota e o número do pedido na mesma linha: com ele, `NF → pedido →
-  vendedor` fecha sozinho e a comissão sai sem marcação nenhuma. Linha que vier
-  sem vendedor entra assim mesmo e é a única que o app pergunta, uma vez, no
-  pedido.
+- **Vendedor nunca é adivinhado, mas agora quase sempre é encontrado.** O
+  relatório fiscal não traz o pedido, e o vendedor vem do relatório de comissão.
+  Duas pontes levam da nota ao pedido, nesta ordem:
+  1. **contas a receber** — traz a nota e o número do pedido na mesma linha. É a
+     prova mais forte, e é sempre a primeira tentada. Só que venda à vista não
+     gera conta a receber: num mês real, de 336 notas apenas 74 apareciam em
+     algum título, e R$ 624 mil de R$ 706 mil ficavam sem dono.
+  2. **mesmo cliente + mesmo valor até o centavo + pedido antes da nota**, e só
+     quando o par é **único**. Não é semelhança: é comparação exata de dois
+     campos. Dois pedidos iguais do mesmo cliente? O app não escolhe — se os dois
+     forem do mesmo vendedor o vendedor é certo de qualquer jeito; se não,
+     vira pendência. A prova de que a ponte está certa está nas datas: dos 292
+     pares únicos, 237 são do mesmo dia, e nenhum pedido é posterior à nota.
+
+  Com as duas, o mesmo mês foi de R$ 82 mil atribuídos para R$ 555 mil, e das 268
+  pendências sobraram 40. O que sobra é cobrado com o motivo escrito, e a origem
+  do vendedor aparece em cada nota — você sempre sabe se veio de um relatório, de
+  qual ponte, ou de uma decisão sua.
 - **Comissão de fábrica:** 2% padrão e 0,5% no cimento (pela palavra na
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
 - **Conferência que nunca some:** faturamento fiscal = soma dos vendedores. A

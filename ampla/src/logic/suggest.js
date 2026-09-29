@@ -17,7 +17,7 @@ import * as store from '../core/store.js';
 import { daysBetween } from '../core/format.js';
 import { cents, sortBy, digits } from '../core/util.js';
 import { valeParaFaturamento } from './revenue.js';
-import { recalcular, porQueSemVendedor } from './link.js';
+import { recalcular, porQueSemVendedor, chaveClienteValor } from './link.js';
 
 /** Quantos dias antes da emissão ainda vale procurar o pedido. */
 export const JANELA_PADRAO = 90;
@@ -64,6 +64,15 @@ export async function sugestoes({ janelaDias = JANELA_PADRAO, mes = null } = {})
   const disponiveis = pedidos.filter((p) => p.vendedorId && !pedidosUsados.has(p.id));
 
   const pedidoPorNumero = new Map(pedidos.map((p) => [String(p.numero), p]));
+  // mesmo índice da segunda ponte, para a explicação dizer a verdade: quando há
+  // dois pedidos iguais o app não escolhe, e é isso que ela precisa ler
+  const pedidoPorClienteValor = new Map();
+  for (const pedido of pedidos) {
+    const k = chaveClienteValor(pedido.clienteNome, pedido.valorTotal);
+    if (!k) continue;
+    if (!pedidoPorClienteValor.has(k)) pedidoPorClienteValor.set(k, []);
+    pedidoPorClienteValor.get(k).push(pedido);
+  }
   const porCliente = new Map();
   for (const pedido of disponiveis) {
     const chave = chaveCliente(pedido);
@@ -103,7 +112,7 @@ export async function sugestoes({ janelaDias = JANELA_PADRAO, mes = null } = {})
     else if (candidatos.length === 1) { confianca = 'unica'; [melhor] = candidatos; } else if (candidatos.length > 1) { confianca = 'varias'; }
 
     // por que esta nota está sem vendedor — é o que diz o que fazer com ela
-    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero);
+    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);
 
     return {
       nf,
