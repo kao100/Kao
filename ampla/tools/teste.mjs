@@ -686,11 +686,12 @@ console.log('\n▶ Os oito relatórios do Gestão Click já vêm ligados');
     'gc-pagar': 'pagar',
     'gc-orcamentos': 'orcamentos',
     'gc-produtos': 'produtos',
+    'gc-produtos-sem-grupo': 'produtos',
     'gc-produtos-vendidos': 'produtosVendidos',
     'gc-comissao-produto': 'comissaoProduto',
     'gc-clientes': 'clientes',
   };
-  igual('os dez relatórios estão cadastrados',
+  igual('os onze relatórios estão cadastrados',
     Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
 
   for (const perfil of perfis.PERFIS) {
@@ -1453,6 +1454,46 @@ TIJOLO PACOTE;100;87,38;8.738,00;14.400,00;5.662,00`, { mesReferencia: '2026-08-
   for (const x of (await store.produtos.listar()).filter((y) => y.codigo === 'TIJ01')) await store.produtos.remover(x.id);
   await link.recalcular();
 
+  /**
+   * O CADASTRO DE PRODUTOS É O MELHOR CUSTO — e também o melhor teste.
+   *
+   * Ele traz custo e varejo do mesmo produto, na mesma linha e na mesma unidade.
+   * Quando a razão entre os dois é sã, o custo absoluto vale. Quando o custo é
+   * MAIOR que o preço de tabela, ou o produto é vendido com prejuízo ou as
+   * unidades diferem (TIJOLO com custo de R$ 280,00 e varejo de R$ 7,20, porque
+   * o custo é do pacote). Nos dois casos o custo não serve, e o app prefere
+   * dizer "sem custo" a inventar prejuízo.
+   */
+  const PROD = 'Cód. interno;Nome;Valor de custo;NCM;Estoque;Fornecedor;Vr. Varejo';
+  await importar('produtos', 'cad.csv', `${PROD}
+CAD01;PRODUTO SADIO;40,00;25051000;10,00;-----;100,00
+CAD02;PRODUTO UNIDADE TROCADA;280,00;25051000;10,00;-----;7,20`);
+  const FISC4 = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  const ITENS4 = 'Nota fiscal;Código do produto;Produto;Quantidade;Valor total';
+  await importar('nfs', 'cad-nf.csv', `${FISC4}
+9920;10/09/2027;Cliente Cadastro Ltda;40404040000140;1.080,00;Autorizada;Venda de mercadoria`);
+  await importar('nfItens', 'cad-it.csv', `${ITENS4}
+9920;CAD01;PRODUTO SADIO;10;900,00
+9920;CAD02;PRODUTO UNIDADE TROCADA;25;180,00`);
+  await link.recalcular();
+
+  const mc = await margemMod.margem({ de: '2027-09-01', ate: '2027-09-30' });
+  const linha = mc.vendedores[0];
+  // só o produto sadio custeia: 10 × 40 = 400. O outro fica de fora.
+  igual('o custo vem do cadastro, por unidade', linha.custo, 400);
+  igual('e o produto cujo custo não fecha com o preço fica sem custo', linha.produtosSemCusto, 1);
+  ok('aparecendo na lista, com o fator que denuncia a unidade',
+    mc.unidadeDiferente.some((u) => /UNIDADE TROCADA/.test(u.descricao) && u.fator > 30),
+    JSON.stringify(mc.unidadeDiferente.map((u) => [u.descricao, u.fator])));
+  ok('e o app avisa que a margem está incompleta', !linha.completa, '');
+
+  for (const x of (await store.nfs.listar()).filter((y) => y.numero === '9920')) await store.nfs.remover(x.id);
+  for (const x of (await store.nfItens.listar()).filter((y) => y.nfNumero === '9920')) await store.nfItens.remover(x.id);
+  for (const x of (await store.produtos.listar()).filter((y) => ['CAD01', 'CAD02'].includes(y.codigo))) {
+    await store.produtos.remover(x.id);
+  }
+  await link.recalcular();
+
   // frete: sem a coluna no arquivo, o app diz que não sabe — não mostra zero
   igual('sem coluna de frete, o app não finge que o frete é zero', m.frete.temDado, false);
 
@@ -1717,6 +1758,70 @@ ${itens}
   }
   const prod = (await store.produtos.listar()).find((x) => x.codigo === 'CIM-XML');
   if (prod) await store.produtos.remover(prod.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ Custo do frete: o cobrado paga o pago?');
+{
+  /**
+   * "Além do custo do material, tem o custo de frete também. Tanto com terceiro
+   *  quanto com a minha frota própria. (…) É bom você considerar que a gente tem
+   *  esse custo, para às vezes pensar: ah, o Guilherme tem um frete, mas aí o
+   *  frete também a gente tem custo."
+   *
+   * O custo da frota é FIXO e mensal: salário de motorista não é de uma entrega.
+   * O app não divide isso por nota nem por vendedor — dividir seria inventar.
+   * Ele faz a conta que existe: cobrado no período menos pago no período.
+   */
+  const FR = 'Data;Tipo;Motorista;Descrição;Valor';
+  await importar('fretes', 'fr.csv', `${FR}
+05/11/2026;Frota própria;Jonas;Salário do mês;3.200,00
+05/11/2026;Frota própria;Jonas;Hora extra;450,00
+10/11/2026;Terceiro;Transportadora Norte;Entregas da semana;1.800,00
+12/11/2026;;Posto da esquina;Combustível;900,00`, { mesReferencia: '2026-11-01' });
+
+  const linhas = (await store.fretes.listar()).filter((l) => l.mes === '2026-11');
+  igual('as quatro linhas entraram', linhas.length, 4);
+  igual('frota própria é reconhecida pelo texto',
+    linhas.filter((l) => l.tipo === 'propria').length, 2);
+  igual('terceiro também', linhas.filter((l) => l.tipo === 'terceiro').length, 1);
+  igual('e o que não diz o tipo fica indefinido, sem chute',
+    linhas.filter((l) => l.tipo === 'indefinido').length, 1);
+
+  // notas com frete cobrado no mesmo mês
+  const FISC3 = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação;Frete';
+  await importar('nfs', 'frn.csv', `${FISC3}
+9910;06/11/2026;Cliente Frete A;30303030000130;5.000,00;Autorizada;Venda de mercadoria;4.000,00
+9911;07/11/2026;Cliente Frete B;30303030000241;3.000,00;Autorizada;Venda de mercadoria;1.500,00`);
+  await link.recalcular();
+
+  const f = await margemMod.frete({ de: '2026-11-01', ate: '2026-11-30' });
+  igual('o frete cobrado soma as notas', f.total, 5500);
+  ok('e o custo veio da planilha', f.custo.temDado, '');
+  igual('somando tudo que saiu', f.custo.total, 6350);
+  igual('com a frota separada', f.custo.frotaPropria, 3650);
+  igual('e os terceiros também', f.custo.terceiros, 1800);
+  igual('o que não foi classificado continua contando', f.custo.naoClassificado, 900);
+  igual('a conta que importa: cobrado menos pago', f.custo.resultado, -850);
+  ok('o cobrado paga 86% do pago', Math.abs(f.custo.cobertura - 86.61) < 0.1, String(f.custo.cobertura));
+  igual('e dá para ver quem fez a entrega', f.custo.porResponsavel[0].nome, 'Jonas');
+  igual('com quanto custou', f.custo.porResponsavel[0].valor, 3650);
+
+  // reenviar a planilha do mês atualiza, não soma de novo
+  await importar('fretes', 'fr.csv', `${FR}
+05/11/2026;Frota própria;Jonas;Salário do mês;3.200,00
+05/11/2026;Frota própria;Jonas;Hora extra;450,00
+10/11/2026;Terceiro;Transportadora Norte;Entregas da semana;1.800,00
+12/11/2026;;Posto da esquina;Combustível;900,00`, { mesReferencia: '2026-11-01' });
+  igual('reenviar a planilha não duplica',
+    (await store.fretes.listar()).filter((l) => l.mes === '2026-11').length, 4);
+
+  // limpeza
+  for (const l of (await store.fretes.listar())) await store.fretes.remover(l.id);
+  for (const n of ['9910', '9911']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
   await link.recalcular();
 }
 

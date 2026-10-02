@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'ampla-admin';
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export const STORES = {
   /** configurações, metas, preferências, marcos de atualização */
@@ -61,6 +61,24 @@ export const STORES = {
   vendasProduto: {
     keyPath: 'id',
     indexes: [['byProduto', 'produtoId'], ['byMes', 'mes'], ['byVendedor', 'vendedorNome']],
+  },
+
+  /**
+   * O QUE A ENTREGA CUSTOU.
+   *
+   * "Além do custo do material, tem o custo de frete também. Tanto com terceiro
+   *  quanto com a minha frota própria. Minha frota própria eu pago o salário
+   *  deles, é fixo. (…) É bom você considerar que a gente tem esse custo, para
+   *  às vezes pensar: ah, o Guilherme tem um frete, mas aí o frete também a
+   *  gente tem custo."
+   *
+   * Vem da planilha do Google onde ela lança tudo no mês. Fica em base própria
+   * porque não é conta a pagar nem venda: é o custo da operação de entrega, e o
+   * que ele responde é se o frete cobrado paga o frete feito.
+   */
+  fretes: {
+    keyPath: 'id',
+    indexes: [['byData', 'data'], ['byMes', 'mes'], ['byTipo', 'tipo']],
   },
 
   vendedores: { keyPath: 'id', indexes: [] },

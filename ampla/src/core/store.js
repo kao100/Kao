@@ -102,6 +102,7 @@ export const pedidos = repo('pedidos');
 export const orcamentos = repo('orcamentos');
 export const comissoesRelatorio = repo('comissoesRelatorio');
 export const vendasProduto = repo('vendasProduto');
+export const fretes = repo('fretes');
 export const receber = repo('receber');
 export const pagar = repo('pagar');
 export const extrato = repo('extrato');

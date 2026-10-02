@@ -402,6 +402,7 @@ async function construir(fonteId, d, ctx) {
   if (fonteId === 'nfs') return construirNf(d, ctx);
   if (fonteId === 'nfItens') return construirItem(d, ctx);
   if (fonteId === 'comissaoProduto' || fonteId === 'produtosVendidos') return construirVendaProduto(d, ctx, fonteId);
+  if (fonteId === 'fretes') return construirFrete(d, ctx);
   if (fonteId === 'pedidos') return construirPedido(d, ctx);
   if (fonteId === 'orcamentos') return construirOrcamento(d, ctx);
   if (fonteId === 'comissoes') return construirComissao(d, ctx);
@@ -465,6 +466,55 @@ function construirNf(d, ctx) {
  * Sem mês não há chave: o registro entra com a data que vier e, se não vier
  * nenhuma, usa o mês escolhido na importação. O app não escolhe um por ela.
  */
+/**
+ * Uma linha de custo de frete, da planilha dela.
+ *
+ * FROTA PRÓPRIA ou TERCEIRO sai do texto da coluna de tipo — e quando a coluna
+ * não vier, o app não adivinha: fica "não classificado", aparece assim na tela e
+ * continua somando no total, porque o dinheiro saiu de qualquer jeito.
+ *
+ * A chave natural é data + quem + descrição + valor. Reenviar a planilha do mês
+ * atualiza as linhas em vez de somar de novo — a mesma regra de todo o resto.
+ */
+function construirFrete(d, ctx) {
+  const data = d.data || ctx.mesReferencia || null;
+  const valor = d.valor == null ? null : cents(d.valor);
+  const tipo = classificarFrete(d.tipo);
+  const quem = d.responsavel ? String(d.responsavel).trim() : null;
+  const referencia = [data || 'sem', chaveTexto(quem || ''), chaveTexto(d.descricao || '').slice(0, 20), valor ?? 'sv']
+    .join('_');
+
+  return [{
+    store: 'fretes',
+    registro: {
+      id: unico(`fre_${referencia}`, ctx.usados),
+      data,
+      mes: data ? monthKey(data) : null,
+      tipo,
+      tipoArquivo: d.tipo || null,
+      responsavel: quem,
+      descricao: d.descricao || null,
+      veiculo: d.veiculo || null,
+      nfNumero: d.nfNumero ? docNumber(d.nfNumero) : null,
+      vendedorNome: d.vendedorNome || null,
+      valor,
+      origem: 'planilha',
+    },
+  }];
+}
+
+/**
+ * Frota própria ou terceiro? Sai do texto que ela escreve na planilha. O que não
+ * encaixar fica como 'indefinido' — o custo continua contando, só não é separado.
+ */
+function classificarFrete(texto) {
+  const t = normalize(texto || '');
+  if (!t) return 'indefinido';
+  if (/(propri|frota|interno|motorista|funcionari|salari)/.test(t)) return 'propria';
+  if (/(terceir|transportadora|externo|contratad|autonom|freteiro)/.test(t)) return 'terceiro';
+  return 'indefinido';
+}
+
 function construirVendaProduto(d, ctx, fonteId) {
   /**
    * LINHA DE TOTAL POR VENDEDOR não é produto.

@@ -453,6 +453,56 @@ export const FONTES = {
       + 'custo vem do seu sistema, não de uma conta minha.',
   },
 
+  /**
+   * CUSTO DE FRETE — a outra metade da conta do frete.
+   *
+   * O frete cobrado aparece na nota. O que ele CUSTOU não aparece em lugar
+   * nenhum dos relatórios do Gestão Click: mora na planilha do Google onde ela
+   * lança salário de motorista, extras e o que paga a transportadora.
+   *
+   * Sem isso, "o Guilherme cobrou R$ 8.676 de frete" parece resultado, e não é —
+   * é receita bruta de uma operação que tem custo fixo e variável.
+   *
+   * As colunas são poucas de propósito: data, tipo, quem fez, quanto, e o que
+   * foi. Quanto menos a planilha tiver que mudar para caber aqui, mais chance de
+   * ela continuar sendo preenchida.
+   */
+  fretes: {
+    id: 'fretes',
+    nome: 'Custos de frete (frota e terceiros)',
+    icone: '🚚',
+    periodicidade: 'mensal',
+    store: 'fretes',
+    verdadeDe: 'O que a entrega custou: frota própria e transportadora.',
+    descricao: 'A sua planilha do Google, exportada em XLSX ou CSV. Lance uma linha por '
+      + 'pagamento: salário de motorista, extras, combustível, manutenção, e o que foi pago a '
+      + 'transportadora. É com ela que o app responde se o frete cobrado paga o frete feito.',
+    formatos: ['xlsx', 'csv', 'pdf'],
+    colunasReais: ['data', 'tipo (frota própria / terceiro)', 'quem', 'descrição', 'valor'],
+    campos: [
+      campo('data', 'Data', 'data', { sinonimos: ['data', 'dia', 'data pagamento', 'competencia', 'mes'] }),
+      campo('tipo', 'Tipo (frota própria / terceiro)', 'texto', {
+        sinonimos: ['tipo', 'frota', 'categoria', 'origem', 'modalidade', 'frota terceiro'],
+      }),
+      campo('responsavel', 'Quem (motorista ou transportadora)', 'texto', {
+        chaveNatural: true,
+        sinonimos: ['motorista', 'transportadora', 'responsavel', 'responsável', 'nome', 'prestador', 'funcionario'],
+      }),
+      campo('descricao', 'Descrição', 'texto', {
+        chaveNatural: true,
+        sinonimos: ['descricao', 'descrição', 'historico', 'observacao', 'referente', 'item'],
+      }),
+      campo('valor', 'Valor', 'dinheiro', { sinonimos: VALOR_TOTAL }),
+      campo('veiculo', 'Veículo / placa', 'texto', { sinonimos: ['veiculo', 'veículo', 'placa', 'carro', 'caminhao'] }),
+      campo('nfNumero', 'Nota fiscal', 'texto', { sinonimos: ['nota fiscal', 'nota', 'nf', 'entrega'] }),
+      campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante'] }),
+    ],
+    mesObrigatorio: true,
+    ajuda: 'Salário de motorista é FIXO e mensal: lance uma linha por mês, com o valor cheio. O '
+      + 'app não divide isso por nota — custo fixo não é de uma entrega, é do mês. Nota fiscal e '
+      + 'vendedor são opcionais: quando vierem, o app consegue dizer quanto custou aquela entrega.',
+  },
+
   saldos: {
     id: 'saldos',
     nome: 'Saldos bancários',

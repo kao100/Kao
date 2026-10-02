@@ -140,6 +140,27 @@ export const PERFIS = [
     observacao: 'Entra tudo: custo, valor de varejo (o preço de venda), grupo, NCM e estoque.',
   },
   {
+    /**
+     * O mesmo relatório de produtos, exportado sem a coluna GRUPO. É o que sai
+     * quando o filtro de grupo não é usado — e como o perfil exige todas as
+     * colunas que lista, sem esta variante o arquivo caía na tela de mapeamento.
+     */
+    id: 'gc-produtos-sem-grupo',
+    fonte: 'produtos',
+    nome: 'Relatório de produtos (sem a coluna Grupo)',
+    colunas: ['Cód. interno', 'Nome', 'Valor de custo', 'NCM', 'Estoque', 'Fornecedor', 'Vr. Varejo'],
+    mapa: {
+      codigo: 'Cód. interno',
+      descricao: 'Nome',
+      custo: 'Valor de custo',
+      ncm: 'NCM',
+      precoVenda: 'Vr. Varejo',
+      estoque: 'Estoque',
+    },
+    observacao: 'Sem a coluna Grupo, a Curva ABC por categoria fica sem agrupamento — o resto '
+      + 'entra igual. Se der para exportar com o Grupo, ela passa a funcionar.',
+  },
+  {
     id: 'gc-produtos-vendidos',
     fonte: 'produtosVendidos',
     nome: 'Relatório de produtos vendidos',

@@ -34,6 +34,7 @@ const COLUNAS = [
 const COLUNAS_FRETE = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Frete cobrado', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Custo rateado', key: 'custoRateado', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Frete / faturamento', key: 'peso', tipo: 'percentual', alinhar: 'direita' },
   { header: 'NFs', key: 'notas', tipo: 'numero', alinhar: 'direita' },
@@ -201,15 +202,57 @@ export async function telaMargem({ query }) {
       ? h('div.empilha', { style: { gap: '10px' } },
         h('div.grade.grade--2',
           kpi({ label: 'Frete cobrado', valor: money(r.frete.total), icone: '🚚', cor: 'info' }),
-          kpi({
-            label: 'Notas com frete', valor: `${r.frete.notasComFrete} de ${r.frete.notasNoPeriodo}`,
-            icone: '🧾',
+          r.frete.custo.temDado
+            ? kpi({ label: 'Frete pago', valor: money(r.frete.custo.total), icone: '💸', cor: 'laranja' })
+            : kpi({
+              label: 'Notas com frete', valor: `${r.frete.notasComFrete} de ${r.frete.notasNoPeriodo}`,
+              icone: '🧾',
+            }),
+          r.frete.custo.temDado && kpi({
+            label: 'Sobra da entrega',
+            valor: money(r.frete.custo.resultado),
+            icone: r.frete.custo.resultado >= 0 ? '✅' : '🔴',
+            cor: r.frete.custo.resultado >= 0 ? 'ok' : 'ruim',
+            nota: r.frete.custo.cobertura == null ? null
+              : `o cobrado paga ${pct(r.frete.custo.cobertura, 0)} do pago`,
+          }),
+          r.frete.custo.temDado && kpi({
+            label: 'Frota própria', valor: money(r.frete.custo.frotaPropria), icone: '🚛',
+            nota: `terceiros ${money(r.frete.custo.terceiros)}`,
           })),
+
+        /**
+         * A conta que ela pediu, escrita por extenso. "O Guilherme tem um frete,
+         * mas aí o frete também a gente tem custo."
+         */
+        r.frete.custo.temDado
+          ? h('p.mini.muted',
+            `${r.frete.custo.lancamentos} lançamento(s) de custo no período. O custo da frota é FIXO `
+            + 'e mensal — salário de motorista não é de uma entrega, é do mês —, então o app NÃO '
+            + 'divide esse custo por nota nem por vendedor. A coluna "custo rateado" é só o rateio '
+            + 'proporcional ao frete que cada um cobrou: serve para ordem de grandeza, não para '
+            + 'cobrar ninguém.')
+          : aviso('Falta o custo do frete. Mande a sua planilha do Google (exportada em XLSX ou CSV) '
+            + 'em Custos de frete: uma linha por pagamento, com data, tipo (frota própria ou '
+            + 'terceiro), quem, descrição e valor. Sem ela, "fulano cobrou R$ 8 mil de frete" parece '
+            + 'resultado — e não é, porque a entrega tem custo.', 'atencao',
+          botao('Mandar custos de frete', { pequeno: true, onClick: () => navigate('/arquivos/fretes') })),
+
         tabela({
           colunas: COLUNAS_FRETE,
           linhas: r.frete.vendedores,
-          total: { nome: 'TOTAL', frete: r.frete.total },
-        }))
+          total: { nome: 'TOTAL', frete: r.frete.total, custoRateado: r.frete.custo.temDado ? r.frete.custo.total : null },
+        }),
+
+        r.frete.custo.temDado && r.frete.custo.porResponsavel.length > 0
+          && secao('Quem fez a entrega', null, tabela({
+            colunas: [
+              { header: 'Motorista / transportadora', key: 'nome' },
+              { header: 'Custo no período', key: 'valor', tipo: 'dinheiro', alinhar: 'direita' },
+            ],
+            linhas: r.frete.custo.porResponsavel,
+            total: { nome: 'TOTAL', valor: r.frete.custo.total },
+          })))
       : aviso('O seu relatório fiscal ainda não traz a coluna de FRETE, então o app não sabe quanto '
         + 'foi cobrado — e preferiu dizer isso a mostrar R$ 0,00, que seria outra coisa. Se o export '
         + 'puder sair com a coluna de frete (ou se você mandar os XMLs das NF-e), esta tela se '

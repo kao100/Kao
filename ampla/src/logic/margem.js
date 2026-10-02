@@ -179,20 +179,88 @@ export async function margem({ de, ate }) {
    *     unidade que pode não ser a da venda, e por isso só com verificação.
    */
   const custoDoCadastro = new Map(produtos.map((p) => [p.id, p.custo]));
-  const custoMedioDoRelatorio = new Map(produtos.map((p) => [p.id, p.custoMedioRelatorio]));
   const custoUnitario = (produtoId, doItem) => {
     if (doItem != null) return doItem;
-    const cadastro = custoDoCadastro.get(produtoId);
-    if (cadastro != null) return cadastro;
     return null;
   };
 
-  /** O custo de uma linha, pelo caminho mais confiável que existir para ela. */
+  /**
+   * A PROPORÇÃO DE CUSTO DO CADASTRO — a melhor que existe.
+   *
+   * O cadastro de produtos traz, do mesmo produto e na mesma linha, o VALOR DE
+   * CUSTO e o VR. VAREJO. Os dois estão na mesma unidade, seja ela qual for: se o
+   * cadastro conta a caixa, os dois contam a caixa.
+   *
+   * O custo absoluto, sozinho, não serve — é por unidade de COMPRA, e a venda
+   * pode ser por peça. Usá-lo direto dava custo de R$ 423 mil sobre venda de
+   * R$ 104 mil num vendedor. A razão entre custo e varejo atravessa isso.
+   *
+   * O preço de tabela não é o preço praticado: com desconto, a razão superestima
+   * um pouco o custo. É o melhor disponível, e a conferência contra a margem que
+   * o relatório declara é quem diz se fechou.
+   */
+  /**
+   * E a razão é também um TESTE, não só uma conta.
+   *
+   * Custo maior que o preço de tabela quer dizer uma de duas coisas: o produto é
+   * vendido com prejuízo (raro, e o app não deveria presumir) ou custo e varejo
+   * estão em unidades diferentes (comum: TIJOLO COMUM com custo de R$ 280,00 e
+   * varejo de R$ 7,20 — o custo é do pacote, o varejo é da peça).
+   *
+   * Nos dois casos o custo daquele produto não serve, e NENHUMA outra fonte
+   * serve também, porque todas saem do mesmo cadastro. O produto fica sem custo
+   * confiável e aparece na lista — que é melhor do que um prejuízo inventado.
+   */
+  const RAZAO_MAXIMA = 1.5;
+  const razaoDoCadastro = new Map();
+  const custoNaoConfiavel = new Set();
+  for (const p of produtos) {
+    if (p.custo == null || !p.precoVenda) continue;
+    const razao = p.custo / p.precoVenda;
+    if (razao > 0 && razao <= RAZAO_MAXIMA) razaoDoCadastro.set(p.id, razao);
+    else custoNaoConfiavel.add(p.id);
+  }
+
+  /**
+   * O custo de uma linha, pelo caminho mais confiável que existir para ela:
+   *
+   *  1. o custo que veio NA PRÓPRIA LINHA — mesma venda, mesma unidade;
+   *  2. a razão custo/varejo do CADASTRO — os dois na mesma linha, sem unidade;
+   *  3. a razão custo/venda do relatório de produtos vendidos — idem, mas é
+   *     média de um período que pode não ser o da tela;
+   *  4. o custo por unidade do cadastro, só quando não há preço de venda para
+   *     formar razão, e com a verificação de unidade por cima.
+   */
   const custoDaLinha = (produtoId, quantidade, valor, custoDoItem) => {
     const unit = custoUnitario(produtoId, custoDoItem);
     if (unit != null && quantidade != null) return unit * quantidade;
+    // o cadastro já disse que o custo deste produto não fecha com o preço dele
+    if (custoNaoConfiavel.has(produtoId)) {
+      if (!produtosComUnidadeDiferente.includes(produtoId)) produtosComUnidadeDiferente.push(produtoId);
+      return null;
+    }
+    /**
+     * Quando a razão custo/varejo do cadastro é sã, ela provou que os dois estão
+     * na MESMA unidade — e o varejo está na unidade de venda. Então o custo
+     * absoluto vale, e é ele que se usa: custo não cai quando se dá desconto.
+     *
+     * Usar a razão aplicada ao preço VENDIDO fazia o custo encolher junto com o
+     * desconto, e a margem saía sempre igual à de tabela: 41% calculados contra
+     * 22,5% que o relatório declara. A diferença entre as duas é exatamente o
+     * desconto praticado — que é informação, não erro, e o app não pode apagá-la.
+     */
+    const doCadastro = custoDoCadastro.get(produtoId);
+    if (razaoDoCadastro.has(produtoId) && doCadastro != null && quantidade != null) {
+      return doCadastro * quantidade;
+    }
     const razao = proporcaoDeCusto(produtoId);
     if (razao != null && valor != null) return valor * razao;
+    const medio = custoMedio(produtoId);
+    if (medio != null && quantidade != null) return medio * quantidade;
+    const soltoNoCadastro = custoDoCadastro.get(produtoId);
+    if (soltoNoCadastro != null && quantidade != null && unidadeConfere(produtoId)) {
+      return soltoNoCadastro * quantidade;
+    }
     return null;
   };
 
@@ -396,16 +464,24 @@ export async function margem({ de, ate }) {
     unidadeDiferente: produtosComUnidadeDiferente.map((id) => {
       const rel = vendaPorProduto.get(id);
       const nota = precoNasNotas.get(id);
-      const nome = (noPeriodo.find((l) => l.produtoId === id) || {}).descricao
+      const cadastro = produtos.find((p) => p.id === id);
+      const nome = cadastro?.descricao
+        || (noPeriodo.find((l) => l.produtoId === id) || {}).descricao
         || (itens.find((i) => i.produtoId === id) || {}).descricao || id;
+      const precoRel = rel?.quantidade ? cents(rel.valor / rel.quantidade) : null;
+      const precoNf = nota?.quantidade ? cents(nota.valor / nota.quantidade) : null;
       return {
         produtoId: id,
         descricao: nome,
-        precoNoRelatorio: cents(rel.valor / rel.quantidade),
-        precoNaNota: cents(nota.valor / nota.quantidade),
-        fator: Math.round((rel.valor / rel.quantidade) / (nota.valor / nota.quantidade) * 100) / 100,
+        custoCadastro: cadastro?.custo ?? null,
+        varejoCadastro: cadastro?.precoVenda ?? null,
+        precoNoRelatorio: precoRel,
+        precoNaNota: precoNf,
+        fator: cadastro?.custo != null && cadastro?.precoVenda
+          ? Math.round((cadastro.custo / cadastro.precoVenda) * 100) / 100
+          : (precoRel && precoNf ? Math.round((precoRel / precoNf) * 100) / 100 : null),
       };
-    }).sort((a, b) => b.fator - a.fator),
+    }).sort((a, b) => (b.fator || 0) - (a.fator || 0)),
     totalDasNotas,
     conferencia,
     produtosSemCusto: semCusto,
@@ -424,7 +500,10 @@ export async function margem({ de, ate }) {
  * achar que não cobra frete.
  */
 export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
-  const nfs = recebidas || await store.nfs.listar();
+  const [nfs, custos] = await Promise.all([
+    recebidas ? Promise.resolve(recebidas) : store.nfs.listar(),
+    store.fretes.listar(),
+  ]);
   const nomeVendedor = nomes || new Map((await store.vendedores.listar()).map((v) => [v.id, v.nome]));
   const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate);
   const comFrete = doPeriodo.filter((nf) => nf.valorFrete != null);
@@ -445,17 +524,61 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
     v.notas += 1;
   }
 
+  /**
+   * O QUE O FRETE CUSTOU, da planilha dela.
+   *
+   * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+   *
+   * O custo da frota é FIXO e mensal: salário de motorista não é de uma entrega,
+   * é do mês. Por isso ele não é dividido por nota nem por vendedor — dividir
+   * seria inventar um custo que ninguém sabe atribuir.
+   *
+   * O que o app faz é a conta que existe: frete cobrado no período menos frete
+   * pago no período. Se sobrar, a entrega se paga; se faltar, parte do frete sai
+   * do bolso da venda — e aí "fulano cobrou R$ 8 mil de frete" muda de sentido.
+   */
+  const doPeriodoCusto = custos.filter((c) => c.data && c.data >= de && c.data <= ate);
+  const porTipo = { propria: 0, terceiro: 0, indefinido: 0 };
+  for (const c of doPeriodoCusto) porTipo[c.tipo || 'indefinido'] = cents((porTipo[c.tipo || 'indefinido'] || 0) + (c.valor || 0));
+  const custoTotal = cents(sum(doPeriodoCusto, (c) => c.valor || 0));
+  const cobrado = cents(sum(comFrete, (nf) => nf.valorFrete || 0));
+
+  const lista = [...porVendedor.values()].map((v) => ({
+    ...v,
+    frete: cents(v.frete),
+    faturamento: cents(v.faturamento),
+    peso: v.faturamento ? (v.frete / v.faturamento) * 100 : null,
+    /**
+     * Quanto do custo FIXO caberia a este vendedor se fosse rateado pelo frete
+     * que ele cobrou. É um RATEIO, não o custo real da entrega dele — está dito
+     * assim na tela. Serve para enxergar ordem de grandeza, não para cobrar
+     * ninguém.
+     */
+    custoRateado: cobrado ? cents(custoTotal * (v.frete / cobrado)) : null,
+  })).sort((a, b) => b.frete - a.frete);
+
   return {
     // sem a coluna no arquivo, o app não sabe — e dizer "R$ 0,00" seria mentira
     temDado: comFrete.length > 0,
     notasComFrete: comFrete.length,
     notasNoPeriodo: doPeriodo.length,
-    total: cents(sum(comFrete, (nf) => nf.valorFrete || 0)),
-    vendedores: [...porVendedor.values()].map((v) => ({
-      ...v,
-      frete: cents(v.frete),
-      faturamento: cents(v.faturamento),
-      peso: v.faturamento ? (v.frete / v.faturamento) * 100 : null,
-    })).sort((a, b) => b.frete - a.frete),
+    total: cobrado,
+    vendedores: lista,
+    custo: {
+      temDado: doPeriodoCusto.length > 0,
+      lancamentos: doPeriodoCusto.length,
+      total: custoTotal,
+      frotaPropria: cents(porTipo.propria || 0),
+      terceiros: cents(porTipo.terceiro || 0),
+      naoClassificado: cents(porTipo.indefinido || 0),
+      // a conta que importa: o frete cobrado paga o frete feito?
+      resultado: cents(cobrado - custoTotal),
+      cobertura: custoTotal ? (cobrado / custoTotal) * 100 : null,
+      porResponsavel: [...doPeriodoCusto.reduce((mapa, c) => {
+        const k = c.responsavel || 'sem identificação';
+        mapa.set(k, cents((mapa.get(k) || 0) + (c.valor || 0)));
+        return mapa;
+      }, new Map())].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor),
+    },
   };
 }
