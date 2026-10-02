@@ -661,11 +661,24 @@ function custoDasNotasPeloPedido(notas, pedidos) {
  * achar que não cobra frete.
  */
 export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
-  const [nfs, custos, vendedores] = await Promise.all([
+  const [nfs, custos, vendedores, entregadores] = await Promise.all([
     recebidas ? Promise.resolve(recebidas) : store.nfs.listar(),
     store.fretes.listar(),
     store.vendedores.listar(),
+    store.entregadores.listar(),
   ]);
+  /**
+   * CARRO NOSSO OU FRETEIRO — quem diz é ela, uma vez por nome.
+   *
+   * "Na planilha tem tanto nossos carros quanto os freteiros. Vincular qual que
+   *  é qual: o VUC é nosso carro, o João é terceiro."
+   *
+   * O app não deduz isso do valor. R$ 0,00 numa entrega quer dizer que não houve
+   * custo de terceiro NAQUELA entrega, não que o motorista seja da casa — e a
+   * frota própria aparece com valor quando sai algum extra. A classificação é um
+   * cadastro de nome, feito uma vez e válido para sempre.
+   */
+  const tipoDoEntregador = new Map(entregadores.map((e) => [normalize(e.nome), e.tipo]));
   const nomeVendedor = nomes || new Map(vendedores.map((v) => [v.id, v.nome]));
   const idPorNome = new Map();
   for (const v of vendedores) {
@@ -726,8 +739,14 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
    * do bolso da venda — e aí "fulano cobrou R$ 8 mil de frete" muda de sentido.
    */
   const doPeriodoCusto = custos.filter((c) => c.data && c.data >= de && c.data <= ate);
+  const tipoDaLinha = (c) => tipoDoEntregador.get(normalize(c.responsavel || ''))
+    || (c.tipo && c.tipo !== 'indefinido' ? c.tipo : null)
+    || 'indefinido';
   const porTipo = { propria: 0, terceiro: 0, indefinido: 0 };
-  for (const c of doPeriodoCusto) porTipo[c.tipo || 'indefinido'] = cents((porTipo[c.tipo || 'indefinido'] || 0) + (c.valor || 0));
+  for (const c of doPeriodoCusto) {
+    const t = tipoDaLinha(c);
+    porTipo[t] = cents((porTipo[t] || 0) + (c.valor || 0));
+  }
   const custoTotal = cents(sum(doPeriodoCusto, (c) => c.valor || 0));
   const cobrado = cents(sum(comFrete, (nf) => nf.valorFrete || 0));
 
@@ -811,9 +830,20 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
       semCobranca: doPeriodoCusto.filter((c) => c.valor === 0).length,
       porResponsavel: [...doPeriodoCusto.reduce((mapa, c) => {
         const k = c.responsavel || 'sem identificação';
-        mapa.set(k, cents((mapa.get(k) || 0) + (c.valor || 0)));
+        const atual = mapa.get(k) || { valor: 0, entregas: 0 };
+        atual.valor = cents(atual.valor + (c.valor || 0));
+        atual.entregas += 1;
+        mapa.set(k, atual);
         return mapa;
-      }, new Map())].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor),
+      }, new Map())].map(([nome, x]) => ({
+        nome,
+        valor: x.valor,
+        entregas: x.entregas,
+        tipo: tipoDoEntregador.get(normalize(nome)) || null,
+      })).sort((a, b) => b.valor - a.valor),
+      // quantos nomes ainda não foram classificados como frota ou terceiro
+      semClassificacao: cents(sum(doPeriodoCusto.filter((c) => tipoDaLinha(c) === 'indefinido'),
+        (c) => c.valor || 0)),
     },
   };
 }

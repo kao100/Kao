@@ -47,6 +47,7 @@ export async function telaAjustes() {
               v.codigo && h('span', `cód. ${v.codigo}`),
               v.apelidos?.length ? h('span', `também: ${v.apelidos.join(', ')}`) : h('span.muted', 'sem apelidos'),
               v.meta ? h('span', `meta ${money(v.meta)}`) : null,
+              v.naoVende && selo('só emite nota', 'atencao'),
               v.ativo === false && selo('inativo', 'ruim'))),
           botao('Editar', { pequeno: true, onClick: () => editarVendedor(v) }))))
         : h('p.pequeno.muted',
@@ -102,7 +103,7 @@ export async function telaAjustes() {
         botao('⬆️ Importar backup', { onClick: () => importarBackup() }),
         botao('🔄 Refazer vínculos', { onClick: () => refazerVinculos() })),
       h('div.btn-linha', { style: { marginTop: '8px' } },
-        botao('🗑️ Apagar movimentos', { tipo: 'perigo', onClick: () => limparMovimentos() })))),
+        botao('🗑️ Apagar tudo que veio de arquivo', { tipo: 'perigo', onClick: () => limparMovimentos() })))),
 
     secao('Histórico de alterações', null, card(null, null,
       historico.length
@@ -205,6 +206,27 @@ async function editarVendedor(vendedor) {
         ajuda: 'Separe por vírgula. Ex.: EDU, Eduardo S.',
       },
       { chave: 'meta', label: 'Meta mensal', tipo: 'dinheiro', valor: vendedor?.meta ?? '' },
+      /**
+       * QUEM EMITE NOTA NÃO É, POR ISSO, VENDEDOR.
+       *
+       * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas
+       *  não é vendedora."
+       *
+       * Marcado aqui, toda nota que sair no nome dela vira pendência para você
+       * dizer de quem era a venda. O app não move a nota sozinho.
+       */
+      {
+        chave: 'papel',
+        label: 'Papel',
+        tipo: 'opcoes',
+        valor: vendedor?.naoVende ? 'emite' : 'vende',
+        opcoes: [
+          { valor: 'vende', label: 'Vende (entra na comissão)' },
+          { valor: 'emite', label: 'Só emite nota, não vende' },
+        ],
+        ajuda: 'Quem só emite nota não entra no ranking. Toda nota no nome dessa pessoa vira '
+          + 'pendência para você vincular ao vendedor certo.',
+      },
       {
         chave: 'ativo',
         label: 'Situação',
@@ -222,6 +244,7 @@ async function editarVendedor(vendedor) {
     codigo: r.codigo || null,
     apelidos: r.apelidos ? r.apelidos.split(',').map((s) => s.trim()).filter(Boolean) : [],
     meta: r.meta ? Number(r.meta) : null,
+    naoVende: r.papel === 'emite',
     ativo: r.ativo !== 'nao',
   });
   await recalcular();
@@ -282,13 +305,32 @@ async function refazerVinculos() {
 async function limparMovimentos() {
   const confirmado = await confirmar({
     titulo: 'Apagar movimentos importados?',
-    texto: 'Apaga notas, itens, pedidos, títulos, extrato e conciliações. '
-      + 'Vendedores, contas bancárias, regras de comissão e ajustes continuam. Não dá para desfazer.',
+    texto: 'Apaga TUDO o que veio de arquivo: notas, itens, pedidos, orçamentos, títulos, '
+      + 'extrato, produtos, clientes, fretes e os relatórios de comissão e de produtos vendidos. '
+      + 'Fica de pé o que você decidiu aqui dentro: vendedores (com apelidos e papéis), quem '
+      + 'entrega, quem recebe RT, contas bancárias, regras de comissão e o histórico. '
+      + 'Não dá para desfazer.',
     confirmar: 'Apagar tudo',
     perigo: true,
   });
   if (!confirmado) return;
-  for (const nome of ['nfs', 'nfItens', 'pedidos', 'receber', 'pagar', 'extrato', 'saldos', 'cobrancas', 'pendencias', 'importacoes']) {
+  /**
+   * O QUE SAI E O QUE FICA.
+   *
+   * "Apagar os arquivos que eu tinha te enviado até então e reenviar tudo de
+   *  novo, para ver com todas essas alterações se está correto."
+   *
+   * Sai tudo que veio de arquivo — senão sobra registro de importação antiga
+   * misturado com o reenvio, e o teste não prova nada. Fica o que ela decidiu
+   * DENTRO do app: vendedor com apelido e papel, quem entrega o quê, quem recebe
+   * RT, conta bancária, regra de comissão. Reapagar isso faria ela refazer à mão
+   * o trabalho que já deu certo.
+   */
+  for (const nome of [
+    'nfs', 'nfItens', 'pedidos', 'orcamentos', 'receber', 'pagar', 'extrato', 'saldos',
+    'cobrancas', 'pendencias', 'importacoes', 'comissoesRelatorio', 'vendasProduto', 'fretes',
+    'clientes', 'produtos', 'fornecedores', 'periodosComissao',
+  ]) {
     await db.clearStore(nome);
   }
   await db.put('kv', { key: 'marcos', valor: {}, atualizadoEm: Date.now() });

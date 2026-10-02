@@ -23,6 +23,7 @@ import { telaPagar } from './ui/views/pagar.js';
 import { telaReceber } from './ui/views/receber.js';
 import { telaBancos } from './ui/views/bancos.js';
 import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
+import { telaRt } from './ui/views/rt.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
 import { telaAjustes } from './ui/views/ajustes.js';
 import { telaFechamento } from './ui/views/fechamento.js';
@@ -49,6 +50,7 @@ const ROTAS = [
   { path: '/pagar', view: telaPagar, titulo: 'Contas a pagar' },
   { path: '/receber', view: telaReceber, titulo: 'Contas a receber' },
   { path: '/bancos', view: telaBancos, titulo: 'Bancos e extrato' },
+  { path: '/rt', view: telaRt, titulo: 'RT (indicação)' },
   { path: '/conciliacao', view: telaConciliacao, titulo: 'Conciliação' },
   { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
   { path: '/fechamento', view: telaFechamento, titulo: 'Pasta do mês' },

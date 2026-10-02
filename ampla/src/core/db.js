@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'ampla-admin';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export const STORES = {
   /** configurações, metas, preferências, marcos de atualização */
@@ -82,6 +82,19 @@ export const STORES = {
   },
 
   vendedores: { keyPath: 'id', indexes: [] },
+  /**
+   * Quem faz a entrega, e se é carro nosso ou freteiro.
+   *
+   * "Na planilha que eu te mandei tem tanto nossos carros quanto os freteiros.
+   *  Vincular qual que é qual: o VUC é nosso carro, o João é terceiro."
+   */
+  entregadores: { keyPath: 'id', indexes: [] },
+  /**
+   * RT: o cliente que indica obra e ganha por isso. Não é vendedor e nunca
+   * aparece como vendedor na nota — ele ganha sobre o faturamento dos CNPJs que
+   * ele trouxe.
+   */
+  rts: { keyPath: 'id', indexes: [] },
   clientes: { keyPath: 'id', indexes: [['byDoc', 'documento']] },
   produtos: { keyPath: 'id', indexes: [['byCategoria', 'categoria']] },
   fornecedores: { keyPath: 'id', indexes: [] },

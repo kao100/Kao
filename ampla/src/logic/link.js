@@ -80,6 +80,23 @@ export const TIPOS_PENDENCIA = {
       + 'certo. O app procura a nota original pelo mesmo cliente e mesmo valor, até seis meses '
       + 'antes — se ela não está na base, ou se a devolução é parcial, diga aqui de quem era.',
   },
+  frete_sem_valor: {
+    titulo: 'Entrega sem custo informado',
+    icone: '🚚',
+    gravidade: 'baixa',
+    explicacao: 'A planilha de entregas veio com o campo de custo em branco. Em branco não é '
+      + 'zero: pode ser que o cliente retirou e não houve custo, ou pode ser que ninguém '
+      + 'preencheu. Diga qual dos dois — e se não houve custo, é um toque.',
+  },
+  nf_vendedor_nao_vende: {
+    titulo: 'Nota no nome de quem não vende',
+    icone: '🙅',
+    gravidade: 'alta',
+    explicacao: 'Esta nota está atribuída a alguém marcado como "só emite nota, não vende". '
+      + 'Acontece: quem emitiu a nota ficou gravado como vendedor. O faturamento e a comissão '
+      + 'continuam onde estão até você dizer de quem era a venda — o app não move dinheiro de '
+      + 'pessoa por conta própria.',
+  },
   pedido_sem_vendedor: {
     titulo: 'Venda sem vendedor',
     icone: '🙋',
@@ -376,6 +393,8 @@ export async function recalcular() {
     pedidoPorNumero,
     pedidoPorClienteValor,
     pedidos,
+    vendedores: [...vendedores, ...novosVendedores],
+    fretes: await store.fretes.listar(),
   });
 
   return {
@@ -952,7 +971,7 @@ function empilharChave(mapa, chave, valor) {
 
 /* --------------------------------------------------------------- pendências */
 
-async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos, pedidoPorNumero, pedidoPorClienteValor, pedidos }) {
+async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, produtos, pedidoPorNumero, pedidoPorClienteValor, pedidos, vendedores, fretes }) {
   const anteriores = await store.pendencias.listar();
   const ignoradas = new Map(anteriores.filter((p) => p.status === 'ignorada').map((p) => [p.id, p]));
   const encontradas = [];
@@ -989,6 +1008,36 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     if (nf.pedidoNumero && pedidoPorNumero.has(String(nf.pedidoNumero))) return true;
     return false;
   };
+
+  /**
+   * QUEM EMITE A NOTA NÃO É QUEM VENDEU.
+   *
+   * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas não
+   *  é vendedora. Deve ter emitido uma nota e acabou saindo o nome dela. Por
+   *  isso precisa ter a possibilidade de vincular essa nota para o vendedor
+   *  correto."
+   *
+   * O app NÃO tira a nota dela sozinho: isso seria mover faturamento e comissão
+   * de uma pessoa para outra por conta própria. Ele deixa a pendência, com o
+   * botão de dizer de quem era — a mesma porta que já existe para a nota sem
+   * vendedor.
+   */
+  const naoVendem = new Set((vendedores || []).filter((v) => v.naoVende).map((v) => v.id));
+  const nomeDoVendedor = new Map((vendedores || []).map((v) => [v.id, v.nome]));
+  if (naoVendem.size) {
+    for (const nf of nfs) {
+      if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
+      if (!nf.vendedorId || !naoVendem.has(nf.vendedorId)) continue;
+      nova('nf_vendedor_nao_vende', nf.id, {
+        titulo: `NF ${nf.numero} está como ${nomeDoVendedor.get(nf.vendedorId) || 'vendedor'}`,
+        detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)}`
+          + ' · quem aparece aqui emite nota, mas não vende',
+        valor: nf.valorTotal,
+        mes: nf.mes,
+        alvo: { store: 'nfs', id: nf.id },
+      });
+    }
+  }
 
   for (const nf of nfs) {
     if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
@@ -1038,6 +1087,27 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
       ].join(' · '),
       valor: notas.length ? cents(sum(notas, (n) => n.valorTotal || 0)) : pedido.valorTotal,
       alvo: { store: 'pedidos', id: pedido.id },
+    });
+  }
+
+  /**
+   * ENTREGA COM O CUSTO EM BRANCO.
+   *
+   * "O que tiver valor em branco, põe para eu vincular valor também. Porque
+   *  essas em branco realmente não tivemos custo com ela: o cliente retirou, ou
+   *  enfim. Eu vinculo e ponho zero. Coloca um botão para fazer isso."
+   *
+   * Em branco e zero são coisas diferentes, e o app não transforma um no outro
+   * sozinho — mas transformar vira um toque.
+   */
+  for (const fr of fretes || []) {
+    if (fr.valor != null) continue;
+    nova('frete_sem_valor', fr.id, {
+      titulo: `Entrega sem custo: ${fr.descricao || fr.nfNumero || 'sem referência'}`,
+      detalhe: [fr.responsavel || 'sem quem entregou', fr.vendedorNome || null,
+        fr.data ? formatDate(fr.data) : null].filter(Boolean).join(' · '),
+      mes: fr.mes,
+      alvo: { store: 'fretes', id: fr.id },
     });
   }
 

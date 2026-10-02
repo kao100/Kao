@@ -11,16 +11,17 @@
  */
 
 import { h } from '../../core/dom.js';
-import { navigate } from '../../core/router.js';
+import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as margemLogica from '../../logic/margem.js';
 import { lerFiltro, descrever } from '../../logic/filtro.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { definirTitulo } from '../shell.js';
-import { kpi, card, secao, botao, vazio, aviso } from '../components/ui.js';
+import { kpi, card, secao, botao, vazio, aviso, selo } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { money, pct, num, formatDate } from '../../core/format.js';
-import { cents } from '../../core/util.js';
+import { cents, normalize } from '../../core/util.js';
+import { ok } from '../components/toast.js';
 
 const COLUNAS = [
   { header: 'Vendedor', key: 'nome' },
@@ -55,6 +56,18 @@ const COLUNAS_FRETE_MEDIDO = [
   { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Frete / faturamento', key: 'peso', tipo: 'percentual', alinhar: 'direita' },
 ];
+
+/**
+ * Classifica um nome da planilha de entregas: carro nosso ou freteiro. É um
+ * cadastro por NOME, feito uma vez — não uma marcação por entrega.
+ */
+async function classificarEntregador(nome, tipo) {
+  const atuais = await store.entregadores.listar();
+  const achado = atuais.find((e) => normalize(e.nome) === normalize(nome));
+  await store.entregadores.salvar({ ...(achado || {}), id: achado?.id, nome, tipo });
+  ok(tipo === 'propria' ? `${nome}: nosso carro.` : `${nome}: freteiro.`);
+  refresh();
+}
 
 export async function telaMargem({ query }) {
   const filtro = lerFiltro(query);
@@ -362,15 +375,40 @@ export async function telaMargem({ query }) {
           },
         }),
 
+        /**
+         * QUEM FEZ A ENTREGA, E DE QUEM É O CARRO.
+         *
+         * "Tem tanto nossos carros quanto os freteiros. É interessante vincular
+         *  qual que é qual: o VUC é nosso carro, o João é terceiro."
+         *
+         * Dois botões por nome, e a classificação vale para sempre — não é por
+         * entrega, é por pessoa. Enquanto um nome não for classificado, o custo
+         * dele fica em "não classificado" em vez de cair no lado errado.
+         */
         r.frete.custo.temDado && r.frete.custo.porResponsavel.length > 0
-          && secao('Quem fez a entrega', null, tabela({
-            colunas: [
-              { header: 'Motorista / transportadora', key: 'nome' },
-              { header: 'Custo no período', key: 'valor', tipo: 'dinheiro', alinhar: 'direita' },
-            ],
-            linhas: r.frete.custo.porResponsavel,
-            total: { nome: 'TOTAL', valor: r.frete.custo.total },
-          })))
+          && secao('Quem fez a entrega', null,
+            r.frete.custo.semClassificacao > 0 && aviso(
+              `${money(r.frete.custo.semClassificacao)} ainda sem dizer se é carro nosso ou `
+              + 'freteiro. Classifique cada nome uma vez — vale para todos os meses.', 'atencao'),
+            h('div.lista', ...r.frete.custo.porResponsavel.map((e) => h('div.item',
+              h('div.item__corpo',
+                h('div.item__titulo', e.nome),
+                h('div.item__sub',
+                  h('span', money(e.valor)),
+                  h('span', `${num(e.entregas, 0)} entrega(s)`),
+                  e.tipo === 'propria' ? selo('nosso carro', 'ok')
+                    : e.tipo === 'terceiro' ? selo('freteiro', 'info')
+                      : selo('não classificado', 'atencao'))),
+              e.tipo !== 'propria' && botao('Nosso carro', {
+                pequeno: true, onClick: () => classificarEntregador(e.nome, 'propria'),
+              }),
+              e.tipo !== 'terceiro' && botao('Freteiro', {
+                pequeno: true, onClick: () => classificarEntregador(e.nome, 'terceiro'),
+              })))),
+            h('p.mini.muted',
+              'Nosso carro = frota própria, com salário fixo que não é desta entrega. Freteiro = '
+              + 'terceiro, que cobra por entrega. A soma dos dois é o custo total; o que ainda não '
+              + 'foi classificado fica à parte, sem cair no lado errado.')))
       : aviso('O seu relatório fiscal ainda não traz a coluna de FRETE, então o app não sabe quanto '
         + 'foi cobrado — e preferiu dizer isso a mostrar R$ 0,00, que seria outra coisa. Se o export '
         + 'puder sair com a coluna de frete (ou se você mandar os XMLs das NF-e), esta tela se '

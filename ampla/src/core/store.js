@@ -91,6 +91,8 @@ export async function meta(mes = monthKey()) {
 /* ------------------------------------------------------------------ cadastros */
 
 export const vendedores = repo('vendedores');
+export const entregadores = repo('entregadores');
+export const rts = repo('rts');
 export const clientes = repo('clientes');
 export const produtos = repo('produtos');
 export const fornecedores = repo('fornecedores');

@@ -39,6 +39,7 @@ const filtro = await import('../src/logic/filtro.js');
 const carteiraMod = await import('../src/logic/carteira.js');
 const abcMod = await import('../src/logic/abc.js');
 const margemMod = await import('../src/logic/margem.js');
+const rtMod = await import('../src/logic/rt.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -1959,6 +1960,166 @@ NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
   }
   for (const l of (await store.fretes.listar())) await store.fretes.remover(l.id);
   for (const n of ['9910', '9911']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ Quem emite nota não é, por isso, vendedor');
+{
+  /**
+   * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas não
+   *  é vendedora. Deve ter emitido uma nota e acabou saindo o nome dela. Por
+   *  isso precisa ter a possibilidade de vincular essa nota para o vendedor
+   *  correto."
+   *
+   * O app NÃO tira a nota dela sozinho — mover faturamento e comissão de uma
+   * pessoa para outra por conta própria é exatamente o que ele não pode fazer.
+   * Ele deixa a pendência com o botão de dizer de quem era.
+   */
+  const emissora = await store.vendedores.salvar({ nome: 'Vitoria Emissora', naoVende: true, ativo: true });
+  const FX = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  await importar('nfs', 'emis.csv', `${FX}
+9950;10/10/2026;Cliente da Obra Ltda;40404040000140;7.000,00;Autorizada;Venda de mercadoria`);
+  /* o nome dela veio no arquivo, como acontece de verdade quando ela emite a nota */
+  const nf = (await store.nfs.listar()).find((x) => x.numero === '9950');
+  await store.nfs.salvar({ ...nf, vendedorNome: 'Vitoria Emissora' });
+  await link.recalcular();
+
+  const pend = (await store.pendencias.listar()).filter((p) => p.tipo === 'nf_vendedor_nao_vende');
+  igual('a nota no nome de quem não vende vira pendência', pend.length, 1);
+  igual('apontando para a própria nota, para o botão poder resolver', pend[0].alvo.id, nf.id);
+  igual('com o valor à vista', pend[0].valor, 7000);
+  /* e o app não moveu nada sozinho */
+  const depois = (await store.nfs.listar()).find((x) => x.numero === '9950');
+  igual('o app não tirou a nota dela por conta própria', depois.vendedorId, emissora.id);
+
+  /* quem vende não gera pendência nenhuma */
+  await store.vendedores.salvar({ ...emissora, naoVende: false });
+  await link.recalcular();
+  igual('marcada como vendedora, a pendência some',
+    (await store.pendencias.listar()).filter((p) => p.tipo === 'nf_vendedor_nao_vende').length, 0);
+
+  await store.nfs.remover(nf.id);
+  await store.vendedores.remover(emissora.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ Carro nosso ou freteiro, e a entrega sem custo informado');
+{
+  /**
+   * "Na planilha tem tanto nossos carros quanto os freteiros. Vincular qual que
+   *  é qual: o VUC é nosso carro, o João é terceiro."
+   *
+   * O app não deduz isso do valor: R$ 0,00 numa entrega quer dizer que não houve
+   * custo de terceiro naquela entrega, não que o motorista seja da casa.
+   */
+  const FRC = 'Período;Nota fiscal ou pedido;Vendedor;Responsável pela entrega;Valor';
+  await importar('fretes', 'frc.csv', `${FRC}
+MANHÃ;NF 100;Alberto;VUC;300,00
+TARDE;NF 101;Alberto;Joao;200,00
+MANHÃ;NF 102;Alberto;Lala;100,00
+NOITE;NF 103;Alberto;Lala;`, { mesReferencia: '2027-01-01' });
+
+  const antes = await margemMod.frete({ de: '2027-01-01', ate: '2027-01-31' });
+  igual('sem classificar, tudo fica em não classificado', antes.custo.naoClassificado, 600);
+  igual('e o app diz quanto está esperando por isso', antes.custo.semClassificacao, 600);
+
+  await store.entregadores.salvar({ nome: 'VUC', tipo: 'propria' });
+  await store.entregadores.salvar({ nome: 'Joao', tipo: 'terceiro' });
+  const depois = await margemMod.frete({ de: '2027-01-01', ate: '2027-01-31' });
+  igual('o carro nosso entra como frota própria', depois.custo.frotaPropria, 300);
+  igual('o freteiro entra como terceiro', depois.custo.terceiros, 200);
+  igual('e quem ainda não foi dito continua à parte', depois.custo.semClassificacao, 100);
+  const vuc = depois.custo.porResponsavel.find((x) => x.nome === 'VUC');
+  igual('a lista mostra o tipo de cada nome', vuc.tipo, 'propria');
+
+  /**
+   * "O que tiver valor em branco, põe para eu vincular valor também. Essas em
+   *  branco realmente não tivemos custo com ela. Eu vinculo e ponho zero."
+   *
+   * Em branco e zero são coisas diferentes, e o app não transforma um no outro
+   * sozinho — mas transformar é um toque.
+   */
+  await link.recalcular();
+  const pend = (await store.pendencias.listar()).filter((p) => p.tipo === 'frete_sem_valor');
+  igual('a entrega sem custo informado vira pendência', pend.length, 1);
+  const linha = await store.fretes.obter(pend[0].alvo.id);
+  ok('apontando para a linha certa', (linha.descricao || linha.nfNumero || '').includes('103'),
+    JSON.stringify([linha.descricao, linha.nfNumero]));
+
+  /* o botão de um toque: não teve custo */
+  await store.fretes.salvar({ ...linha, valor: 0, valorOrigem: 'manual' });
+  await link.recalcular();
+  igual('resolvida, a pendência some',
+    (await store.pendencias.listar()).filter((p) => p.tipo === 'frete_sem_valor').length, 0);
+  const fim = await margemMod.frete({ de: '2027-01-01', ate: '2027-01-31' });
+  igual('e o zero informado não muda o custo total', fim.custo.total, 600);
+  igual('mas passa a contar como entrega sem cobrança', fim.custo.semCobranca, 1);
+  igual('e nenhuma fica mais em branco', fim.custo.semValor, 0);
+
+  for (const l of (await store.fretes.listar())) await store.fretes.remover(l.id);
+  for (const e of (await store.entregadores.listar())) await store.entregadores.remover(e.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ RT: a comissão de quem traz a obra');
+{
+  /**
+   * "Tenho três que ganham: o Thomas, o André e a Tereza. Esses três ganham RT
+   *  em cima de X CNPJs e eles ganham em cima do valor total vendido, contando
+   *  frete, tudo."
+   *
+   * Cliente não é faturamento: um cliente pode ter vários CNPJs. Por isso o
+   * vínculo é com uma LISTA de documentos, e não com um cadastro de cliente.
+   */
+  const FY = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação;Frete';
+  await importar('nfs', 'rt.csv', `${FY}
+9960;05/10/2026;Obra Alfa Ltda;11222333000181;10.000,00;Autorizada;Venda de mercadoria;1.000,00
+9961;06/10/2026;Obra Beta Ltda;11222333000262;5.000,00;Autorizada;Venda de mercadoria;0,00
+9962;07/10/2026;Cliente Avulso Ltda;99888777000166;8.000,00;Autorizada;Venda de mercadoria;0,00`);
+
+  const indicador = await store.rts.salvar({
+    nome: 'Indicador Um',
+    percentual: 10,
+    documentos: ['11.222.333/0001-81', '11.222.333/0002-62'],
+    ativo: true,
+  });
+
+  const r = await rtMod.rt({ de: '2026-10-01', ate: '2026-10-31' });
+  const linha = r.linhas.find((l) => l.nome === 'Indicador Um');
+  /* dois CNPJs do mesmo indicador somam: 10.000 + 5.000 */
+  igual('o faturamento dos CNPJs dele soma', linha.faturamento, 15000);
+  /* e é sobre o TOTAL, com frete: o frete de R$ 1.000 já está dentro dos 10.000 */
+  igual('o RT é 10% sobre esse total', linha.valor, 1500);
+  igual('a venda de quem ele não trouxe fica de fora', r.faturamentoCoberto, 15000);
+  igual('e o detalhe abre por faturamento', linha.faturamentos.length, 2);
+
+  /* sem CNPJ vinculado não há conta a fazer, e zero seria outra coisa */
+  await store.rts.salvar({ nome: 'Indicador Sem Vínculo', percentual: 10, documentos: [], ativo: true });
+  const r2 = await rtMod.rt({ de: '2026-10-01', ate: '2026-10-31' });
+  const vazia = r2.linhas.find((l) => l.nome === 'Indicador Sem Vínculo');
+  ok('quem não tem CNPJ vinculado não recebe zero, recebe nada', vazia.valor === null, String(vazia.valor));
+  igual('e aparece na lista do que falta vincular', r2.semDocumento.length, 1);
+
+  /**
+   * O MESMO CNPJ EM DOIS CADASTROS pagaria a mesma venda duas vezes. O app não
+   * escolhe qual vale — ele devolve o conflito.
+   */
+  await store.rts.salvar({
+    nome: 'Indicador Dois', percentual: 10, documentos: ['11.222.333/0001-81'], ativo: true,
+  });
+  const r3 = await rtMod.rt({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('CNPJ repetido entre dois RTs é acusado', r3.conflitos.length, 1);
+  igual('dizendo qual documento', r3.conflitos[0].documento, '11222333000181');
+
+  /* a leitura da lista colada aceita linha, vírgula e ponto e vírgula */
+  igual('a lista colada é lida nos três separadores',
+    rtMod.lerDocumentos('11.222.333/0001-81\n99888777000166, 123; 11222333000181').length, 2);
+
+  for (const x of (await store.rts.listar())) await store.rts.remover(x.id);
+  for (const n of ['9960', '9961', '9962']) {
     const x = (await store.nfs.listar()).find((y) => y.numero === n);
     if (x) await store.nfs.remover(x.id);
   }

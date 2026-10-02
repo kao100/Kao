@@ -20,6 +20,7 @@ export const MODULOS = [
   { path: '/orcamentos', icone: '📝', label: 'Orçados', titulo: 'Orçamentos' },
   { path: '/clientes', icone: '👥', label: 'Clientes', titulo: 'Clientes' },
   { path: '/comissoes', icone: '🎯', label: 'Comissões', titulo: 'Comissões' },
+  { path: '/rt', icone: '🤝', label: 'RT', titulo: 'RT (indicação)' },
 ];
 
 /** O resto do app, no menu — sem sumir e sem ocupar a barra. */

@@ -139,6 +139,12 @@ function acoes(p, contexto) {
     // o que resolve é dizer de QUEM abater: a venda original não está na base
     botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
+  } else if (p.tipo === 'frete_sem_valor') {
+    botoes.push(botao('Não teve custo', { tipo: 'primario', pequeno: true, onClick: () => custoDaEntrega(p, 0) }));
+    botoes.push(botao('Informar valor', { pequeno: true, onClick: () => custoDaEntrega(p) }));
+  } else if (p.tipo === 'nf_vendedor_nao_vende') {
+    botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
+    botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
   } else if (p.tipo === 'pedido_sem_vendedor') {
     botoes.push(botao('Mandar comissão por venda', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/comissoes') }));
     botoes.push(botao('Definir à mão', { pequeno: true, onClick: () => navigate('/conciliacao/vendedores') }));
@@ -188,6 +194,8 @@ function acoes(p, contexto) {
  */
 const MOTIVO_RAPIDO = {
   nf_sem_pedido: 'A nota está correta',
+  nf_vendedor_nao_vende: 'Pode deixar como está',
+  frete_sem_valor: 'Depois eu vejo',
   devolucao_sem_origem: 'A devolução está correta',
   pedido_sem_vendedor: 'O pedido está correto',
   receber_sem_nf: 'O título está correto',
@@ -236,6 +244,37 @@ async function resolverVendedor(p, { vendedores, nfs }) {
   await definirVendedorDaNf(nf.id, r.vendedorId, r.motivo);
   await atualizarAlertas();
   ok('Vendedor definido — comissão e faturamento atualizados.');
+  refresh();
+}
+
+/**
+ * O CUSTO DA ENTREGA, EM UM TOQUE OU DIGITADO.
+ *
+ * "Essas em branco realmente não tivemos custo com ela. Eu vinculo e ponho zero.
+ *  Coloca um botão para fazer isso."
+ *
+ * Zero informado por ela é um dado; branco deixado pelo arquivo não é. Por isso
+ * o registro guarda que o valor veio daqui, e não da planilha — reimportar a
+ * planilha não apaga o que ela decidiu.
+ */
+async function custoDaEntrega(p, valorPronto) {
+  const frete = await store.fretes.obter(p.alvo?.id);
+  if (!frete) { erro('Entrega não encontrada.'); return; }
+
+  let valor = valorPronto;
+  if (valor == null) {
+    const r = await formulario({
+      titulo: 'Custo desta entrega',
+      descricao: [frete.descricao, frete.responsavel, frete.vendedorNome].filter(Boolean).join(' · '),
+      campos: [{ chave: 'valor', label: 'Quanto custou', tipo: 'dinheiro', obrigatorio: true, valor: '' }],
+      confirmar: 'Salvar',
+    });
+    if (!r) return;
+    valor = Number(r.valor);
+  }
+  await store.fretes.salvar({ ...frete, valor, valorOrigem: 'manual' });
+  await atualizarAlertas();
+  ok(valor ? 'Custo informado.' : 'Entrega sem custo — registrado.');
   refresh();
 }
 

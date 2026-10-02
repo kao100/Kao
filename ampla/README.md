@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 415 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 441 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,29 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **Quem emite a nota não é, por isso, quem vendeu.** Um vendedor pode ser
+  marcado como *"só emite nota, não vende"* — e aí toda nota que sair no nome
+  dele vira **pendência** com o botão de dizer de quem era a venda. O app não
+  move a nota sozinho: trocar o dono de um faturamento e de uma comissão é
+  decisão dela, não dedução dele.
+- **Quem entrega é cadastro, não dedução.** Cada nome da planilha de entregas é
+  classificado uma vez como **carro nosso** ou **freteiro**, e vale para sempre.
+  O app não infere isso do valor: R$ 0,00 numa entrega quer dizer que não houve
+  custo de terceiro *naquela entrega*, não que o motorista seja da casa. O que
+  ainda não foi classificado aparece à parte, em reais, em vez de cair no lado
+  errado.
+- **Em branco não é zero, mas virar zero é um toque.** Entrega com o custo em
+  branco na planilha vira pendência com dois botões: *"não teve custo"* e
+  *"informar valor"*. O valor que ela põe aqui fica marcado como decidido por
+  ela, e reimportar a planilha não o apaga.
+- **RT é a comissão de quem traz a obra, e não é comissão de vendedor.** Quem
+  recebe RT é cliente, nunca aparece na nota, e é reconhecido pelos **CNPJs**
+  que trouxe — porque *"um cliente pode ter vários faturamentos diferentes,
+  vários CNPJ"*. Três diferenças impedem de misturar com vendedor: o RT não
+  aparece na venda, incide sobre o **total com frete** (e não só sobre o
+  produto), e pô-lo no ranking faria a soma dos vendedores passar do
+  faturamento. O mesmo CNPJ em dois cadastros é acusado como conflito, porque
+  pagaria a mesma venda duas vezes.
 - **O frete tem duas metades, e a planilha de entregas dá a segunda.** A nota
   diz quanto foi *cobrado*; a planilha de solicitação de entrega diz quanto cada
   entrega *custou* e de quem era a venda. Com as duas, "o Guilherme cobrou
