@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 399 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 405 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,16 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **O frete tem duas metades, e a planilha de entregas dá a segunda.** A nota
+  diz quanto foi *cobrado*; a planilha de solicitação de entrega diz quanto cada
+  entrega *custou* e de quem era a venda. Com as duas, "o Guilherme cobrou
+  R$ 8 mil de frete" vira resultado de verdade. O app lê dessa planilha só o que
+  importa — **valor, vendedor e quem entregou** — e **não** tenta amarrar a
+  entrega à nota ou ao pedido que ela cita: *"às vezes a nota fiscal é entregue
+  com um pedido; não se apegue a isso, se apegue ao custo"*. Como a planilha não
+  tem data, o mês é o que se escolhe na importação — por isso ela vai exportada
+  um mês por vez. Entrega com R$ 0,00 conta como entrega sem custo de terceiro;
+  valor em branco não conta, e o app diz quantas foram.
 - **Custo maior que a venda no mês inteiro não é prejuízo: é unidade trocada.**
   `TIJOLO COMUM 9X19X5 (PACOTE C/10)` saía do relatório com quantidade em peça e
   custo médio do pacote: 3.959 × R$ 87,38 = R$ 345.933,00 de custo sobre

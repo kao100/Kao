@@ -38,6 +38,29 @@ export const PERFIS = [
     },
     observacao: 'Este relatório não traz a coluna do vendedor.',
   },
+  /**
+   * O MESMO RELATÓRIO DE VENDAS, exportado sem as colunas de prazo e situação.
+   *
+   * Vem DEPOIS do completo de propósito: o cabeçalho de sete colunas contém este
+   * de cinco, e quem chega primeiro ganha. Assim o export completo continua sendo
+   * reconhecido como completo.
+   */
+  {
+    id: 'gc-vendas-simples',
+    fonte: 'pedidos',
+    nome: 'Relatório de vendas (sem prazo e situação)',
+    colunas: ['Nº', 'Cliente', 'Data', 'Valor custo', 'Valor'],
+    mapa: {
+      numero: 'Nº',
+      clienteNome: 'Cliente',
+      data: 'Data',
+      valorCusto: 'Valor custo',
+      valorTotal: 'Valor',
+    },
+    observacao: 'Sem a coluna SITUAÇÃO, o app não separa venda concretizada de cancelada — o '
+      + 'pedido entra, mas só é cobrado vendedor dele quando já tem nota. E sem a coluna VENDEDOR '
+      + 'a comissão não fecha sozinha. Vale incluir as duas no próximo export.',
+  },
   {
     id: 'gc-nfe',
     fonte: 'nfs',
@@ -227,6 +250,37 @@ function assinaturaDe(linha) {
  * Exige que TODAS as colunas do perfil estejam presentes, na ordem — assim um
  * relatório parecido, mas diferente, não passa por engano.
  */
+PERFIS.push({
+  id: 'forms-entrega',
+  fonte: 'fretes',
+  nome: 'Solicitação de entrega (planilha do Google)',
+  colunas: ['PERÍODO', 'NOTA FISCAL OU PEDIDO', 'VENDEDOR', 'RESPONSÁVEL PELA ENTREGA', 'PREÇO CUSTO (F)'],
+  mapa: {
+    descricao: 'NOTA FISCAL OU PEDIDO',
+    vendedorNome: 'VENDEDOR',
+    responsavel: 'RESPONSÁVEL PELA ENTREGA',
+    valor: 'PREÇO CUSTO (F)',
+  },
+  /**
+   * O QUE ESTA PLANILHA RESPONDE, E SÓ ISSO:
+   *
+   * "Não se apegue ao pedido de nota fiscal, nem nada. Porque às vezes a nota
+   *  fiscal é entregue com um pedido. Se apegue ao custo que tem cada... não
+   *  precisa nem ser cada venda, mas atente ao custo. Não queira abraçar todas
+   *  as informações; pega só o que é importante."
+   *
+   * Então o app lê três coisas: QUANTO custou, de QUEM é a venda e QUEM
+   * entregou. O número da nota/pedido entra como referência da linha, para ela
+   * se achar na planilha — não para amarrar entrega a venda. Uma entrega leva
+   * nota e pedido juntos, e forçar esse vínculo erraria em silêncio.
+   *
+   * A planilha também não tem data: o mês é o que ela escolhe na importação.
+   */
+  observacao: 'Esta planilha não tem coluna de data — escolha o mês na importação e exporte um '
+    + 'mês por vez. O que o app aproveita dela é o CUSTO de cada entrega, o VENDEDOR da venda e '
+    + 'QUEM entregou. É com isso que ele responde quanto o frete de cada vendedor custou.',
+});
+
 export function perfilDoCabecalho(linha) {
   const achadas = assinaturaDe(linha);
   if (!achadas.length) return null;

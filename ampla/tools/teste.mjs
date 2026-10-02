@@ -675,11 +675,12 @@ console.log('\n▶ Relatório paginado, como sai do sistema');
   ok('e o app diz o que deixou de fora', /ficaram de fora/.test(leitura.aviso || ''), leitura.aviso || '');
 }
 
-console.log('\n▶ Os oito relatórios do Gestão Click já vêm ligados');
+console.log('\n▶ Os relatórios que já vêm ligados');
 {
   // Ela não liga coluna nenhuma: o app conhece o cabeçalho de cada relatório.
   const esperado = {
     'gc-vendas': 'pedidos',
+    'gc-vendas-simples': 'pedidos',
     'gc-nfe': 'nfs',
     'gc-comissao': 'comissoes',
     'gc-receber': 'receber',
@@ -690,8 +691,9 @@ console.log('\n▶ Os oito relatórios do Gestão Click já vêm ligados');
     'gc-produtos-vendidos': 'produtosVendidos',
     'gc-comissao-produto': 'comissaoProduto',
     'gc-clientes': 'clientes',
+    'forms-entrega': 'fretes',
   };
-  igual('os onze relatórios estão cadastrados',
+  igual('os treze relatórios estão cadastrados',
     Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
 
   for (const perfil of perfis.PERFIS) {
@@ -1886,6 +1888,45 @@ console.log('\n▶ Custo do frete: o cobrado paga o pago?');
   ok('o cobrado paga 86% do pago', Math.abs(f.custo.cobertura - 86.61) < 0.1, String(f.custo.cobertura));
   igual('e dá para ver quem fez a entrega', f.custo.porResponsavel[0].nome, 'Jonas');
   igual('com quanto custou', f.custo.porResponsavel[0].valor, 3650);
+
+  /**
+   * O CUSTO DE FRETE DE CADA VENDEDOR, quando a planilha diz de quem é a venda.
+   *
+   * "Não se apegue ao pedido de nota fiscal, nem nada. Se apegue ao custo. Não
+   *  queira abraçar todas as informações; pega só o que é importante."
+   *
+   * A planilha de solicitação de entrega traz valor, vendedor e quem entregou.
+   * Com o vendedor na linha, o custo de cada um é MEDIDO — e o rateio, que era
+   * só ordem de grandeza, sai de cena.
+   */
+  const FRV = 'Período;Nota fiscal ou pedido;Vendedor;Responsável pela entrega;Valor';
+  await importar('fretes', 'frv.csv', `${FRV}
+MANHÃ;NF 9910;Alberto;Messias;135,00
+TARDE;PED 7001;Alberto;Elias;150,00
+MANHÃ;NOTA 9911;Beatriz;Moises;90,00
+MANHÃ;PEDIDO No.7002;;Diego;200,00
+TARDE;NF 9912;Alberto;Val;0,00
+NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
+
+  const fv = await margemMod.frete({ de: '2026-12-01', ate: '2026-12-31' });
+  igual('as seis entregas entraram', fv.custo.entregas, 6);
+  igual('e o custo é a soma do que foi lançado', fv.custo.total, 575);
+  ok('o custo agora é por vendedor, não rateio', fv.custo.porVendedor === true, '');
+  igual('a entrega sem vendedor fica à parte', fv.custo.semVendedor, 200);
+  // R$ 0,00 é entrega sem custo de terceiro; valor em branco o app não conta
+  igual('entrega com zero é contada como sem cobrança', fv.custo.semCobranca, 1);
+  igual('e a de valor em branco não vira zero', fv.custo.semValor, 1);
+  /**
+   * O NÚMERO DA NOTA OU DO PEDIDO NÃO AMARRA NADA. Ele entra como referência da
+   * linha e só. "Às vezes a nota fiscal é entregue com um pedido" — forçar esse
+   * vínculo erraria calado, e o que ela quer é o custo.
+   */
+  const refs = (await store.fretes.listar()).filter((l) => l.mes === '2026-12');
+  ok('o documento citado fica guardado como referência da linha',
+    refs.some((l) => (l.descricao || l.nfNumero || '').includes('9910')),
+    JSON.stringify(refs.map((l) => l.descricao || l.nfNumero)));
+  ok('e nenhuma entrega sai amarrada a uma nota ou a um pedido',
+    refs.every((l) => !l.nfId && !l.pedidoId), '');
 
   // reenviar a planilha do mês atualiza, não soma de novo
   await importar('fretes', 'fr.csv', `${FR}

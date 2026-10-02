@@ -20,6 +20,7 @@ import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, vazio, aviso } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { money, pct, num, formatDate } from '../../core/format.js';
+import { cents } from '../../core/util.js';
 
 const COLUNAS = [
   { header: 'Vendedor', key: 'nome' },
@@ -38,6 +39,21 @@ const COLUNAS_FRETE = [
   { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Frete / faturamento', key: 'peso', tipo: 'percentual', alinhar: 'direita' },
   { header: 'NFs', key: 'notas', tipo: 'numero', alinhar: 'direita' },
+];
+
+/**
+ * Quando a planilha de entregas diz de quem é a venda, o custo de cada vendedor
+ * é MEDIDO, não rateado — e aí as colunas mudam: entra o que a entrega dele
+ * custou e o que sobrou, e o rateio sai de cena. Um número medido e um número
+ * estimado não podem dividir a mesma coluna.
+ */
+const COLUNAS_FRETE_MEDIDO = [
+  { header: 'Vendedor', key: 'nome' },
+  { header: 'Frete cobrado', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Entregas custaram', key: 'custoReal', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Sobra', key: 'resultado', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Frete / faturamento', key: 'peso', tipo: 'percentual', alinhar: 'direita' },
 ];
 
 export async function telaMargem({ query }) {
@@ -257,12 +273,12 @@ export async function telaMargem({ query }) {
             `⚠️ ${v.nome}: ${v.produtosSemCusto} de ${v.produtos} produtos sem custo no período.`)))),
 
     /* frete */
-    secao('Frete cobrado', r.frete.temDado
+    ((colunasFrete) => secao('Frete cobrado', r.frete.temDado
       ? exportadores(() => ({
         titulo: 'Frete por vendedor',
         subtitulo: `${formatDate(filtro.de)} a ${formatDate(filtro.ate)}`,
         nomeArquivo: `frete_${filtro.de}`,
-        colunas: COLUNAS_FRETE,
+        colunas: colunasFrete,
         linhas: r.frete.vendedores,
         total: { nome: 'TOTAL', frete: r.frete.total },
       }))
@@ -296,21 +312,41 @@ export async function telaMargem({ query }) {
          */
         r.frete.custo.temDado
           ? h('p.mini.muted',
-            `${r.frete.custo.lancamentos} lançamento(s) de custo no período. O custo da frota é FIXO `
-            + 'e mensal — salário de motorista não é de uma entrega, é do mês —, então o app NÃO '
-            + 'divide esse custo por nota nem por vendedor. A coluna "custo rateado" é só o rateio '
-            + 'proporcional ao frete que cada um cobrou: serve para ordem de grandeza, não para '
-            + 'cobrar ninguém.')
-          : aviso('Falta o custo do frete. Mande a sua planilha do Google (exportada em XLSX ou CSV) '
-            + 'em Custos de frete: uma linha por pagamento, com data, tipo (frota própria ou '
-            + 'terceiro), quem, descrição e valor. Sem ela, "fulano cobrou R$ 8 mil de frete" parece '
-            + 'resultado — e não é, porque a entrega tem custo.', 'atencao',
+            r.frete.custo.porVendedor
+              ? `${num(r.frete.custo.entregas, 0)} entregas no período, e a planilha diz de quem é `
+                + 'cada venda — então "entregas custaram" é o que as entregas DELE custaram, '
+                + 'medido, e não um rateio. '
+                + (r.frete.custo.semVendedor > 0
+                  ? `${money(r.frete.custo.semVendedor)} ficaram fora da tabela por não ter vendedor na planilha. `
+                  : '')
+                + (r.frete.custo.semCobranca > 0
+                  ? `${r.frete.custo.semCobranca} entregas estão com R$ 0,00 — entrega sem custo lançado, `
+                    + 'que normalmente é a frota própria. '
+                  : '')
+                + (r.frete.custo.semValor > 0
+                  ? `${r.frete.custo.semValor} estão com o valor em branco, e essas o app não conta.`
+                  : '')
+              : `${r.frete.custo.lancamentos} lançamento(s) de custo no período. A coluna "custo `
+                + 'rateado" é só o rateio proporcional ao frete que cada um cobrou: serve para '
+                + 'ordem de grandeza, não para cobrar ninguém. Com a coluna VENDEDOR na planilha '
+                + 'de entregas, ela vira custo medido.')
+          : aviso('Falta o custo do frete. Mande a sua planilha de entregas do Google (XLSX, CSV ou '
+            + 'PDF) em Custos de frete. O que importa nela é o CUSTO de cada entrega e o VENDEDOR '
+            + 'da venda — com esses dois o app responde quanto a entrega de cada um custou. Sem '
+            + 'ela, "fulano cobrou R$ 8 mil de frete" parece resultado, e não é.', 'atencao',
           botao('Mandar custos de frete', { pequeno: true, onClick: () => navigate('/arquivos/fretes') })),
 
         tabela({
-          colunas: COLUNAS_FRETE,
+          colunas: colunasFrete,
           linhas: r.frete.vendedores,
-          total: { nome: 'TOTAL', frete: r.frete.total, custoRateado: r.frete.custo.temDado ? r.frete.custo.total : null },
+          total: {
+            nome: 'TOTAL',
+            frete: r.frete.total,
+            custoRateado: r.frete.custo.temDado && !r.frete.custo.porVendedor ? r.frete.custo.total : null,
+            custoReal: r.frete.custo.porVendedor ? cents(r.frete.custo.total - r.frete.custo.semVendedor) : null,
+            resultado: r.frete.custo.porVendedor
+              ? cents(r.frete.total - (r.frete.custo.total - r.frete.custo.semVendedor)) : null,
+          },
         }),
 
         r.frete.custo.temDado && r.frete.custo.porResponsavel.length > 0
@@ -326,5 +362,5 @@ export async function telaMargem({ query }) {
         + 'foi cobrado — e preferiu dizer isso a mostrar R$ 0,00, que seria outra coisa. Se o export '
         + 'puder sair com a coluna de frete (ou se você mandar os XMLs das NF-e), esta tela se '
         + 'preenche sozinha: total, por vendedor, e quanto o frete pesa sobre o que cada um vendeu.',
-      'info')));
+      'info')))(r.frete.custo.porVendedor ? COLUNAS_FRETE_MEDIDO : COLUNAS_FRETE));
 }

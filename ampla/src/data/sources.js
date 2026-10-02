@@ -479,12 +479,13 @@ export const FONTES = {
     icone: '🚚',
     periodicidade: 'mensal',
     store: 'fretes',
-    verdadeDe: 'O que a entrega custou: frota própria e transportadora.',
-    descricao: 'A sua planilha do Google, exportada em XLSX ou CSV. Lance uma linha por '
-      + 'pagamento: salário de motorista, extras, combustível, manutenção, e o que foi pago a '
-      + 'transportadora. É com ela que o app responde se o frete cobrado paga o frete feito.',
+    verdadeDe: 'O que a entrega custou, e de quem era a venda.',
+    descricao: 'A sua planilha de entregas do Google, em XLSX, CSV ou PDF. Duas colunas fazem o '
+      + 'trabalho todo: o VALOR de cada entrega e o VENDEDOR da venda. Com elas o app responde '
+      + 'quanto o frete de cada vendedor custou de verdade — e se o frete cobrado paga o frete '
+      + 'feito. O resto é bem-vindo, mas não é necessário.',
     formatos: ['xlsx', 'csv', 'pdf'],
-    colunasReais: ['data', 'tipo (frota própria / terceiro)', 'quem', 'descrição', 'valor'],
+    colunasReais: ['valor', 'vendedor', 'quem entregou', 'data', 'tipo (frota própria / terceiro)'],
     campos: [
       campo('data', 'Data', 'data', { sinonimos: ['data', 'dia', 'data pagamento', 'competencia', 'mes'] }),
       campo('tipo', 'Tipo (frota própria / terceiro)', 'texto', {
@@ -504,9 +505,11 @@ export const FONTES = {
       campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante'] }),
     ],
     mesObrigatorio: true,
-    ajuda: 'Salário de motorista é FIXO e mensal: lance uma linha por mês, com o valor cheio. O '
-      + 'app não divide isso por nota — custo fixo não é de uma entrega, é do mês. Nota fiscal e '
-      + 'vendedor são opcionais: quando vierem, o app consegue dizer quanto custou aquela entrega.',
+    ajuda: 'Se a planilha não tiver coluna de data (a de solicitação de entrega não tem), exporte '
+      + 'UM MÊS POR VEZ e escolha o mês aqui — é o que põe o custo no mês certo. Salário de '
+      + 'motorista é FIXO e mensal: lance uma linha por mês, com o valor cheio, em vez de dividir '
+      + 'por entrega. Entrega com R$ 0,00 o app conta como entrega sem custo de terceiro; valor em '
+      + 'branco ele não conta, e diz quantas foram.',
   },
 
   saldos: {

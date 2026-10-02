@@ -661,11 +661,17 @@ function custoDasNotasPeloPedido(notas, pedidos) {
  * achar que não cobra frete.
  */
 export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
-  const [nfs, custos] = await Promise.all([
+  const [nfs, custos, vendedores] = await Promise.all([
     recebidas ? Promise.resolve(recebidas) : store.nfs.listar(),
     store.fretes.listar(),
+    store.vendedores.listar(),
   ]);
-  const nomeVendedor = nomes || new Map((await store.vendedores.listar()).map((v) => [v.id, v.nome]));
+  const nomeVendedor = nomes || new Map(vendedores.map((v) => [v.id, v.nome]));
+  const idPorNome = new Map();
+  for (const v of vendedores) {
+    idPorNome.set(normalize(v.nome), v.id);
+    for (const a of v.apelidos || []) idPorNome.set(normalize(a), v.id);
+  }
   const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate);
   const comFrete = doPeriodo.filter((nf) => nf.valorFrete != null);
 
@@ -704,6 +710,25 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
   const custoTotal = cents(sum(doPeriodoCusto, (c) => c.valor || 0));
   const cobrado = cents(sum(comFrete, (nf) => nf.valorFrete || 0));
 
+  /**
+   * O CUSTO DE FRETE DE CADA VENDEDOR, quando a planilha diz de quem é a venda.
+   *
+   * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+   *
+   * A planilha de entregas traz o vendedor em cada linha. Então este número não
+   * é rateio nenhum: é a soma do que as entregas DELE custaram. O rateio só
+   * continua existindo para quando a planilha não disser o vendedor — e os dois
+   * ficam em colunas diferentes, porque um é medida e o outro é estimativa.
+   */
+  const custoPorVendedor = new Map();
+  let custoSemVendedor = 0;
+  for (const c of doPeriodoCusto) {
+    const vid = c.vendedorId || idPorNome.get(normalize(c.vendedorNome || '')) || null;
+    if (!vid) { custoSemVendedor += c.valor || 0; continue; }
+    custoPorVendedor.set(vid, cents((custoPorVendedor.get(vid) || 0) + (c.valor || 0)));
+  }
+  const temCustoPorVendedor = custoPorVendedor.size > 0;
+
   const lista = [...porVendedor.values()].map((v) => ({
     ...v,
     frete: cents(v.frete),
@@ -716,6 +741,12 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
      * ninguém.
      */
     custoRateado: cobrado ? cents(custoTotal * (v.frete / cobrado)) : null,
+    /* o que as entregas dele custaram de verdade, quando a planilha diz */
+    custoReal: v.vendedorId && custoPorVendedor.has(v.vendedorId)
+      ? custoPorVendedor.get(v.vendedorId) : null,
+    /* e o que sobra da entrega dele: cobrado menos custo medido */
+    resultado: v.vendedorId && custoPorVendedor.has(v.vendedorId)
+      ? cents(v.frete - custoPorVendedor.get(v.vendedorId)) : null,
   })).sort((a, b) => b.frete - a.frete);
 
   return {
@@ -735,6 +766,14 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
       // a conta que importa: o frete cobrado paga o frete feito?
       resultado: cents(cobrado - custoTotal),
       cobertura: custoTotal ? (cobrado / custoTotal) * 100 : null,
+      // a planilha de entregas diz de quem é a venda? então o custo por vendedor
+      // é medido, não rateado — e a tela pode parar de pedir desculpa pelo rateio
+      porVendedor: temCustoPorVendedor,
+      semVendedor: cents(custoSemVendedor),
+      entregas: doPeriodoCusto.length,
+      /* entrega registrada sem custo lançado não é entrega de graça: é campo em branco */
+      semValor: doPeriodoCusto.filter((c) => c.valor == null).length,
+      semCobranca: doPeriodoCusto.filter((c) => c.valor === 0).length,
       porResponsavel: [...doPeriodoCusto.reduce((mapa, c) => {
         const k = c.responsavel || 'sem identificação';
         mapa.set(k, cents((mapa.get(k) || 0) + (c.valor || 0)));
