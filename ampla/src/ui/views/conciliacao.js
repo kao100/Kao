@@ -481,9 +481,18 @@ async function vincularNfDoTitulo(p, { nfs }) {
   const mesmoValor = (n) => titulo.valor != null && n.valorTotal != null
     && Math.abs(n.valorTotal - titulo.valor) < 0.01;
 
-  const peso = (n) => (mesmoNumero(n) ? 0 : mesmoValor(n) ? 1 : n.clienteId === titulo.clienteId ? 2 : 3);
+  /**
+   * O NÚMERO DO PEDIDO está nos dois lados: o título se chama "Venda de nº 871"
+   * e o XML traz <xPed>871</xPed>. Quando a nota citada não está na base, é esta
+   * que quase sempre é a certa — então ela vem logo atrás.
+   */
+  const pedido = soDigitos(titulo.pedidoNumero);
+  const mesmoPedido = (n) => !!pedido && soDigitos(n.pedidoNumero) === pedido;
+
+  const peso = (n) => (mesmoNumero(n) ? 0 : mesmoPedido(n) ? 1 : mesmoValor(n) ? 2
+    : n.clienteId === titulo.clienteId ? 3 : 4);
   const candidatas = nfs
-    .filter((n) => mesmoNumero(n) || mesmoValor(n) || n.clienteId === titulo.clienteId)
+    .filter((n) => mesmoNumero(n) || mesmoPedido(n) || mesmoValor(n) || n.clienteId === titulo.clienteId)
     .sort((a, b) => peso(a) - peso(b) || String(b.dataEmissao).localeCompare(String(a.dataEmissao)))
     .slice(0, 80);
 
@@ -492,58 +501,62 @@ async function vincularNfDoTitulo(p, { nfs }) {
     formatDate(n.dataEmissao),
     money(n.valorTotal),
     (n.clienteNome || '').slice(0, 24),
-    mesmoNumero(n) ? '\u2190 a que o título cita' : mesmoValor(n) ? '\u2190 mesmo valor' : '',
+    mesmoNumero(n) ? '\u2190 a que o título cita'
+      : mesmoPedido(n) ? `\u2190 mesmo pedido (${titulo.pedidoNumero})`
+        : mesmoValor(n) ? '\u2190 mesmo valor' : '',
   ].filter(Boolean).join(' \u00b7 ');
+
+  /**
+   * UM CAMPO SÓ, E O ESTADO DITO EM PALAVRAS.
+   *
+   * "A primeira nota tá certa, que é a que você mesmo tá vinculando. Só que aí
+   *  aparece 'ou escolha na lista'. Aí, se eu apertar vincular, não sei qual das
+   *  duas que vai. Não entendi nada."
+   *
+   * Eu tinha posto dois controles para uma decisão só — um campo de número e uma
+   * lista — e nada dizia qual ganhava. Agora é UMA lista, a nota citada já vem
+   * escolhida quando existe, e a linha de cima diz, em palavras, se ela existe ou
+   * não. Quem lê não precisa adivinhar regra nenhuma.
+   */
+  const citadas = citado ? nfs.filter(mesmoNumero) : [];
+  const situacao = !titulo.nfNumero
+    ? 'Este título não cita número de nota.'
+    : citadas.length === 1
+      ? `✅ A NF ${titulo.nfNumero} está na base e já vem escolhida abaixo.`
+      : citadas.length > 1
+        ? `⚠️ Existe mais de uma NF ${titulo.nfNumero} na base. Escolha qual é.`
+        : `⚠️ A NF ${titulo.nfNumero} NÃO está na base. Importe o XML dela — ou escolha abaixo `
+          + 'a nota certa, se o número do relatório estiver errado.'
+          + (candidatas.some(mesmoPedido)
+            ? ` A primeira da lista é a nota do mesmo pedido (${titulo.pedidoNumero}).` : '');
+
+  if (!candidatas.length) {
+    erro(`A NF ${titulo.nfNumero || ''} não está na base e não há nota parecida para escolher. `
+      + 'Importe o XML dessa nota.');
+    return;
+  }
 
   const r = await formulario({
     titulo: `Título ${titulo.documento || ''} — vincular à NF`,
     descricao: [
-      titulo.clienteNome,
-      money(titulo.valor),
-      `vence ${formatDate(titulo.vencimento)}`,
-      titulo.nfNumero ? `o título cita a NF ${titulo.nfNumero}` : null,
-    ].filter(Boolean).join(' \u00b7 '),
+      [titulo.clienteNome, money(titulo.valor), `vence ${formatDate(titulo.vencimento)}`]
+        .filter(Boolean).join(' \u00b7 '),
+      situacao,
+    ].join('\n'),
     campos: [
       {
-        chave: 'numero',
-        label: 'Número da NF',
-        tipo: 'texto',
-        valor: titulo.nfNumero || '',
-        ajuda: 'Digite o número e o app acha a nota. Apague para escolher na lista.',
-      },
-      candidatas.length ? {
         chave: 'nfId',
-        label: 'Ou escolha na lista',
+        label: citadas.length === 1 ? 'Nota fiscal' : 'Escolha a nota fiscal',
         tipo: 'select',
         opcoes: candidatas.map((n) => ({ valor: n.id, label: rotulo(n) })),
-      } : null,
+      },
       { chave: 'motivo', label: 'Motivo', tipo: 'texto', obrigatorio: true, valor: 'conferido no relatório' },
-    ].filter(Boolean),
+    ],
     confirmar: 'Vincular',
   });
   if (!r) return;
 
-  /**
-   * O NÚMERO DIGITADO MANDA — e se ele não achar nada, o app DIZ, em vez de
-   * ligar na nota que estava selecionada na lista por acaso. Vincular o título à
-   * nota errada é pior do que não vincular.
-   */
-  let nf = null;
-  const digitado = soDigitos(r.numero);
-  if (digitado) {
-    const achadas = nfs.filter((n) => soDigitos(n.numero) === digitado);
-    if (!achadas.length) {
-      erro(`Não existe NF ${r.numero} na base. Importe o XML dessa nota, ou apague o número para escolher na lista.`);
-      return;
-    }
-    if (achadas.length > 1) {
-      erro(`Existe mais de uma NF ${r.numero} na base. Escolha na lista qual é.`);
-      return;
-    }
-    [nf] = achadas;
-  } else {
-    nf = candidatas.find((n) => n.id === r.nfId);
-  }
+  const nf = candidatas.find((n) => n.id === r.nfId);
   if (!nf) { erro('Escolha uma nota.'); return; }
 
   await store.receber.salvar({

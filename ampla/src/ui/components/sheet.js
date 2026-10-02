@@ -118,7 +118,8 @@ export function formulario({ titulo, campos, confirmar: rotulo = 'Salvar', descr
     abrirFolha({
       titulo,
       corpo: h('div.empilha', { style: { gap: '12px' } },
-        descricao && h('p.pequeno.muted', descricao),
+        /* quebra de linha na descrição vale: é onde o formulário diz o estado */
+        descricao && h('p.pequeno.muted', { style: { whiteSpace: 'pre-line' } }, descricao),
         ...controles,
         erroEl),
       acoes: [

@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 450 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 452 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,12 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **O título do financeiro chega à nota por dois caminhos.** Pelo número da NF
+  que ele cita, e — quando esse falha ou nem veio — pelo **número do pedido**,
+  que os dois lados carregam: o título se chama *"Venda de nº 871"* e o XML traz
+  `<xPed>871</xPed>` dentro da nota. Não é semelhança, é o mesmo número escrito
+  pelo mesmo sistema nos dois documentos. Vale a regra de sempre: só liga quando
+  há uma única nota com aquele pedido.
 - **A mesma nota vista por dois arquivos é UMA nota.** O XML identifica a nota
   pela chave de 44 dígitos; o relatório fiscal só tem número e série. Sem
   reconciliar, a NF 4061 entrava duas vezes — e o título que a citava achava

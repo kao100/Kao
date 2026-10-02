@@ -342,11 +342,19 @@ export async function recalcular() {
     if (!nfsPorNumero.has(k)) nfsPorNumero.set(k, []);
     nfsPorNumero.get(k).push(nf);
   }
+  /* as notas pelo número do PEDIDO que elas carregam dentro (xPed do XML) */
+  const nfsPorPedido = new Map();
+  for (const nf of nfs) {
+    if (!nf.pedidoNumero) continue;
+    const k = String(docNumber(nf.pedidoNumero) || nf.pedidoNumero);
+    if (!nfsPorPedido.has(k)) nfsPorPedido.set(k, []);
+    nfsPorPedido.get(k).push(nf);
+  }
   const titulosAtualizados = [];
   for (const titulo of titulos) {
     let nfId = titulo.nfId || null;
     let vendedorId = titulo.vendedorId || null;
-    if (titulo.nfNumero) {
+    if (!nfId && titulo.nfNumero) {
       /**
        * A BUSCA TEM DE USAR A MESMA NORMALIZAÇÃO DA CHAVE, senão "04061" no
        * título nunca acha "4061" na nota — e o app acusa um buraco que não
@@ -356,6 +364,22 @@ export async function recalcular() {
       const candidatas = nfsPorNumero.get(k) || [];
       // só liga quando não há dúvida: uma única NF com aquele número
       if (candidatas.length === 1) nfId = candidatas[0].id;
+    }
+    /**
+     * A SEGUNDA PONTE: O NÚMERO DO PEDIDO, QUE OS DOIS LADOS CARREGAM.
+     *
+     * O título do contas a receber se chama "Venda de nº 871". O XML da nota
+     * traz <xPed>871</xPed> dentro dela. É o mesmo número, escrito pelo mesmo
+     * sistema, nos dois documentos — não é semelhança, é igualdade.
+     *
+     * Serve para quando o número da NOTA no relatório financeiro não bate (ou
+     * nem veio): o pedido liga assim mesmo. E vale a regra de sempre — só liga
+     * quando há uma única nota com aquele pedido.
+     */
+    if (!nfId && titulo.pedidoNumero) {
+      const k = String(docNumber(titulo.pedidoNumero) || titulo.pedidoNumero);
+      const porPedido = nfsPorPedido.get(k) || [];
+      if (porPedido.length === 1) nfId = porPedido[0].id;
     }
     const nf = nfId ? nfPorId.get(nfId) : null;
     if (nf?.vendedorId) vendedorId = nf.vendedorId;

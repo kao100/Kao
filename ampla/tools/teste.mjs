@@ -2175,7 +2175,8 @@ console.log('\n▶ A mesma nota vista pelo relatório e pelo XML é UMA nota');
 <emit><CNPJ>00000000000191</CNPJ><xNome>AMPLA TESTE</xNome></emit>
 <dest><CNPJ>11111111000191</CNPJ><xNome>CLIENTE DE TESTE LTDA</xNome><xMun>SAO PAULO</xMun><UF>SP</UF></dest>
 <det nItem="1"><prod><cProd>P9</cProd><xProd>PRODUTO NOVE</xProd><NCM>25232910</NCM><CFOP>5102</CFOP>
-<uCom>UN</uCom><qCom>10.0000</qCom><vUnCom>100.0000</vUnCom><vProd>1000.00</vProd></prod></det>
+<uCom>UN</uCom><qCom>10.0000</qCom><vUnCom>100.0000</vUnCom><vProd>1000.00</vProd>
+<xPed>8710</xPed></prod></det>
 <total><ICMSTot><vProd>1000.00</vProd><vFrete>0.00</vFrete><vDesc>0.00</vDesc><vNF>1000.00</vNF></ICMSTot></total>
 </infNFe></NFe></nfeProc>`;
   const leitura = await readFile(new File([xml], 'n9820.xml', { type: 'text/xml' }));
@@ -2191,7 +2192,7 @@ console.log('\n▶ A mesma nota vista pelo relatório e pelo XML é UMA nota');
    * E É ISSO QUE FAZ O TÍTULO ACHAR A NOTA. Com duas candidatas ele não ligava;
    * com uma, liga sozinho e a pendência nem chega a existir.
    */
-  const REC = 'Documento;Cliente;CPF/CNPJ;Vencimento;Valor;Situação;Nota fiscal';
+  const REC = 'Descrição;Cliente;CPF/CNPJ;Vencimento;Valor;Situação;Nota fiscal';
   await importar('receber', 'rec9820.csv', `${REC}
 Venda de nº 871;CLIENTE DE TESTE LTDA;11111111000191;20/09/2027;1.000,00;Em aberto;9820`);
   await link.recalcular();
@@ -2203,6 +2204,26 @@ Venda de nº 871;CLIENTE DE TESTE LTDA;11111111000191;20/09/2027;1.000,00;Em abe
     (await store.pendencias.listar()).filter((p) => p.tipo === 'receber_sem_nf'
       && p.alvo?.id === titulo?.id).length, 0);
 
+  /**
+   * E A SEGUNDA PONTE: O NÚMERO DO PEDIDO, que os dois lados carregam.
+   *
+   * O título se chama "Venda de nº 871"; o XML da nota traz <xPed>871</xPed>.
+   * Quando o número da NOTA no relatório financeiro não bate — ou a nota citada
+   * nem está na base —, o pedido liga assim mesmo. Não é semelhança: é o mesmo
+   * número escrito pelo mesmo sistema nos dois documentos.
+   */
+  const nota9820 = notas9820[0];
+  igual('a nota carrega o pedido que veio dentro do XML', nota9820.pedidoNumero, '8710');
+  await importar('receber', 'recped.csv', `${REC}
+Venda de nº 8710;CLIENTE DE TESTE LTDA;11111111000191;25/09/2027;1.590,00;Em aberto;9999`);
+  await link.recalcular();
+  const porPedido = (await store.receber.listar()).find((t) => t.pedidoNumero === '8710');
+  ok('o título acha a nota pelo número do PEDIDO, mesmo citando outra NF',
+    porPedido?.nfId === nota9820.id, JSON.stringify([porPedido?.nfId, porPedido?.nfNumero]));
+
+  for (const t of (await store.receber.listar()).filter((x) => x.pedidoNumero === '8710')) {
+    await store.receber.remover(t.id);
+  }
   for (const t of (await store.receber.listar()).filter((x) => x.nfNumero === '9820')) {
     await store.receber.remover(t.id);
   }
