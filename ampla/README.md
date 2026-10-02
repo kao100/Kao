@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 456 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 460 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **Arquivo que não tem a coluna não desmarca o que o outro marcou.** O XML diz
+  que a nota é devolução, pela natureza da operação; o relatório fiscal sai sem
+  essa coluna. Importado depois, ele devolvia `devolucao: false` por cima do
+  `true` do XML — e três notas de setembro voltavam a contar como venda. Como
+  devolução entra negativa, o faturamento mexia o dobro delas: R$ 7.965,32 a
+  mais no mês. **"Não sei" não pode virar "não é":** sem a coluna, o campo não é
+  escrito. Com a coluna, ela vale e corrige.
 - **O XML não diz que a nota foi cancelada.** O cancelamento é outro documento
   — um evento (`tpEvento` 110111), em arquivo separado. O XML da própria nota
   continua dizendo *"Autorizado o uso da NF-e"* para sempre. O app lê os eventos

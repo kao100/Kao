@@ -2186,6 +2186,54 @@ console.log('\n▶ O XML não diz que a nota foi cancelada');
     !preparoUm.avisos.some((a) => /cancelamento/i.test(a)), JSON.stringify(preparoUm.avisos));
 }
 
+console.log('\n▶ Arquivo sem a coluna não desmarca o que o outro marcou');
+{
+  /**
+   * O XML diz que a nota é DEVOLUÇÃO, pela natureza da operação. O relatório
+   * fiscal dela sai SEM essa coluna — e, importado depois, devolvia
+   * devolucao:false por cima do true do XML.
+   *
+   * Medido nos arquivos reais de setembro: três notas (3991, 4126 e 4229)
+   * voltavam a contar como venda. Como devolução entra NEGATIVA, o faturamento
+   * mexia o dobro do valor delas — R$ 7.965,32 a mais no mês.
+   *
+   * "Não sei" não pode virar "não é".
+   */
+  const { readFile } = await import('../src/core/files/read.js');
+  const devXml = `<?xml version="1.0"?>
+<nfeProc><NFe><infNFe Id="NFe35269830000000000000000000000000000000000000">
+<ide><nNF>9830</nNF><serie>1</serie><mod>55</mod><dhEmi>2027-09-20T10:00:00-03:00</dhEmi>
+<natOp>DEVOLUCAO DE VENDA</natOp><tpNF>0</tpNF><finNFe>4</finNFe></ide>
+<emit><CNPJ>00000000000191</CNPJ><xNome>AMPLA TESTE</xNome></emit>
+<dest><CNPJ>11111111000191</CNPJ><xNome>CLIENTE DE TESTE LTDA</xNome></dest>
+<total><ICMSTot><vProd>500.00</vProd><vFrete>0.00</vFrete><vDesc>0.00</vDesc><vNF>500.00</vNF></ICMSTot></total>
+</infNFe></NFe></nfeProc>`;
+  await ingest.confirmar(await ingest.prepararNfe({
+    leitura: await readFile(new File([devXml], 'dev9830.xml', { type: 'text/xml' })),
+  }));
+  const comXml = (await store.nfs.listar()).find((n) => n.numero === '9830');
+  ok('o XML marcou a nota como devolução', comXml?.devolucao === true, String(comXml?.devolucao));
+
+  /* o relatório fiscal dela NÃO tem a coluna de natureza da operação */
+  const SEM_NATUREZA = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação';
+  await importar('nfs', 'semnat.csv', `${SEM_NATUREZA}
+9830;20/09/2027;CLIENTE DE TESTE LTDA;11111111000191;500,00;Autorizada`);
+
+  const depois = (await store.nfs.listar()).find((n) => n.numero === '9830');
+  ok('e o relatório sem a coluna NÃO desmarca', depois?.devolucao === true, String(depois?.devolucao));
+  igual('a natureza que veio do XML também fica', depois?.naturezaOperacao, 'DEVOLUCAO DE VENDA');
+
+  /* e quando o arquivo TEM a coluna, ela vale: é informação, não ausência */
+  const COM_NATUREZA = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  await importar('nfs', 'comnat.csv', `${COM_NATUREZA}
+9830;20/09/2027;CLIENTE DE TESTE LTDA;11111111000191;500,00;Autorizada;Venda de mercadoria`);
+  const corrigida = (await store.nfs.listar()).find((n) => n.numero === '9830');
+  ok('arquivo COM a coluna corrige de verdade', corrigida?.devolucao === false, String(corrigida?.devolucao));
+
+  await store.nfs.remover(corrigida.id);
+  await link.recalcular();
+}
+
 console.log('\n▶ A mesma nota vista pelo relatório e pelo XML é UMA nota');
 {
   /**

@@ -1042,12 +1042,26 @@ function acharConta(contas, texto) {
  * Quando a natureza não vem no arquivo, nada é devolução: é o que o app sabe, e
  * a tela avisa que sem essa coluna a devolução passa como venda.
  */
+/**
+ * ARQUIVO QUE NÃO TEM A COLUNA NÃO PODE DESMARCAR O QUE O OUTRO MARCOU.
+ *
+ * O XML traz a natureza da operação e por ela o app sabe o que é DEVOLUÇÃO. O
+ * relatório fiscal dela sai SEM essa coluna — e, importado depois do XML,
+ * devolvia devolucao:false por cima do true que o XML tinha posto. Três notas de
+ * setembro (3991, 4126 e 4229) voltavam a contar como venda, e como devolução
+ * entra negativa, o faturamento mexia o dobro: R$ 7.965,32 a mais.
+ *
+ * Então, sem texto nenhum, esta função não devolve campo nenhum. "Não sei" não
+ * pode virar "não é" — é a mesma regra que vale para zero e vazio no resto do
+ * app.
+ */
 function classificarNatureza(texto) {
-  const t = normalize(texto || '');
+  if (!temConteudo(texto)) return {};
+  const t = normalize(texto);
   const ehDevolucao = /devolu/.test(t);
   const deCompra = ehDevolucao && /(compra|fornecedor)/.test(t);
   return {
-    naturezaOperacao: texto || null,
+    naturezaOperacao: texto,
     devolucao: ehDevolucao && !deCompra,
     devolucaoDeCompra: deCompra,
   };
