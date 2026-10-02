@@ -1583,6 +1583,61 @@ ${itens}
   igual('reimportar o mesmo XML não duplica',
     (await store.nfs.listar()).filter((n) => n.numero === '9801').length, 1);
 
+  /**
+   * VÁRIOS DE UMA VEZ. "Enviar um por um é muita nota."
+   *
+   * Só XML junta: cada NF-e é um documento independente, então ler várias e
+   * somá-las num pacote é a mesma coisa que ler um ZIP. Planilha e PDF não
+   * juntam — dois relatórios diferentes no mesmo lote virariam uma tabela sem
+   * sentido, e isso seria perder dado calado.
+   */
+  const { readFiles } = await import('../src/core/files/read.js');
+  const arquivoXml = (nome, texto) => new File([texto], nome, { type: 'text/xml' });
+
+  const lote = await readFiles([
+    arquivoXml('a.xml', nfe('9811', { natOp: 'VENDA', finNFe: '1', vFrete: '10.00', vNF: '100.00', itens: item(1, 'P1', 'PRODUTO UM', '1.0000', '100.0000', '100.00') })),
+    arquivoXml('b.xml', nfe('9812', { natOp: 'VENDA', finNFe: '1', vFrete: '20.00', vNF: '200.00', itens: item(1, 'P2', 'PRODUTO DOIS', '2.0000', '100.0000', '200.00') })),
+    arquivoXml('quebrado.xml', '<isto nao e> uma nota'),
+  ]);
+  igual('o lote junta as notas que deram certo', lote.nfe.notas.length, 2);
+  igual('e o formato é o mesmo de um XML só', lote.formato, 'nfe');
+  ok('o arquivo quebrado não derruba o lote: vira aviso',
+    /1 de 3 arquivo\(s\) não puderam ser lidos/.test(lote.aviso || ''), lote.aviso);
+  ok('e o nome do lote diz quantos e quantas notas',
+    /3 arquivos \(2 nota\(s\)\)/.test(lote.arquivo), lote.arquivo);
+
+  // a mesma nota em dois arquivos entra uma vez só, e o app avisa
+  const repetido = await readFiles([
+    arquivoXml('x.xml', nfe('9813', { natOp: 'VENDA', finNFe: '1', vNF: '50.00', itens: item(1, 'P3', 'PRODUTO TRES', '1.0000', '50.0000', '50.00') })),
+    arquivoXml('x-copia.xml', nfe('9813', { natOp: 'VENDA', finNFe: '1', vNF: '50.00', itens: item(1, 'P3', 'PRODUTO TRES', '1.0000', '50.0000', '50.00') })),
+  ]);
+  ok('nota repetida entre arquivos é avisada', /vieram repetidas/.test(repetido.aviso || ''), repetido.aviso);
+  const preparoRep = await ingest.prepararNfe({ leitura: repetido });
+  await ingest.confirmar(preparoRep);
+  igual('e entra uma vez só',
+    (await store.nfs.listar()).filter((n) => n.numero === '9813').length, 1);
+
+  // dois relatórios juntos: recusa com explicação, em vez de misturar
+  let recusou = null;
+  try {
+    await readFiles([
+      new File(['a;b\n1;2'], 'um.csv', { type: 'text/csv' }),
+      new File(['a;b\n3;4'], 'dois.csv', { type: 'text/csv' }),
+    ]);
+  } catch (err) { recusou = err.message; }
+  ok('vários relatórios no mesmo lote são recusados', !!recusou, String(recusou));
+  ok('com explicação do porquê', /um de cada vez/.test(recusou || ''), String(recusou));
+
+  // um arquivo só continua funcionando igual
+  const sozinho = await readFiles([arquivoXml('so.xml', nfe('9814', { natOp: 'VENDA', finNFe: '1', vNF: '10.00', itens: item(1, 'P4', 'PRODUTO QUATRO', '1.0000', '10.0000', '10.00') }))]);
+  igual('um arquivo só é lido como sempre foi', sozinho.nfe.notas.length, 1);
+  igual('e mantém o nome do arquivo', sozinho.arquivo, 'so.xml');
+
+  for (const n of ['9813']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+
   // limpeza
   for (const n of ['9801', '9802', '9803']) {
     const x = (await store.nfs.listar()).find((y) => y.numero === n);

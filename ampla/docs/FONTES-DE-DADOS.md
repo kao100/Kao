@@ -177,6 +177,18 @@ Ele traz três coisas que nenhum relatório traz juntas:
 | `vFrete` | **frete cobrado**, por nota e por vendedor — hoje nenhum relatório traz |
 | `natOp` + `finNFe` | **devolução**, sem depender de coluna nenhuma, e separando devolução de venda da de compra |
 | `det/prod` | os **itens** de cada nota: produto, quantidade e valor — curva ABC e margem sem depender de relatório |
+| `prod/xPed` | **o número do pedido**, escrito na própria nota — a ligação NF → pedido vem pronta, sem ponte nenhuma |
+
+Esse último é o que resolve o problema que custou mais dias neste projeto. As duas
+pontes (contas a receber, e cliente + valor) existem porque o relatório fiscal não
+diz de qual pedido a nota veio. **O XML diz.** Com ele, a ligação é um dado do
+documento, não uma dedução — e as pontes viram rede de segurança para o que não
+vier por XML.
+
+**Mande vários de uma vez:** o seletor aceita seleção múltipla, e um ZIP com o mês
+inteiro também serve. Arquivo que não abrir é contado e dito no aviso, sem
+derrubar o lote; nota repetida entre arquivos entra uma vez só. Só XML junta —
+dois relatórios diferentes no mesmo lote o app recusa, com explicação.
 
 Com o XML, frete, devolução e curva ABC param de depender de qualquer relatório,
 e nada precisa ser ligado à mão: o layout é fixo e o app já o conhece.

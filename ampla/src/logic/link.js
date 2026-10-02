@@ -435,6 +435,7 @@ export const ORIGEM_VENDEDOR = {
   comissao: 'relatório de comissão',
   nf: 'relatório fiscal',
   pedido: 'pedido',
+  'pedido-xml': 'pedido informado na própria nota (XML)',
   'pedido-titulo': 'pedido (via contas a receber)',
   'pedido-valor': 'pedido com mesmo cliente e mesmo valor',
   'pedido-nf': 'pedido → NF',
@@ -447,6 +448,7 @@ export const ORIGEM_VENDEDOR = {
 
 /** De onde veio o número do pedido → como isso se chama no rótulo do vendedor. */
 const ORIGEM_DO_PEDIDO = {
+  xml: 'pedido-xml',
   titulo: 'pedido-titulo',
   valor: 'pedido-valor',
   'pedido-nf': 'pedido-nf',

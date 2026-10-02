@@ -41,6 +41,103 @@ export function acceptSuportado() {
   return [...EXTENSOES_SUPORTADAS].map((e) => `.${e}`).join(',');
 }
 
+/**
+ * VÁRIOS ARQUIVOS DE UMA VEZ — o mês inteiro de notas.
+ *
+ * "Eu precisava ou enviar um arquivo zip com todos os XMLs, ou selecionar vários
+ *  de uma vez. Enviar um por um é muita nota."
+ *
+ * Só XML junta: cada NF-e é um documento independente, então ler trezentos e
+ * somar as notas num pacote só é a mesma coisa que ler um ZIP com trezentos
+ * dentro. Planilha e PDF NÃO juntam — dois relatórios diferentes no mesmo lote
+ * virariam uma tabela sem sentido, e isso seria perder dado calado.
+ *
+ * Arquivo que não abre não derruba o lote: ele é contado e dito no aviso, e os
+ * outros entram.
+ *
+ * @param {File[]} arquivos
+ * @param {(lidos: number, total: number) => void} [aoAndar] para a tela contar
+ */
+export async function readFiles(arquivos, aoAndar) {
+  const lista = [...arquivos];
+  if (lista.length === 0) throw new Error('Nenhum arquivo escolhido.');
+  if (lista.length === 1) return readFile(lista[0]);
+
+  const naoXml = lista.filter((f) => {
+    const ext = (f.name || '').toLowerCase().split('.').pop();
+    return ext !== 'xml' && ext !== 'zip';
+  });
+  if (naoXml.length) {
+    throw new Error('Vários arquivos de uma vez só vale para XML de NF-e (ou ZIP). '
+      + `Mande ${naoXml.length === lista.length ? 'o relatório' : 'os relatórios'} um de cada vez — `
+      + 'dois relatórios diferentes no mesmo lote virariam uma tabela sem sentido.');
+  }
+
+  const notas = [];
+  const eventos = [];
+  const falharam = [];
+  const hashes = [];
+  let tamanho = 0;
+  let lidos = 0;
+
+  for (const file of lista) {
+    try {
+      const r = await readFile(file);
+      if (!r.nfe) { falharam.push(file.name); continue; }
+      notas.push(...r.nfe.notas);
+      eventos.push(...r.nfe.eventos);
+      hashes.push(r.hash);
+      tamanho += r.tamanho || 0;
+    } catch {
+      falharam.push(file.name);
+    }
+    lidos += 1;
+    if (aoAndar) aoAndar(lidos, lista.length);
+  }
+
+  if (!notas.length && !eventos.length) {
+    throw new Error(`Nenhum dos ${lista.length} arquivos tinha NF-e dentro.`);
+  }
+
+  const avisos = [];
+  if (falharam.length) {
+    avisos.push(`${falharam.length} de ${lista.length} arquivo(s) não puderam ser lidos`
+      + ` (${falharam.slice(0, 3).join(', ')}${falharam.length > 3 ? '…' : ''}).`);
+  }
+  // nota repetida entre arquivos é a mesma nota: o importador já casa pela chave,
+  // então aqui não se tira nada — só se avisa quando aconteceu
+  const chaves = new Set(notas.map((n) => n.chave).filter(Boolean));
+  if (chaves.size && chaves.size < notas.length) {
+    avisos.push(`${notas.length - chaves.size} nota(s) vieram repetidas entre os arquivos — `
+      + 'cada uma entra uma vez só.');
+  }
+
+  return {
+    arquivo: `${lista.length} arquivos (${notas.length} nota(s))`,
+    // o lote é tratado igual a um XML só: mesmo formato, mesmo caminho adiante
+    formato: 'nfe',
+    hash: hashTexto(hashes.sort().join('|')),
+    tamanho,
+    planilhas: [],
+    nfe: { notas, eventos },
+    ofx: null,
+    aviso: avisos.join(' ') || null,
+  };
+}
+
+/**
+ * Identidade do lote, no mesmo formato de hashFile: é por ela que o app sabe
+ * dizer "este lote já foi importado" e atualizar em vez de duplicar.
+ */
+function hashTexto(texto) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i += 1) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${texto.length.toString(36)}-${(h >>> 0).toString(36)}`;
+}
+
 export async function readFile(file) {
   const nome = file.name || 'arquivo';
   const ext = nome.toLowerCase().split('.').pop();

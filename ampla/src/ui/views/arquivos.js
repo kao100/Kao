@@ -14,7 +14,7 @@ import { recalcular, vendasSemVendedor, definirVendedorDoPedido, definirVendedor
 import { rotina, selo as seloRotina } from '../../logic/routine.js';
 import { FONTES, FONTES_LISTA, PERIODICIDADE } from '../../data/sources.js';
 import { reconhecer } from '../../data/perfis.js';
-import { readFile, detectHeaderRow, rowsToObjects, FORMATOS, formatoSuportado, acceptSuportado } from '../../core/files/read.js';
+import { readFiles, detectHeaderRow, rowsToObjects, FORMATOS, formatoSuportado, acceptSuportado } from '../../core/files/read.js';
 import { definirTitulo, seloDados, atualizarAlertas } from '../shell.js';
 import { kpi, card, secao, botao, aviso, selo } from '../components/ui.js';
 import { ok } from '../components/toast.js';
@@ -151,11 +151,21 @@ function aindaNao(fonte) {
 
 function passoArquivo(estado, ctx) {
   const { fonte, contas } = ctx;
+  /**
+   * SELEÇÃO MÚLTIPLA. "Enviar um por um é muita nota."
+   *
+   * O seletor aceita vários de uma vez. Quem junta é o leitor, e só para XML:
+   * cada NF-e é um documento independente, então trezentas lidas e somadas num
+   * pacote é a mesma coisa que um ZIP com trezentas dentro. Planilha e PDF
+   * continuam um de cada vez — dois relatórios diferentes no mesmo lote virariam
+   * uma tabela sem sentido.
+   */
   const input = h('input', {
     type: 'file',
+    multiple: true,
     style: { display: 'none' },
     accept: acceptSuportado(),
-    onChange: (e) => e.target.files[0] && carregar(e.target.files[0], estado, ctx),
+    onChange: (e) => e.target.files.length && carregar([...e.target.files], estado, ctx),
   });
 
   const zona = h('button.solta', {
@@ -165,13 +175,17 @@ function passoArquivo(estado, ctx) {
     onDrop: (e) => {
       e.preventDefault();
       zona.classList.remove('solta--ativo');
-      const arquivo = e.dataTransfer.files[0];
-      if (arquivo) carregar(arquivo, estado, ctx);
+      const arquivos = [...e.dataTransfer.files];
+      if (arquivos.length) carregar(arquivos, estado, ctx);
     },
   },
   h('span.solta__icone', estado.ocupado ? '⏳' : fonte.icone),
-  h('strong', estado.ocupado ? 'Lendo o arquivo…' : 'Toque para escolher, ou arraste o arquivo aqui'),
+  h('strong', estado.ocupado
+    ? (estado.progresso || 'Lendo o arquivo…')
+    : 'Toque para escolher, ou arraste os arquivos aqui'),
   h('span.pequeno.muted', `Formatos aceitos: ${maiusc(aceitos(fonte)).join(', ')}`),
+  fonte.formatos?.includes('xml') && h('span.pequeno.muted',
+    'Pode escolher VÁRIOS XMLs de uma vez, ou mandar um ZIP com o mês inteiro.'),
   input);
 
   return [
@@ -238,13 +252,21 @@ function passoArquivo(estado, ctx) {
   ];
 }
 
-async function carregar(arquivo, estado, ctx) {
+async function carregar(arquivos, estado, ctx) {
   const { fonte, perfis, desenhar } = ctx;
+  const lista = Array.isArray(arquivos) ? arquivos : [arquivos];
   estado.ocupado = true;
   estado.aviso = null;
+  estado.progresso = lista.length > 1 ? `Lendo ${lista.length} arquivos…` : null;
   desenhar();
   try {
-    const leitura = await readFile(arquivo);
+    const leitura = await readFiles(lista, (lidos, total) => {
+      // trezentos XMLs levam alguns segundos: a tela conta, em vez de parecer travada
+      if (total < 2) return;
+      estado.progresso = `Lendo ${lidos} de ${total} arquivos…`;
+      desenhar();
+    });
+    estado.progresso = null;
     estado.leitura = leitura;
 
     const anterior = await ingest.importacaoAnterior(leitura.hash);
@@ -308,6 +330,7 @@ async function carregar(arquivo, estado, ctx) {
     estado.aviso = err.message;
   } finally {
     estado.ocupado = false;
+    estado.progresso = null;
     desenhar();
   }
 }
