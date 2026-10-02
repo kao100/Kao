@@ -83,11 +83,12 @@ export function lerFiltro(query = {}, { atalhoPadrao = 'mes' } = {}) {
     vendedorId: query.v || '',
     clienteId: query.c || '',
     produtoId: query.pr || '',
+    grupo: query.g || '',
     busca: query.q || '',
     situacao: query.s || '',
     campoData: query.cmp || '',
     /** O filtro está mexido? É o que decide se o painel abre já aberto. */
-    ativo: !!(query.de || query.ate || query.v || query.c || query.pr || query.q || query.s),
+    ativo: !!(query.de || query.ate || query.v || query.c || query.pr || query.g || query.q || query.s),
   };
 }
 
@@ -100,6 +101,7 @@ export function paraQuery(f) {
     v: f.vendedorId || null,
     c: f.clienteId || null,
     pr: f.produtoId || null,
+    g: f.grupo || null,
     q: f.busca || null,
     s: f.situacao || null,
     cmp: f.campoData || null,
@@ -137,6 +139,7 @@ export function aplicar(lista, f, campos = {}) {
     if (f.vendedorId && r[vendedor] !== f.vendedorId) return false;
     if (f.clienteId && r[cliente] !== f.clienteId) return false;
     if (f.produtoId && r[produto] !== f.produtoId) return false;
+    if (f.grupo && (r.categoria || r.grupo) !== f.grupo) return false;
     if (f.situacao && r[situacao] !== f.situacao) return false;
     if (!buscaNorma) return true;
     // busca livre: nome, número, documento. Dígito casa com documento sem máscara.
@@ -159,4 +162,27 @@ export function descrever(f, { vendedores = [], clientes = [] } = {}) {
   if (f.busca) partes.push(`"${f.busca}"`);
   if (f.situacao) partes.push(f.situacao);
   return partes.join(' · ');
+}
+
+/**
+ * TODAS AS PESSOAS DO COMPLEXO AMPLA, numa lista só.
+ *
+ * "Ali o que eu preciso que você tenha é cliente, fornecedor, funcionário,
+ *  enfim, tudo, todas essas pessoas que fazem parte do complexo AMPLA."
+ *
+ * Um seletor só, com o tipo escrito ao lado de cada nome. Quem usa não precisa
+ * saber em qual cadastro a pessoa mora — precisa achar a pessoa.
+ *
+ * Cada uma leva o campo pelo qual a tela deve filtrar, porque o mesmo cadastro
+ * aparece com nomes diferentes em bases diferentes: o cliente é `clienteId` no
+ * faturamento, o fornecedor é `fornecedorId` no contas a pagar.
+ */
+export function listaDePessoas({ clientes = [], fornecedores = [], vendedores = [] } = {}) {
+  const pessoas = [
+    ...vendedores.filter((v) => v.ativo !== false)
+      .map((v) => ({ id: v.id, nome: v.nome, tipo: 'vendedor', campo: 'vendedorId' })),
+    ...clientes.map((c) => ({ id: c.id, nome: c.nome, tipo: 'cliente', campo: 'clienteId' })),
+    ...fornecedores.map((f) => ({ id: f.id, nome: f.nome, tipo: 'fornecedor', campo: 'fornecedorId' })),
+  ].filter((p) => p.nome);
+  return pessoas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }

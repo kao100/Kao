@@ -68,6 +68,20 @@ export const FONTES = {
           'nat operacao', 'nat op', 'cfop descricao', 'tipo de operacao', 'tipo operacao', 'finalidade'],
       }),
       // existem no XML, e em alguns relatórios; se não vier, tudo bem
+      /**
+       * FRETE. "É preciso saber quanto está sendo cobrado de frete, quanto cada
+       * vendedor está cobrando de frete, qual o valor total de frete cobrado."
+       *
+       * O relatório fiscal de hoje não traz esta coluna — o XML da NF-e traz. Se
+       * um dia o export tiver frete, ele entra sozinho por aqui e as telas de
+       * frete param de dizer "sem dado".
+       */
+      campo('valorFrete', 'Frete', 'dinheiro', {
+        sinonimos: ['frete', 'valor frete', 'vl frete', 'valor do frete', 'frete cobrado'],
+      }),
+      campo('valorProdutos', 'Valor dos produtos', 'dinheiro', {
+        sinonimos: ['valor produtos', 'valor dos produtos', 'total produtos', 'vl produtos'],
+      }),
       campo('serie', 'Série', 'texto', { sinonimos: ['serie', 'série'] }),
       campo('pedidoNumero', 'Pedido', 'texto', { sinonimos: ['pedido', 'num pedido', 'numero pedido', 'nro pedido'] }),
     ],

@@ -12,19 +12,21 @@ import { origemVendedor } from '../../logic/link.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, rankLinha, aviso, vazio, progresso } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
-import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { lerFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { money, pct, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
 
 export async function telaComercial({ query }) {
   const busca = lerFiltro(query);
   const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
-  const [resumo, comparacao, mes, meses, vendedores] = await Promise.all([
+  const [resumo, comparacao, mes, meses, vendedores, cadastroClientes, fornecedores] = await Promise.all([
     revenue.resumo(faixa),
     revenue.comparar(faixa),
     revenue.mesAtual(),
     revenue.ultimosMeses(6),
     store.vendedores.listar(),
+    store.clientes.listar(),
+    store.fornecedores.listar(),
   ]);
   definirTitulo('Comercial', descrever(busca, { vendedores }));
 
@@ -32,6 +34,7 @@ export async function telaComercial({ query }) {
     rota: '/comercial',
     filtro: busca,
     vendedores,
+    pessoas: listaDePessoas({ clientes: cadastroClientes, fornecedores, vendedores }),
     rotuloData: 'Emissão da nota',
     rotuloBusca: 'Buscar cliente, NF ou documento',
     aoExportar: () => exportarPlanilha(montarExportacaoVendedores(resumo, faixa)),

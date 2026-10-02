@@ -8,7 +8,7 @@ import { navigate, href } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, aviso } from '../components/ui.js';
-import { lerFiltro, aplicar as aplicarFiltro, descrever } from '../../logic/filtro.js';
+import { lerFiltro, aplicar as aplicarFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
 import { filtroAvancado } from '../components/filtro.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
@@ -38,7 +38,9 @@ export async function telaReceber({ query }) {
    * respondem a pergunta dela sem ela digitar nada.
    */
   const busca = lerFiltro(query, { atalhoPadrao: 'tudo' });
-  const [titulos, vendedores] = await Promise.all([store.receber.listar(), store.vendedores.listar()]);
+  const [titulos, vendedores, cadastroClientes, fornecedores] = await Promise.all([
+    store.receber.listar(), store.vendedores.listar(), store.clientes.listar(), store.fornecedores.listar(),
+  ]);
   definirTitulo('Contas a receber', descrever(busca, { vendedores }));
 
   if (!titulos.length) {
@@ -71,6 +73,7 @@ export async function telaReceber({ query }) {
       rota: '/receber',
       filtro: busca,
       vendedores,
+      pessoas: listaDePessoas({ clientes: cadastroClientes, fornecedores, vendedores }),
       rotuloData: 'Vencimento',
       rotuloBusca: 'Buscar cliente, título, NF ou documento',
       aoExportar: () => exportarPlanilha(montarExportacao(lista, filtro, busca)),

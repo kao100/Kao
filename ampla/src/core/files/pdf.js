@@ -437,6 +437,24 @@ function extrairItens(conteudo, fontes) {
 
 /* ------------------------------------------ de posições para linha/coluna */
 
+/**
+ * Dois números completos lado a lado são DUAS colunas, sempre.
+ *
+ * O relatório de comissão por produto sai apertado: a quantidade termina a um
+ * ponto e meio do valor, abaixo do limite que junta pedaços na mesma célula. O
+ * resultado era "8.213,00 51.266,59" numa célula só — a quantidade sumia e o
+ * valor virava texto. Em 852 das 1.177 linhas.
+ *
+ * O teste é estrito de propósito: os dois lados precisam ser números FORMATADOS
+ * inteiros (1.234,56 ou 12,00). Assim um número que o PDF desenhou em pedaços
+ * ("8.213" + ",00", ou "1.773.473" + "69") continua sendo juntado, e um nome de
+ * produto com número ("BLOCO 14X19X39") nem chega perto da regra.
+ */
+function doisNumerosCompletos(antes, depois) {
+  const esquerda = String(antes).trim().split(/\s+/).pop();
+  return NUMERO_COMPLETO.test(esquerda) && NUMERO_COMPLETO.test(String(depois).trim());
+}
+
 /** Junta os pedaços que estão na mesma altura e vizinhos em uma célula só. */
 function montarCelulas(itens) {
   const linhas = [];
@@ -454,7 +472,7 @@ function montarCelulas(itens) {
       const ultima = celulas[celulas.length - 1];
       const espaco = ultima ? it.x - (ultima.x + ultima.largura) : Infinity;
       const limite = (it.tamanho || 8) * 0.4;
-      if (ultima && espaco < limite) {
+      if (ultima && espaco < limite && !doisNumerosCompletos(ultima.texto, it.texto)) {
         ultima.texto += (espaco > (it.tamanho || 8) * 0.12 ? ' ' : '') + it.texto;
         ultima.largura = it.x + it.largura - ultima.x;
       } else {
@@ -581,23 +599,133 @@ function montarMatriz(linhasVisuais) {
   const colunas = descobrirColunas(linhasVisuais);
   if (!colunas.length) return [];
 
-  const indice = (c) => {
+  /**
+   * TABELA QUE MUDA DE LUGAR A CADA PÁGINA.
+   *
+   * Alguns relatórios dimensionam as colunas pelo conteúdo DAQUELA página: numa
+   * folha em que o vendedor se chama "MARCELO SANTANA" a coluna é estreita; na
+   * seguinte, "FRANCISCO CORREIA DA SILVA JUNIOR" empurra tudo 70 pontos para a
+   * direita. Com uma grade global só, a quantidade de uma página cai dentro da
+   * coluna de valor da outra — foi o que colou "8.213,00 51.266,59" numa célula
+   * só, em 852 das 1.177 linhas do relatório de comissão por produto.
+   *
+   * Mas grade por página também já quebrou aqui: num relatório de 334 vendas,
+   * páginas diferentes produziram quantidades diferentes de colunas e a soma caiu
+   * de R$ 685 mil para R$ 21 mil.
+   *
+   * Qual das duas serve para ESTE arquivo não é palpite: o app monta a tabela
+   * das duas formas e MEDE. Duas colunas que caíram na mesma célula deixam uma
+   * marca inconfundível — dois números completos separados por espaço, como
+   * "8.213,00 51.266,59", que nenhum valor de verdade tem. Ganha a grade que
+   * produzir menos dessas; empatando, fica a global, que é o comportamento antigo.
+   */
+  const porPagina = gradePorPagina(linhasVisuais, colunas.length);
+  const comGlobal = aplicarGrade(linhasVisuais, colunas, null);
+  if (!porPagina) return comGlobal;
+
+  const comPaginas = aplicarGrade(linhasVisuais, colunas, porPagina);
+  return celulasColadas(comPaginas) < celulasColadas(comGlobal) ? comPaginas : comGlobal;
+}
+
+/** Distribui as células nas colunas e devolve a matriz de texto. */
+function aplicarGrade(linhasVisuais, colunas, porPagina) {
+  const indice = (c, grade) => {
     const meio = c.x + c.largura / 2;
     let melhor = 0;
     let dist = Infinity;
-    colunas.forEach((f, i) => {
+    grade.forEach((f, i) => {
       const d = meio < f.inicio ? f.inicio - meio : meio > f.fim ? meio - f.fim : 0;
       if (d < dist) { dist = d; melhor = i; }
     });
     return melhor;
   };
   const linhas = linhasVisuais.map((l) => {
+    const grade = porPagina?.get(l.pagina) || colunas;
     const celulas = Array.from({ length: colunas.length }, () => []);
-    for (const c of l.celulas) celulas[indice(c)].push({ y: l.y, texto: c.texto });
+    for (const c of l.celulas) celulas[indice(c, grade)].push({ y: l.y, texto: c.texto });
     return { y: l.y, celulas, preenchidas: celulas.filter((a) => a.length).length };
   });
-
   return juntarQuebras(linhas, colunas.length).map((l) => l.celulas.map(montarTexto));
+}
+
+/**
+ * Quantas células ficaram com DOIS números completos dentro.
+ *
+ * É a assinatura de duas colunas coladas numa só. Um valor de verdade nunca é
+ * "1.234,56 7.890,12", e um nome de produto não é feito só de números
+ * formatados — por isso a medida é confiável para escolher entre duas grades.
+ */
+function celulasColadas(matriz) {
+  let total = 0;
+  for (const linha of matriz) {
+    for (const celula of linha) {
+      const pedacos = String(celula).trim().split(/\s+/);
+      if (pedacos.length < 2) continue;
+      let completos = 0;
+      for (const p of pedacos) if (NUMERO_COMPLETO.test(p)) completos += 1;
+      if (completos >= 2) total += 1;
+    }
+  }
+  return total;
+}
+
+/** Um número formatado inteiro: 1.234,56 ou 12,00. Nunca um pedaço de outro. */
+const NUMERO_COMPLETO = /^\d{1,3}(\.\d{3})*,\d{2}$|^\d+,\d{2}$/;
+
+/**
+ * Uma grade de colunas por página — mas só quando todas as páginas concordam no
+ * número de colunas. Qualquer discordância devolve null, e o chamador usa a
+ * grade global.
+ */
+function gradePorPagina(linhasVisuais, quantasGlobais) {
+  const paginas = new Map();
+  for (const l of linhasVisuais) {
+    if (l.pagina == null) return null;
+    if (!paginas.has(l.pagina)) paginas.set(l.pagina, []);
+    paginas.get(l.pagina).push(l);
+  }
+  if (paginas.size < 2) return null;
+
+  const grades = new Map();
+  for (const [pagina, linhas] of paginas) {
+    // página quase vazia (capa, rodapé solto) não tem o que dizer sobre a grade
+    if (linhas.length < 3) continue;
+    const colunas = descobrirColunas(linhas);
+    if (colunas.length === quantasGlobais) { grades.set(pagina, colunas); continue; }
+    // a página que o corredor em branco não resolve (porque ela tem o resumo do
+    // relatório em cima, ou os totais embaixo) ainda pode ser lida pelas linhas
+    // que vieram inteiras nela
+    const porPosicao = gradePelasLinhasInteiras(linhas, quantasGlobais);
+    if (porPosicao) grades.set(pagina, porPosicao);
+  }
+  // uma página ou outra concordando é coincidência, não grade: só vale quando a
+  // maioria do documento concorda, porque aí é o layout, não o acaso
+  return grades.size > paginas.size / 2 ? grades : null;
+}
+
+/**
+ * A grade tirada das linhas que já vieram com o número certo de células.
+ *
+ * Numa página em que o corredor em branco não fecha — porque o resumo do
+ * relatório ocupa o topo com outra largura de coluna — as linhas de dado em si
+ * continuam alinhadas entre elas. Cada posição vira uma faixa do menor começo ao
+ * maior fim observado naquela posição, naquela página.
+ */
+function gradePelasLinhasInteiras(linhas, quantas) {
+  const inteiras = linhas.filter((l) => l.celulas.length === quantas);
+  if (inteiras.length < 3) return null;
+  const faixas = Array.from({ length: quantas }, () => ({ inicio: Infinity, fim: -Infinity }));
+  for (const l of inteiras) {
+    l.celulas.forEach((c, i) => {
+      faixas[i].inicio = Math.min(faixas[i].inicio, c.x);
+      faixas[i].fim = Math.max(faixas[i].fim, c.x + c.largura);
+    });
+  }
+  // faixas que se encavalam não são colunas: nesse caso não há o que aproveitar
+  for (let i = 1; i < faixas.length; i += 1) {
+    if (faixas[i].inicio <= faixas[i - 1].fim) return null;
+  }
+  return faixas;
 }
 
 /** Os pedaços de uma célula, de cima para baixo, colados na ordem certa. */
@@ -833,7 +961,7 @@ export async function readPdf(buffer, nomeArquivo = 'PDF') {
     const desvio = pagina * 100000;
     // yPagina guarda a altura ORIGINAL na folha: é ela que denuncia o enfeite,
     // que sai sempre no mesmo lugar da margem em todas as páginas
-    for (const l of visuais) todas.push({ ...l, y: l.y - desvio, yPagina: l.y });
+    for (const l of visuais) todas.push({ ...l, y: l.y - desvio, yPagina: l.y, pagina });
     pagina += 1;
   }
 

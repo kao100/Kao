@@ -32,8 +32,9 @@ import { formatDate } from '../../core/format.js';
  * @param {function} [opcoes.aoExportar] mostra o botão de exportar o que está filtrado
  */
 export function filtroAvancado({
-  rota, filtro, vendedores, clientes, situacoes, rotuloData = 'Data',
-  rotuloEntidade = 'Cliente', rotuloBusca = 'Buscar por nome, número ou documento',
+  rota, filtro, vendedores, clientes, pessoas, grupos, produtos, situacoes,
+  rotuloData = 'Data', rotuloEntidade = 'Cliente',
+  rotuloBusca = 'Buscar por nome, número ou documento',
   aoExportar, extra,
 }) {
   const ir = (mudanca) => navigate(href(rota, paraQuery({ ...filtro, ...mudanca })));
@@ -82,7 +83,34 @@ export function filtroAvancado({
       h('div.filtro__grade',
         vendedores?.length ? seletor('vendedorId', 'Vendedor', vendedores, filtro.vendedorId, 'Todos os vendedores') : null,
         clientes?.length ? seletor('clienteId', rotuloEntidade, clientes, filtro.clienteId, `Todos (${clientes.length})`) : null,
+        grupos?.length ? seletor('grupo', 'Grupo', grupos, filtro.grupo, 'Todos os grupos') : null,
+        produtos?.length ? seletor('produtoId', 'Produto', produtos, filtro.produtoId, `Todos (${produtos.length})`) : null,
         situacoes?.length ? seletor('situacao', 'Situação', situacoes, filtro.situacao, 'Qualquer situação') : null),
+
+      /**
+       * TODAS AS PESSOAS NUM SELETOR SÓ.
+       *
+       * "Cliente, fornecedor, funcionário, enfim, todas essas pessoas que fazem
+       *  parte do complexo AMPLA."
+       *
+       * Quem usa não precisa saber em qual cadastro a pessoa mora. O tipo vai
+       * escrito ao lado do nome, e a escolha filtra pelo campo certo daquela base.
+       */
+      pessoas?.length ? h('label.filtro__campo',
+        h('span.filtro__rotulo', `Pessoa (${pessoas.length} entre clientes, fornecedores e vendedores)`),
+        h('select.entrada', {
+          onChange: (e) => {
+            const p = pessoas.find((x) => `${x.campo}:${x.id}` === e.target.value);
+            if (!p) { ir({ vendedorId: '', clienteId: '' }); return; }
+            ir(p.campo === 'vendedorId' ? { vendedorId: p.id, clienteId: '' } : { clienteId: p.id, vendedorId: '' });
+          },
+        },
+        h('option', { value: '' }, 'Qualquer pessoa'),
+        ...pessoas.map((p) => h('option', {
+          value: `${p.campo}:${p.id}`,
+          selected: (p.campo === 'vendedorId' && p.id === filtro.vendedorId)
+            || (p.campo !== 'vendedorId' && p.id === filtro.clienteId),
+        }, `${p.nome} · ${p.tipo}`)))) : null,
 
       h('label.filtro__campo',
         h('span.filtro__rotulo', rotuloBusca),

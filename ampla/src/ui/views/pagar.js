@@ -9,7 +9,7 @@ import * as store from '../../core/store.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, selo } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
-import { lerFiltro, aplicar as aplicarFiltro, descrever } from '../../logic/filtro.js';
+import { lerFiltro, aplicar as aplicarFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
 import { filtroAvancado } from '../components/filtro.js';
 import { formulario, detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
 import { ok } from '../components/toast.js';
@@ -32,7 +32,9 @@ export async function telaPagar({ query }) {
   // o padrão é a faixa inteira, para ela olhar o que vem até o fim do ano e
   // decidir o que prorrogar — e não só o que cai neste mês
   const busca = lerFiltro(query, { atalhoPadrao: 'tudo' });
-  const [contas, fornecedores] = await Promise.all([store.pagar.listar(), store.fornecedores.listar()]);
+  const [contas, fornecedores, vendedores, cadastroClientes] = await Promise.all([
+    store.pagar.listar(), store.fornecedores.listar(), store.vendedores.listar(), store.clientes.listar(),
+  ]);
   definirTitulo('Contas a pagar', descrever(busca));
 
   if (!contas.length) {
@@ -62,6 +64,7 @@ export async function telaPagar({ query }) {
       rota: '/pagar',
       filtro: busca,
       clientes: fornecedores,
+      pessoas: listaDePessoas({ clientes: cadastroClientes, fornecedores, vendedores }),
       rotuloEntidade: 'Fornecedor',
       rotuloData: 'Vencimento',
       rotuloBusca: 'Buscar fornecedor, descrição, plano de contas ou documento',

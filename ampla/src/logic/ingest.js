@@ -457,6 +457,16 @@ function construirNf(d, ctx) {
  * nenhuma, usa o mês escolhido na importação. O app não escolhe um por ela.
  */
 function construirVendaProduto(d, ctx, fonteId) {
+  /**
+   * LINHA DE TOTAL POR VENDEDOR não é produto.
+   *
+   * O relatório de comissão por produto fecha cada vendedor com uma linha sem
+   * produto, repetindo a soma das linhas de cima. Importá-la DOBRARIA tudo: no
+   * arquivo real, R$ 1.773.473,69 viravam R$ 3.546.947,33. Sem produto não há
+   * registro — e isso é verificação exata, não palpite sobre o conteúdo.
+   */
+  if (!temConteudo(d.descricao) && !temConteudo(d.produtoCodigo)) return [];
+
   const produtoId = store.idProduto({ codigo: d.produtoCodigo, descricao: d.descricao });
   const data = d.data || ctx.mesReferencia || null;
   const mes = data ? monthKey(data) : null;
@@ -474,6 +484,8 @@ function construirVendaProduto(d, ctx, fonteId) {
       store: 'vendasProduto',
       registro: {
         id: `vp_${mes || 'sem'}_${vendedor}_${produtoId}`,
+        // relatório de total: linha repetida do mesmo produto SOMA, não substitui
+        __somar: ['quantidade', 'valorTotal', 'custoTotal', 'lucro', 'comissaoRelatorio'],
         origemRelatorio: fonteId,
         produtoId,
         produtoCodigo: d.produtoCodigo || null,
@@ -967,9 +979,26 @@ function empilhar(preparo, { store: nome, registro }) {
   preparo.porStore[nome].set(registro.id, anterior ? mesclarRegistro(anterior, registro) : registro);
 }
 
+/**
+ * Duas linhas do mesmo arquivo com a mesma chave.
+ *
+ * Para um documento (uma NF, um título) isso é repetição e o último vence. Mas
+ * num relatório de TOTAIS o mesmo produto pode aparecer duas vezes — o sistema
+ * dela quebra a linha por algo que o app não importa, e as duas linhas são
+ * vendas de verdade. Sobrescrever perdia dinheiro calado: no relatório real,
+ * R$ 338 em duas linhas.
+ *
+ * Por isso o registro diz quais campos SOMAM quando repete. Só eles somam; o
+ * resto continua sendo "o último preenchimento vence".
+ */
 function mesclarRegistro(base, novo) {
   const out = { ...base };
-  for (const [k, v] of Object.entries(novo)) if (v != null) out[k] = v;
+  const somar = new Set(novo.__somar || base.__somar || []);
+  for (const [k, v] of Object.entries(novo)) {
+    if (v == null) continue;
+    if (somar.has(k) && typeof v === 'number' && typeof base[k] === 'number') out[k] = cents(base[k] + v);
+    else out[k] = v;
+  }
   return out;
 }
 
@@ -1053,7 +1082,7 @@ export async function confirmar(preparo, { observacao = null } = {}) {
 
   for (const [nome, mapa] of Object.entries(preparo.porStore)) {
     lote[nome] = [...mapa.values()].map((r) => {
-      const { __acao, ...limpo } = r;
+      const { __acao, __somar, ...limpo } = r;
       return { ...limpo, importadoEm: momento, importacaoId: preparo.id };
     });
   }

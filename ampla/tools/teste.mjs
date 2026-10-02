@@ -36,6 +36,7 @@ const diario = await import('../src/logic/diario.js');
 const filtro = await import('../src/logic/filtro.js');
 const carteiraMod = await import('../src/logic/carteira.js');
 const abcMod = await import('../src/logic/abc.js');
+const margemMod = await import('../src/logic/margem.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -683,9 +684,11 @@ console.log('\n▶ Os oito relatórios do Gestão Click já vêm ligados');
     'gc-pagar': 'pagar',
     'gc-orcamentos': 'orcamentos',
     'gc-produtos': 'produtos',
+    'gc-produtos-vendidos': 'produtosVendidos',
+    'gc-comissao-produto': 'comissaoProduto',
     'gc-clientes': 'clientes',
   };
-  igual('os oito relatórios estão cadastrados',
+  igual('os dez relatórios estão cadastrados',
     Object.fromEntries(perfis.PERFIS.map((p) => [p.id, p.fonte])), esperado);
 
   for (const perfil of perfis.PERFIS) {
@@ -1347,6 +1350,128 @@ console.log('\n▶ Vendedor se cadastra, não se manda por relatório');
   ok('mas continua existindo, para o importador e o backup', !!FONTES.vendedores, '');
   ok('e os dois relatórios de produto entraram na lista',
     FONTES_LISTA.some((f) => f.id === 'comissaoProduto') && FONTES_LISTA.some((f) => f.id === 'produtosVendidos'), '');
+}
+
+console.log('\n▶ Margem e frete por vendedor');
+{
+  /**
+   * "Conseguir ver a margem que está sendo utilizada por vendedor, a margem
+   *  total. De 100, quantos por cento? Qual o custo final? Qual o lucro final?
+   *  E frete: quanto cada vendedor está cobrando?"
+   *
+   * O custo vem do relatório de PRODUTOS VENDIDOS; quanto cada vendedor vendeu de
+   * cada produto vem do de COMISSÃO POR PRODUTO. O app cruza os dois — não
+   * estima nada.
+   */
+  const PV = 'Produto;Quantidade;Custo médio;Custo total;Valor total;Lucro';
+  const CP = 'Produto;Vendedor;Quantidade;Valor total;Comissão integral (%)';
+
+  await importar('produtosVendidos', 'mv.csv', `${PV}
+CIMENTO MARGEM 50KG;200;30,00;6.000,00;10.000,00;4.000,00
+AREIA MARGEM M3;100;40,00;4.000,00;6.000,00;2.000,00`, { mesReferencia: '2026-07-01' });
+  await importar('comissaoProduto', 'mc.csv', `${CP}
+CIMENTO MARGEM 50KG;Nair;150;7.500,00;37,50
+CIMENTO MARGEM 50KG;Otavio;50;2.500,00;12,50
+AREIA MARGEM M3;Nair;100;6.000,00;120,00`, { mesReferencia: '2026-07-01' });
+  await link.recalcular();
+
+  const m = await margemMod.margem({ de: '2026-07-01', ate: '2026-07-31' });
+
+  // o total vem direto do relatório, sem passar por vendedor nenhum
+  igual('o total vendido é o do relatório', m.totalRelatorio.venda, 16000);
+  igual('o custo total também', m.totalRelatorio.custo, 10000);
+  igual('e o lucro também', m.totalRelatorio.lucro, 6000);
+  igual('margem sobre a venda: de 100, quantos por cento sobram',
+    Math.round(m.totalRelatorio.margem * 100) / 100, 37.5);
+
+  const nair = m.vendedores.find((v) => v.nome === 'Nair');
+  const otavio = m.vendedores.find((v) => v.nome === 'Otavio');
+  igual('Nair vendeu cimento e areia', nair.venda, 13500);
+  // 150 × 30 (custo médio do cimento) + 100 × 40 (da areia) = 8.500
+  igual('e o custo dela é quantidade × custo médio de cada produto', nair.custo, 8500);
+  igual('com o lucro que sobra', nair.lucro, 5000);
+  igual('e a margem dela', Math.round(nair.margem * 100) / 100, 37.04);
+  ok('margem completa: todo produto dela tinha custo', nair.completa, '');
+
+  igual('Otavio vendeu só cimento', otavio.venda, 2500);
+  igual('com custo de 50 × 30', otavio.custo, 1500);
+
+  igual('a soma dos vendedores bate com o total', m.total.venda, 16000);
+  igual('e o custo somado também', m.total.custo, 10000);
+
+  // produto vendido por alguém mas fora do relatório de custo: margem incompleta
+  await importar('comissaoProduto', 'mc2.csv', `${CP}
+PRODUTO SEM CUSTO;Nair;10;500,00;10,00`, { mesReferencia: '2026-07-01' });
+  const m2 = await margemMod.margem({ de: '2026-07-01', ate: '2026-07-31' });
+  const nair2 = m2.vendedores.find((v) => v.nome === 'Nair');
+  ok('produto sem custo marca a margem como incompleta', !nair2.completa, '');
+  igual('e o app diz quantos foram', nair2.produtosSemCusto, 1);
+  igual('sem inventar custo nenhum para ele', nair2.custo, 8500);
+
+  // frete: sem a coluna no arquivo, o app diz que não sabe — não mostra zero
+  igual('sem coluna de frete, o app não finge que o frete é zero', m.frete.temDado, false);
+
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação;Frete';
+  await importar('nfs', 'fr.csv', `${FISC}
+9701;10/07/2026;Cliente Frete Ltda;10101010000110;1.000,00;Autorizada;Venda de mercadoria;120,00
+9702;11/07/2026;Cliente Frete Ltda;10101010000110;2.000,00;Autorizada;Venda de mercadoria;80,00`);
+  await link.recalcular();
+  const comFrete = await margemMod.frete({ de: '2026-07-01', ate: '2026-07-31' });
+  ok('com a coluna, o frete aparece', comFrete.temDado, '');
+  igual('somado', comFrete.total, 200);
+  igual('em duas notas', comFrete.notasComFrete, 2);
+
+  // limpeza
+  for (const l of (await store.vendasProduto.listar())) await store.vendasProduto.remover(l.id);
+  for (const n of ['9701', '9702']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const p2 of (await store.produtos.listar()).filter((x) => /MARGEM|SEM CUSTO/.test(x.descricao || ''))) {
+    await store.produtos.remover(p2.id);
+  }
+  for (const v of (await store.vendedores.listar()).filter((x) => ['Nair', 'Otavio'].includes(x.nome))) {
+    await store.vendedores.remover(v.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ Mesmo vendedor com dois nomes: o app pergunta, não junta sozinho');
+{
+  /**
+   * O relatório de comissão por venda traz "EDUARDO"; o de comissão por produto,
+   * "CARLOS EDUARDO APARECIDO DO NASCIMENTO". Juntar por semelhança é o que o
+   * item 20 proíbe — então o app mostra o par e pergunta.
+   */
+  const curto = await store.vendedores.salvar({ nome: 'EDUARDO', apelidos: [], ativo: true });
+  const longo = await store.vendedores.salvar({ nome: 'CARLOS EDUARDO APARECIDO DO NASCIMENTO', apelidos: [], ativo: true });
+  const outro = await store.vendedores.salvar({ nome: 'ANALICE', apelidos: [], ativo: true });
+  const ana = await store.vendedores.salvar({ nome: 'ANA', apelidos: [], ativo: true });
+
+  const pares = link.vendedoresParecidos(await store.vendedores.listar());
+  ok('acha o par pelo nome inteiro dentro do nome comprido',
+    pares.some((p) => p.curto.id === curto.id && p.longo.id === longo.id),
+    JSON.stringify(pares.map((p) => [p.curto.nome, p.longo.nome])));
+  ok('mas NÃO acha "ANA" dentro de "ANALICE": é palavra, não pedaço',
+    !pares.some((p) => p.curto.id === ana.id && p.longo.id === outro.id), '');
+
+  await link.recalcular();
+  const pend = (await store.pendencias.listar())
+    .filter((x) => x.status === 'aberta' && x.tipo === 'vendedor_duplicado');
+  ok('e vira pendência para ela decidir', pend.length >= 1, String(pend.length));
+
+  // juntar: o nome do outro vira apelido e some um cadastro
+  await link.juntarVendedores(curto.id, longo.id, 'teste');
+  const depois = await store.vendedores.listar();
+  igual('o cadastro que saiu some', depois.filter((v) => v.id === longo.id).length, 0);
+  ok('e o nome dele vira apelido do que ficou',
+    depois.find((v) => v.id === curto.id).apelidos.includes('CARLOS EDUARDO APARECIDO DO NASCIMENTO'), '');
+
+  for (const v of [curto, outro, ana]) {
+    const x = (await store.vendedores.listar()).find((y) => y.id === v.id);
+    if (x) await store.vendedores.remover(x.id);
+  }
+  await link.recalcular();
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

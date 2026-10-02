@@ -205,9 +205,34 @@ export function idFornecedor({ documento, nome }) {
   return `for_n${chaveTexto(nome).slice(0, 28) || 'sem'}`;
 }
 
+/**
+ * O id de um produto. O corte em 28 caracteres existe para o id ficar legível
+ * no banco e nos logs — mas sozinho ele JUNTAVA produtos diferentes:
+ *
+ *   BLOCO CONCRETO ESTRUTURAL 14X19X39  →  blococoncretoestrutural14x19
+ *   BLOCO CONCRETO ESTRUTURAL 14X19X19  →  blococoncretoestrutural14x19
+ *
+ * Dois produtos, um id, e as vendas de um somando nas do outro. No relatório de
+ * produtos vendidos de verdade isso comia 14 das 768 linhas e R$ 34 mil.
+ *
+ * Agora o que passa de 28 caracteres leva junto uma marca do texto INTEIRO. O
+ * começo continua legível, e nomes diferentes nunca mais caem no mesmo id.
+ */
+function marca(texto) {
+  let h = 5381;
+  for (let i = 0; i < texto.length; i += 1) h = ((h * 33) ^ texto.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function idCurto(prefixo, texto) {
+  const chave = chaveTexto(texto);
+  if (chave.length <= 28) return `${prefixo}${chave}`;
+  return `${prefixo}${chave.slice(0, 28)}_${marca(chave)}`;
+}
+
 export function idProduto({ codigo, descricao }) {
-  if (codigo) return `prod_${chaveTexto(codigo).slice(0, 28)}`;
-  return `prod_d${chaveTexto(descricao).slice(0, 28)}`;
+  if (codigo) return idCurto('prod_', codigo);
+  return idCurto('prod_d', descricao);
 }
 
 /* ------------------------------------------------------------------ auditoria */

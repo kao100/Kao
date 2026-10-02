@@ -28,6 +28,7 @@ export const OUTRAS = [
   { path: '/pagar', icone: '💳', label: 'Contas a pagar', titulo: 'Contas a pagar' },
   { path: '/receber', icone: '📥', label: 'Contas a receber', titulo: 'Contas a receber' },
   { path: '/bancos', icone: '🏦', label: 'Bancos e extrato', titulo: 'Bancos e extrato' },
+  { path: '/margem', icone: '📐', label: 'Margem e frete', titulo: 'Margem e frete' },
   { path: '/produtos', icone: '📦', label: 'Produtos e curva ABC', titulo: 'Produtos e curva ABC' },
   { path: '/conciliacao', icone: '⚠️', label: 'O que ficou sem vendedor', titulo: 'Conciliação' },
   { path: '/empresa', icone: '🏢', label: 'Visão da empresa', titulo: 'Visão da empresa' },

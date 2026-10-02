@@ -16,7 +16,7 @@ import { h } from '../../core/dom.js';
 import { navigate, href } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as carteira from '../../logic/carteira.js';
-import { lerFiltro } from '../../logic/filtro.js';
+import { lerFiltro, listaDePessoas } from '../../logic/filtro.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, vazio, aviso, selo } from '../components/ui.js';
@@ -26,7 +26,9 @@ import { money, pct, formatDate, monthLabelShort } from '../../core/format.js';
 
 export async function telaClientes({ query }) {
   const filtro = lerFiltro(query);
-  const vendedores = await store.vendedores.listar();
+  const [vendedores, cadastroClientes, fornecedores] = await Promise.all([
+    store.vendedores.listar(), store.clientes.listar(), store.fornecedores.listar(),
+  ]);
   const r = await carteira.carteira({
     de: filtro.de, ate: filtro.ate, vendedorId: filtro.vendedorId, busca: filtro.busca,
   });
@@ -36,6 +38,7 @@ export async function telaClientes({ query }) {
     rota: '/clientes',
     filtro,
     vendedores,
+    pessoas: listaDePessoas({ clientes: cadastroClientes, fornecedores, vendedores }),
     rotuloData: 'Compra',
     rotuloBusca: 'Buscar cliente por nome ou documento',
     aoExportar: () => exportarCarteira(r, filtro),

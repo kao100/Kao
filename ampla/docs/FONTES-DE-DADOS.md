@@ -153,6 +153,23 @@ E dois que valem a pena mandar uma vez por mês:
 | **Produtos vendidos** | custo médio, custo total e lucro por produto — é o que faz a Curva ABC por MARGEM sair sem o app estimar nada |
 | **Comissão por produto** | quanto cada produto vendeu, por vendedor — confere a regra de 0,5% no cimento contra os 2% dos demais |
 
+**Juntos, os dois dão a MARGEM POR VENDEDOR**, que nenhum relatório sozinho dá:
+
+```
+produtos vendidos          comissão por produto
+custo médio do produto  ×  quanto o vendedor vendeu dele  =  custo do vendedor
+```
+
+Conferido no arquivo real: a soma dos vendedores fecha a venda com R$ 0,08 de
+diferença. O custo fecha com R$ 6.187,77 a menos, porque 27 linhas vendidas por
+alguém não aparecem no relatório de custo — a tela mostra essa diferença em vez
+de escondê-la, porque ela faz as margens saírem um pouco MAIORES que a realidade.
+
+**Frete** não está em nenhum dos dois, nem no relatório fiscal de hoje. O campo
+existe no app e é reconhecido sozinho se um dia a coluna vier (ou pelos XMLs das
+NF-e); até lá a tela diz que não sabe, em vez de mostrar R$ 0,00 — que seria
+outra coisa.
+
 Os dois vêm **agregados** (totais de um período, sem número de nota), então moram
 em base própria: a Curva ABC usa os itens das notas quando eles existem, ou estes
 quando não — nunca os dois somados, que contaria a mesma venda duas vezes. Se o

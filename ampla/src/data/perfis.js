@@ -140,6 +140,37 @@ export const PERFIS = [
     observacao: 'Entra tudo: custo, valor de varejo (o preço de venda), grupo, NCM e estoque.',
   },
   {
+    id: 'gc-produtos-vendidos',
+    fonte: 'produtosVendidos',
+    nome: 'Relatório de produtos vendidos',
+    colunas: ['Produto', 'Quantidade', 'Custo médio', 'Custo total', 'Valor total', 'Lucro'],
+    mapa: {
+      descricao: 'Produto',
+      quantidade: 'Quantidade',
+      custoUnitario: 'Custo médio',
+      custoTotal: 'Custo total',
+      valorTotal: 'Valor total',
+      lucro: 'Lucro',
+    },
+    observacao: 'Este é o relatório que faz a margem sair sem o app estimar nada: o custo vem do '
+      + 'seu sistema. Ele não traz data — escolha o mês na importação.',
+  },
+  {
+    id: 'gc-comissao-produto',
+    fonte: 'comissaoProduto',
+    nome: 'Relatório de comissão por produto',
+    colunas: ['Produto', 'Vendedor', 'Quantidade', 'Valor total', 'Comissão integral (%)'],
+    mapa: {
+      descricao: 'Produto',
+      vendedorNome: 'Vendedor',
+      quantidade: 'Quantidade',
+      valorTotal: 'Valor total',
+      comissao: 'Comissão integral (%)',
+    },
+    observacao: 'As linhas de total por vendedor (as que vêm sem produto) são descartadas — elas '
+      + 'repetem o que já está nas linhas de cima e dobrariam todos os números.',
+  },
+  {
     id: 'gc-clientes',
     fonte: 'clientes',
     nome: 'Relatório de clientes',

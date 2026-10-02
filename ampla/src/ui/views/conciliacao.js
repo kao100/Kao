@@ -8,6 +8,7 @@ import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import {
   TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
+  juntarVendedores,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -115,6 +116,10 @@ function acoes(p, contexto) {
     botoes.push(botao('Mandar contas a receber', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/receber') }));
     botoes.push(botao('Definir vendedor', { pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
+  } else if (p.tipo === 'vendedor_duplicado') {
+    // juntar é decisão dela: o app mostra a evidência e os dois botões
+    botoes.push(botao('É a mesma pessoa', { tipo: 'primario', pequeno: true, onClick: () => juntar(p) }));
+    botoes.push(botao('São pessoas diferentes', { pequeno: true, onClick: () => ignorar(p, 'São pessoas diferentes') }));
   } else if (p.tipo === 'devolucao_sem_origem') {
     // o que resolve é dizer de QUEM abater: a venda original não está na base
     botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
@@ -174,6 +179,7 @@ const MOTIVO_RAPIDO = {
   extrato_sem_vinculo: 'O movimento está correto',
   pago_sem_banco: 'A baixa está correta',
   divergencia_faturamento: 'A diferença está explicada',
+  vendedor_duplicado: 'São pessoas diferentes',
   item_sem_nf: 'Está correto',
   produto_sem_custo: 'Está correto',
   pagar_sem_categoria: 'Está correto',
@@ -349,6 +355,38 @@ async function vincularNfDoTitulo(p, { nfs }) {
   await recalcular();
   await atualizarAlertas();
   ok('Título vinculado à NF.');
+  refresh();
+}
+
+/**
+ * Junta dois cadastros de vendedor. O nome que FICA é o que ela escolhe — e é
+ * uma escolha de verdade, porque é o nome que vai sair no relatório de comissão
+ * que ela manda para o pai.
+ */
+async function juntar(p) {
+  const vendedores = await store.vendedores.listar();
+  const curto = vendedores.find((v) => v.id === p.vendedorCurtoId);
+  const longo = vendedores.find((v) => v.id === p.vendedorLongoId);
+  if (!curto || !longo) { erro('Um dos cadastros já não existe.'); refresh(); return; }
+
+  const r = await formulario({
+    titulo: 'Qual nome fica?',
+    descricao: `O outro vira apelido, e tudo que estava nele passa para o que ficar. `
+      + 'É este nome que vai sair nos relatórios.',
+    campos: [{
+      chave: 'fica',
+      label: 'Nome que fica',
+      tipo: 'opcoes',
+      valor: curto.id,
+      opcoes: [{ valor: curto.id, label: curto.nome }, { valor: longo.id, label: longo.nome }],
+    }],
+    confirmar: 'Juntar',
+  });
+  if (!r) return;
+  const saiId = r.fica === curto.id ? longo.id : curto.id;
+  const { nfs, pedidos } = await juntarVendedores(r.fica, saiId, 'confirmado na conciliação');
+  await atualizarAlertas();
+  ok(`Juntados — ${nfs} nota(s) e ${pedidos} pedido(s) passaram para o cadastro que ficou.`);
   refresh();
 }
 

@@ -28,6 +28,7 @@ import { telaAjustes } from './ui/views/ajustes.js';
 import { telaFechamento } from './ui/views/fechamento.js';
 import { telaOrcamentos } from './ui/views/orcamentos.js';
 import { telaClientes, telaCliente } from './ui/views/clientes.js';
+import { telaMargem } from './ui/views/margem.js';
 
 const ROTAS = [
   { path: '/', view: telaDiario, titulo: 'Relatório do dia' },
@@ -41,6 +42,7 @@ const ROTAS = [
   { path: '/orcamentos', view: telaOrcamentos, titulo: 'Orçamentos' },
   { path: '/clientes', view: telaClientes, titulo: 'Clientes' },
   { path: '/clientes/detalhe', view: telaCliente, titulo: 'Cliente' },
+  { path: '/margem', view: telaMargem, titulo: 'Margem e frete' },
   { path: '/produtos', view: telaProdutos, titulo: 'Produtos e curva ABC' },
   { path: '/produtos/:id', view: telaProduto, titulo: 'Produto' },
   { path: '/comissoes', view: telaComissoes, titulo: 'Comissões' },

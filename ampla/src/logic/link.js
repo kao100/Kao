@@ -122,6 +122,15 @@ export const TIPOS_PENDENCIA = {
     gravidade: 'baixa',
     explicacao: 'Sem custo o app mostra faturamento, mas não calcula margem.',
   },
+  vendedor_duplicado: {
+    titulo: 'Dois cadastros para a mesma pessoa?',
+    icone: '👥',
+    gravidade: 'alta',
+    explicacao: 'Um relatório traz o nome curto ("EDUARDO") e outro o nome completo ("CARLOS '
+      + 'EDUARDO APARECIDO DO NASCIMENTO"). O app NÃO junta por semelhança — ele mostra os dois e '
+      + 'pergunta. Confirmando, o nome completo vira apelido do mesmo vendedor e os números se '
+      + 'somam daí em diante.',
+  },
   pagar_sem_categoria: {
     titulo: 'Pagamento sem categoria',
     icone: '🗂️',
@@ -135,10 +144,10 @@ export const TIPOS_PENDENCIA = {
  * pode ser chamado à mão. Não altera nada que o usuário tenha decidido.
  */
 export async function recalcular() {
-  const [nfs, pedidos, itens, titulos, pagamentos, movimentos, vendedores, produtos, comissoes] = await Promise.all([
+  const [nfs, pedidos, itens, titulos, pagamentos, movimentos, vendedores, produtos, comissoes, porProduto] = await Promise.all([
     store.nfs.listar(), store.pedidos.listar(), store.nfItens.listar(), store.receber.listar(),
     store.pagar.listar(), store.extrato.listar(), store.vendedores.listar(), store.produtos.listar(),
-    store.comissoesRelatorio.listar(),
+    store.comissoesRelatorio.listar(), store.vendasProduto.listar(),
   ]);
 
   /**
@@ -326,6 +335,21 @@ export async function recalcular() {
     }
   }
 
+  /**
+   * As linhas do relatório de comissão POR PRODUTO trazem o vendedor por nome.
+   * Resolver para o cadastro aqui é o que permite somar margem e frete por
+   * vendedor — e é também o que faz o nome completo aparecer como vendedor novo,
+   * para a pendência de cadastro duplicado poder perguntar.
+   */
+  const vendasProdutoAtualizadas = [];
+  for (const linha of porProduto) {
+    if (!linha.vendedorNome) continue;
+    const achado = resolverVendedor(linha.vendedorNome, porNome, novosVendedores);
+    if (achado && linha.vendedorId !== achado.id) {
+      vendasProdutoAtualizadas.push({ ...linha, vendedorId: achado.id });
+    }
+  }
+
   /* 6. conciliação bancária: só o que casa sem ambiguidade */
   const conciliacao = conciliar(movimentos, titulos, pagamentos);
 
@@ -337,6 +361,7 @@ export async function recalcular() {
     nfItens: itensAtualizados,
     receber: titulosAtualizados,
     extrato: conciliacao.movimentos,
+    vendasProduto: vendasProdutoAtualizadas,
   });
 
   /* 8. pendências */
@@ -1070,6 +1095,33 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     }
   }
 
+  /**
+   * DOIS CADASTROS PARA A MESMA PESSOA.
+   *
+   * O relatório de comissão por venda traz "EDUARDO"; o de comissão por produto,
+   * "CARLOS EDUARDO APARECIDO DO NASCIMENTO". São dois vendedores no app, e o
+   * faturamento de um não soma no do outro.
+   *
+   * O app não junta sozinho — juntar por semelhança é exatamente o que o item 20
+   * proíbe, e sobrenome em comum não prova nada. Mas ficar calado também não
+   * serve: ela veria dois Eduardos e não saberia por quê. Então ele mostra o par
+   * e pergunta, com a evidência à vista.
+   *
+   * O teste é estrito: o nome curto tem de aparecer INTEIRO, como palavra, dentro
+   * do nome comprido. "EDUARDO" dentro de "CARLOS EDUARDO APARECIDO" conta;
+   * "ANA" dentro de "ANALICE" não.
+   */
+  for (const par of vendedoresParecidos(await store.vendedores.listar())) {
+    nova('vendedor_duplicado', par.id, {
+      titulo: `${par.curto.nome} e ${par.longo.nome}`,
+      detalhe: `"${par.curto.nome}" aparece inteiro dentro de "${par.longo.nome}". `
+        + 'Se for a mesma pessoa, confirme e o app junta os dois.',
+      alvo: { store: 'vendedores', id: par.longo.id },
+      vendedorCurtoId: par.curto.id,
+      vendedorLongoId: par.longo.id,
+    });
+  }
+
   const semCategoria = pagamentos.filter((p) => p.status !== 'pago' && !p.categoria);
   if (semCategoria.length) {
     nova('pagar_sem_categoria', 'geral', {
@@ -1180,4 +1232,69 @@ export async function definirVendedorDaNf(nfId, vendedorId, motivo) {
     alvoId: nfId, alvo: `NF ${nf.numero}`, de: antes, para: vendedorId, motivo,
   });
   await recalcular();
+}
+
+
+/**
+ * Pares de vendedores em que o nome de um aparece inteiro dentro do nome do
+ * outro. É evidência para PERGUNTAR, nunca para juntar sozinho.
+ *
+ * Quem já é apelido de alguém não entra: o par já foi resolvido.
+ */
+export function vendedoresParecidos(vendedores) {
+  const ativos = vendedores.filter((v) => v.ativo !== false);
+  const pares = [];
+  for (const curto of ativos) {
+    const palavrasCurto = normalize(curto.nome).split(' ').filter(Boolean);
+    if (!palavrasCurto.length) continue;
+    for (const longo of ativos) {
+      if (longo.id === curto.id) continue;
+      const palavrasLongo = normalize(longo.nome).split(' ').filter(Boolean);
+      if (palavrasLongo.length <= palavrasCurto.length) continue;
+      // já resolvido à mão: um é apelido do outro
+      const apelidos = (longo.apelidos || []).map(normalize);
+      if (apelidos.includes(normalize(curto.nome))) continue;
+      // todas as palavras do nome curto aparecem, inteiras, no nome comprido
+      const todasDentro = palavrasCurto.every((p) => palavrasLongo.includes(p));
+      if (!todasDentro) continue;
+      pares.push({ id: `${curto.id}__${longo.id}`, curto, longo });
+    }
+  }
+  return pares;
+}
+
+/**
+ * Junta dois cadastros: o nome do outro vira apelido, e tudo que apontava para
+ * ele passa a apontar para o que fica. Decisão dela, registrada.
+ */
+export async function juntarVendedores(ficaId, saiId, motivo) {
+  const [fica, sai] = await Promise.all([store.vendedores.obter(ficaId), store.vendedores.obter(saiId)]);
+  if (!fica || !sai) throw new Error('Vendedor não encontrado.');
+
+  await store.vendedores.salvar({
+    ...fica,
+    apelidos: [...new Set([...(fica.apelidos || []), sai.nome, ...(sai.apelidos || [])])],
+  });
+
+  const trocar = async (repo, campo) => {
+    const todos = await repo.listar();
+    const mexidos = todos.filter((r) => r[campo] === saiId).map((r) => ({ ...r, [campo]: ficaId }));
+    if (mexidos.length) await repo.salvarMuitos(mexidos);
+    return mexidos.length;
+  };
+  const nfs = await trocar(store.nfs, 'vendedorId');
+  const pedidos = await trocar(store.pedidos, 'vendedorId');
+  await trocar(store.receber, 'vendedorId');
+  await trocar(store.nfItens, 'vendedorId');
+
+  await store.vendedores.remover(saiId);
+  await store.registrar('vendedores_juntados', {
+    alvoId: ficaId,
+    alvo: fica.nome,
+    de: sai.nome,
+    para: fica.nome,
+    motivo: motivo || `${nfs} nota(s) e ${pedidos} pedido(s) passaram para ${fica.nome}`,
+  });
+  await recalcular();
+  return { nfs, pedidos };
 }
