@@ -8,20 +8,25 @@
  *
  * DE ONDE VEM CADA NÚMERO, porque isso é o que decide se dá para confiar:
  *
- *  • O faturamento por vendedor vem da NOTA FISCAL, como em todo o resto do app.
- *  • O custo vem do RELATÓRIO DE PRODUTOS VENDIDOS, que traz custo médio e custo
- *    total por produto — número do sistema dela, não conta minha.
- *  • A ponte entre os dois é o RELATÓRIO DE COMISSÃO POR PRODUTO, que diz quanto
- *    cada vendedor vendeu de cada produto. Custo do vendedor = quantidade que ele
- *    vendeu × custo médio daquele produto no mês.
+ *  • A VENDA vem da NOTA FISCAL, sempre. É a regra da casa: "o que vale de
+ *    faturamento é a nota fiscal; comissão, tudo, tudo é a nota fiscal, porque
+ *    ali a gente sabe que o cliente foi uma venda efetiva".
+ *  • O CUSTO vem, na ordem, do PEDIDO que gerou a nota (coluna "Valor custo" do
+ *    relatório de vendas — o CMV do sistema dela, na unidade da venda), depois do
+ *    CADASTRO DE PRODUTOS, depois do RELATÓRIO DE PRODUTOS VENDIDOS.
+ *  • Sem o XML, a ponte venda↔vendedor é o RELATÓRIO DE COMISSÃO POR PRODUTO.
  *
- * O custo médio é uma MÉDIA do mês: se o produto foi comprado por preços
- * diferentes, o custo de uma venda específica pode ter sido outro. Isso não é
- * defeito do app, é o que o relatório traz — e está escrito na tela, porque uma
- * margem que parece exata e não é vale menos que uma margem honesta.
+ * O QUE A MARGEM DO RELATÓRIO DE PRODUTOS VENDIDOS É: outra base. Ele conta as
+ * VENDAS do mês, a tela conta as NOTAS do mês, e nem toda venda sai em nota no
+ * mesmo mês. Comparar as duas margens é referência, não conferência — e por isso
+ * a diferença entre elas não segura mais a tela.
  *
- * Quando os dois relatórios não chegaram, a margem NÃO é estimada: ela aparece
- * como "falta o relatório X", e só.
+ * O QUE SEGURA A TELA é a COBERTURA DE CUSTO: quanto da venda faturada tem custo
+ * de origem verificada. Abaixo de 98% a margem não aparece como número bom, e o
+ * que falta aparece em reais.
+ *
+ * Quando nada disso chegou, a margem NÃO é estimada: ela aparece como "falta o
+ * relatório X", e só.
  */
 
 import * as store from '../core/store.js';
@@ -30,9 +35,9 @@ import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
 /** Margem do período, por vendedor e total. */
 export async function margem({ de, ate }) {
-  const [linhas, vendedores, nfs, itens, produtos] = await Promise.all([
+  const [linhas, vendedores, nfs, itens, produtos, pedidos] = await Promise.all([
     store.vendasProduto.listar(), store.vendedores.listar(), store.nfs.listar(),
-    store.nfItens.listar(), store.produtos.listar(),
+    store.nfItens.listar(), store.produtos.listar(), store.pedidos.listar(),
   ]);
   const noPeriodo = linhas.filter((l) => l.data && l.data >= de && l.data <= ate);
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
@@ -269,34 +274,67 @@ export async function margem({ de, ate }) {
   const porVendedor = new Map();
   let semCusto = 0;
 
+  /**
+   * O CUSTO QUE O SISTEMA DELA JÁ CALCULOU — a fonte que vem antes de todas.
+   *
+   * O relatório de vendas traz, em cada pedido, a coluna "Valor custo": é o CMV
+   * daquela venda do jeito que o sistema dela registrou, na unidade da venda,
+   * sem média de período e sem conta minha por cima. Vale para a nota inteira,
+   * então dispensa a cascata de produto — e com ela some o problema de unidade,
+   * que é a fonte de quase todo erro de margem nesta base.
+   */
+  const custoPorNota = custoDasNotasPeloPedido(doPeriodo, pedidos);
+  let vendaComCustoDoPedido = 0;
+
   if (temItensDeNota) {
     const nfPorId = new Map(nfs.map((n) => [n.id, n]));
+    const itensPorNota = new Map();
     for (const item of itensDoPeriodo) {
-      const nf = nfPorId.get(item.nfId);
+      if (!itensPorNota.has(item.nfId)) itensPorNota.set(item.nfId, []);
+      itensPorNota.get(item.nfId).push(item);
+    }
+    for (const [nfId, daNota] of itensPorNota) {
+      const nf = nfPorId.get(nfId);
       if (!nf || !valeParaFaturamento(nf)) continue;
-      const vid = item.vendedorId || nf.vendedorId || null;
+      const vid = (daNota.find((i) => i.vendedorId) || {}).vendedorId || nf.vendedorId || null;
       const chave = vid || 'sem';
       if (!porVendedor.has(chave)) {
         porVendedor.set(chave, {
           vendedorId: vid,
           nome: vid ? (nomeVendedor.get(vid) || 'Vendedor') : 'sem vendedor',
           venda: 0, custo: 0, quantidade: 0, produtos: 0, produtosSemCusto: 0,
+          vendaSemCusto: 0, custoDoPedido: 0,
         });
       }
       const v = porVendedor.get(chave);
       const sinal = nf.devolucao ? -1 : 1;
-      const quantidade = Math.abs(item.quantidade || 0) * sinal;
-      v.venda += Math.abs(item.valorTotal || 0) * sinal;
-      v.quantidade += quantidade;
-      v.produtos += 1;
-      const custoDaVenda = custoDaLinha(
-        item.produtoId,
-        quantidade,
-        Math.abs(item.valorTotal || 0) * sinal,
-        item.custoUnitario ?? (item.custoTotal != null && item.quantidade
-          ? item.custoTotal / item.quantidade : null),
-      );
-      if (custoDaVenda == null) { v.produtosSemCusto += 1; semCusto += 1; } else v.custo += custoDaVenda;
+      const custoDoPedido = custoPorNota.get(nfId);
+      for (const item of daNota) {
+        const quantidade = Math.abs(item.quantidade || 0) * sinal;
+        const valor = Math.abs(item.valorTotal || 0) * sinal;
+        v.venda += valor;
+        v.quantidade += quantidade;
+        v.produtos += 1;
+        // o custo do pedido já cobre esta nota inteira: o item entra só com venda
+        if (custoDoPedido != null) continue;
+        const custoDaVenda = custoDaLinha(
+          item.produtoId,
+          quantidade,
+          valor,
+          item.custoUnitario ?? (item.custoTotal != null && item.quantidade
+            ? item.custoTotal / item.quantidade : null),
+        );
+        if (custoDaVenda == null) {
+          v.produtosSemCusto += 1;
+          v.vendaSemCusto += Math.abs(valor);
+          semCusto += 1;
+        } else v.custo += custoDaVenda;
+      }
+      if (custoDoPedido != null) {
+        v.custo += custoDoPedido * sinal;
+        v.custoDoPedido += custoDoPedido * sinal;
+        vendaComCustoDoPedido += sum(daNota, (i) => Math.abs(i.valorTotal || 0)) * sinal;
+      }
     }
   }
 
@@ -309,6 +347,7 @@ export async function margem({ de, ate }) {
         vendedorId: vid,
         nome: vid ? (nomeVendedor.get(vid) || l.vendedorNome) : (l.vendedorNome || 'sem vendedor'),
         venda: 0, custo: 0, quantidade: 0, produtos: 0, produtosSemCusto: 0,
+        vendaSemCusto: 0, custoDoPedido: 0,
       });
     }
     const v = porVendedor.get(chave);
@@ -316,7 +355,11 @@ export async function margem({ de, ate }) {
     v.quantidade += l.quantidade || 0;
     v.produtos += 1;
     const custoDaVenda = custoDaLinha(l.produtoId, l.quantidade, l.valorTotal, null);
-    if (custoDaVenda == null) { v.produtosSemCusto += 1; semCusto += 1; } else v.custo += custoDaVenda;
+    if (custoDaVenda == null) {
+      v.produtosSemCusto += 1;
+      v.vendaSemCusto += Math.abs(l.valorTotal || 0);
+      semCusto += 1;
+    } else v.custo += custoDaVenda;
   }
 
   /**
@@ -356,6 +399,9 @@ export async function margem({ de, ate }) {
       markup: custo ? (lucro / custo) * 100 : null,
       // margem só é confiável quando todo produto do vendedor tinha custo
       completa: v.produtosSemCusto === 0,
+      vendaSemCusto: cents(v.vendaSemCusto || 0),
+      // quanto do custo dele veio do pedido, que é a fonte boa
+      custoDoPedido: cents(v.custoDoPedido || 0),
     };
   }).sort((a, b) => b.venda - a.venda);
 
@@ -440,31 +486,86 @@ export async function margem({ de, ate }) {
    * dobra.
    */
   /**
-   * QUANDO A VENDA DO RELATÓRIO É MAIOR QUE A DAS NOTAS, a pergunta é: que
-   * vendas são essas que o relatório conta e as notas não?
+   * A MARGEM QUE O RELATÓRIO DECLARA SÓ VALE DEPOIS DE LIMPA.
    *
-   * A resposta mais comum numa loja de material de construção é a venda de
-   * BALCÃO, que sai em NFC-e (cupom fiscal eletrônico, modelo 65) e não em NF-e
-   * (modelo 55). Se a base só tem modelo 55, é quase certamente isso — e a tela
-   * diz, em vez de deixar um buraco sem explicação.
+   * O relatório de produtos vendidos declara o próprio lucro, e por isso serve de
+   * referência. Mas ele carrega o mesmo erro de unidade que já apareceu no custo
+   * médio: TIJOLO COMUM 9X19X5 (PACOTE C/10) sai com a quantidade em PEÇA e o
+   * custo médio do PACOTE — 3.959 × R$ 87,38 = R$ 345.933,00 de custo sobre
+   * R$ 29.767,75 de venda. Dezesseis linhas assim respondiam por R$ 372.615,50 de
+   * custo sobre R$ 37.507,94 de venda e derrubavam a margem declarada do
+   * relatório inteiro de 42,3% para 22,5%.
+   *
+   * Custo maior que a venda do produto no mês inteiro não é prejuízo: é unidade
+   * trocada. Essas linhas saem da referência e aparecem na tela, para serem
+   * corrigidas na origem — o único lugar onde isso se resolve de verdade.
    */
-  const modelos = new Map();
-  for (const nf of doPeriodo) modelos.set(nf.modelo || '?', (modelos.get(nf.modelo || '?') || 0) + 1);
-  const soTemNfe = modelos.size > 0 && [...modelos.keys()].every((m) => m === '55');
+  const furadas = doRelatorio.filter((l) => l.custoTotal != null && l.valorTotal
+    && l.custoTotal > l.valorTotal);
+  const relatorioLimpo = {
+    venda: cents(totalRelatorio.venda - sum(furadas, (l) => l.valorTotal || 0)),
+    custo: cents(totalRelatorio.custo - sum(furadas, (l) => l.custoTotal || 0)),
+  };
+  relatorioLimpo.margem = relatorioLimpo.venda
+    ? ((relatorioLimpo.venda - relatorioLimpo.custo) / relatorioLimpo.venda) * 100 : null;
+  conferencia.relatorioFurado = {
+    linhas: furadas.length,
+    venda: cents(sum(furadas, (l) => l.valorTotal || 0)),
+    custo: cents(sum(furadas, (l) => l.custoTotal || 0)),
+    produtos: furadas.slice()
+      .sort((x, y) => (y.custoTotal || 0) - (x.custoTotal || 0))
+      .slice(0, 10)
+      .map((l) => ({
+        descricao: l.descricao, quantidade: l.quantidade,
+        venda: l.valorTotal, custo: l.custoTotal,
+      })),
+  };
 
   const margemCalculada = venda ? ((venda - custo) / venda) * 100 : null;
-  const margemDeclarada = totalRelatorio.margem;
   conferencia.margemCalculada = margemCalculada;
-  conferencia.margemDeclarada = margemDeclarada;
-  conferencia.margemConfere = margemCalculada == null || margemDeclarada == null
-    ? null
-    : Math.abs(margemCalculada - margemDeclarada) <= 2;
-  conferencia.modelos = [...modelos.entries()].map(([modelo, quantas]) => ({ modelo, quantas }));
-  conferencia.soTemNfe = soTemNfe;
+  // a margem do relatório, já sem as linhas de unidade trocada
+  conferencia.margemDeclarada = relatorioLimpo.margem;
+  // e a que ele declara de fato, com elas, para a diferença não ficar escondida
+  conferencia.margemDeclaradaBruta = totalRelatorio.margem;
+
+  /**
+   * O QUE A MARGEM DO RELATÓRIO É E O QUE ELA NÃO É.
+   *
+   * Ela não é a mesma conta com outro resultado: é OUTRA BASE. O relatório conta
+   * as VENDAS do mês; a margem da tela conta as NOTAS do mês. São conjuntos
+   * diferentes de venda, porque nem toda venda do mês sai em nota no mesmo mês —
+   * e nem toda nota do mês vem de venda deste mês.
+   *
+   * Por isso a diferença entre as duas é referência, não erro, e não segura mais
+   * a tela. Quem decide se a margem pode ser levada a sério é a COBERTURA DE
+   * CUSTO: quanto da venda faturada tem custo de origem verificada. É isso que
+   * fica à vista, em reais.
+   */
   conferencia.vendaDoRelatorio = totalRelatorio.venda;
   conferencia.vendaDasNotas = temItensDeNota ? alvo.venda : null;
-  conferencia.faltandoNasNotas = temItensDeNota && totalRelatorio.venda
+  conferencia.diferencaDeBase = temItensDeNota && totalRelatorio.venda
     ? cents(totalRelatorio.venda - alvo.venda) : null;
+
+  const vendaSemCusto = cents(sum(lista, (v) => v.vendaSemCusto || 0));
+  conferencia.coberturaDeCusto = {
+    venda,
+    semCusto: vendaSemCusto,
+    comCusto: cents(venda - vendaSemCusto),
+    percentual: venda ? ((venda - vendaSemCusto) / venda) * 100 : null,
+    doPedido: cents(vendaComCustoDoPedido),
+    percentualDoPedido: venda ? (cents(vendaComCustoDoPedido) / venda) * 100 : null,
+    notasComPedido: custoPorNota.size,
+  };
+  /**
+   * NOVENTA E OITO POR CENTO.
+   *
+   * Abaixo disso a margem não é margem, é média de uma parte — e a tela diz isso
+   * em vermelho em vez de mostrar o número. Acima, o número vale e o que falta
+   * aparece em reais do lado, porque dois por cento de venda sem custo mudam a
+   * margem na primeira casa, não na ordem de grandeza.
+   */
+  conferencia.coberturaDeCusto.suficiente = conferencia.coberturaDeCusto.percentual != null
+    && conferencia.coberturaDeCusto.percentual >= 98;
 
   return {
     periodo: { de, ate },
@@ -473,8 +574,8 @@ export async function margem({ de, ate }) {
     totalRelatorio,
     // de onde vieram os números por vendedor, para a tela poder dizer
     fonte: temItensDeNota ? 'itens-da-nota' : 'relatorio-por-produto',
-    // a margem só é confiável quando ela bate com a que o relatório declara
-    margemConfiavel: conferencia.margemConfere !== false,
+    // a margem é confiável quando quase toda a venda tem custo de origem verificada
+    margemConfiavel: conferencia.coberturaDeCusto.suficiente,
     /**
      * Os produtos cujo preço não bate entre o relatório e a nota. Não é erro do
      * app nem dela: é o mesmo produto contado em unidades diferentes nos dois
@@ -508,6 +609,47 @@ export async function margem({ de, ate }) {
     temProdutosVendidos: doRelatorio.length > 0,
     frete: await frete({ de, ate, nfs, nomeVendedor }),
   };
+}
+
+/**
+ * O CUSTO DE CADA NOTA, VINDO DO PEDIDO QUE A GEROU.
+ *
+ * A coluna "Valor custo" do relatório de vendas é o CMV que o sistema dela
+ * registrou para aquela venda — na unidade da venda, do mês da venda, sem média
+ * e sem conta minha por cima. É a melhor fonte de custo que existe nesta base.
+ *
+ * A ligação é a mesma do DRE: a nota aponta para o pedido. Quando um pedido
+ * rendeu mais de uma nota, o custo se divide na proporção do valor de cada uma —
+ * e só quando o pedido informa o valor total, que é o que torna a proporção
+ * verificável. Sem isso a nota não recebe custo por aqui e cai na cascata de
+ * produto, em vez de levar um rateio inventado.
+ *
+ * O pedido pode ser de OUTRO MÊS: a nota de setembro que saiu de um pedido de
+ * agosto só ganha custo se os pedidos de agosto estiverem na base. É por isso
+ * que o relatório de vendas vale mandar com folga de um mês para trás.
+ */
+function custoDasNotasPeloPedido(notas, pedidos) {
+  const porId = new Map(pedidos.map((p) => [p.id, p]));
+  const porNumero = new Map(pedidos.filter((p) => p.numero).map((p) => [String(p.numero), p]));
+  const pedidoDa = (nf) => porId.get(nf.pedidoId)
+    || (nf.pedidoNumero ? porNumero.get(String(nf.pedidoNumero)) : null);
+
+  const quantasNotas = new Map();
+  for (const nf of notas) {
+    const pedido = pedidoDa(nf);
+    if (pedido) quantasNotas.set(pedido.id, (quantasNotas.get(pedido.id) || 0) + 1);
+  }
+
+  const custo = new Map();
+  for (const nf of notas) {
+    const pedido = pedidoDa(nf);
+    if (!pedido || pedido.valorCusto == null) continue;
+    const varias = (quantasNotas.get(pedido.id) || 1) > 1;
+    if (varias && !pedido.valorTotal) continue;
+    const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;
+    custo.set(nf.id, cents(pedido.valorCusto * parte));
+  }
+  return custo;
 }
 
 /**

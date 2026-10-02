@@ -58,8 +58,8 @@ export const FONTES = {
       texto: 'Um arquivo .xml, vários de uma vez, ou um .zip com o mês inteiro. O XML traz quatro '
         + 'coisas que nenhum relatório traz juntas: o NÚMERO DO PEDIDO dentro da própria nota, o '
         + 'FRETE cobrado, a NATUREZA DA OPERAÇÃO (que separa venda de devolução) e os ITENS, com '
-        + 'produto, quantidade e valor. MANDE TAMBÉM AS NFC-e (modelo 65, o cupom da venda de '
-        + 'balcão): só com NF-e, a venda de balcão fica fora de tudo.',
+        + 'produto, quantidade e valor. É a base do faturamento do mês e da comissão de cada '
+        + 'vendedor — mandando o XML, o resto dos relatórios só complementa.',
     },
     formatos: ['xlsx', 'csv', 'pdf', 'xml', 'zip'],
     colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação',
@@ -113,9 +113,11 @@ export const FONTES = {
     icone: '🤝',
     periodicidade: 'diaria',
     store: 'pedidos',
-    verdadeDe: 'Pedidos concretizados, com custo e valor.',
-    descricao: 'Relatório de vendas do sistema. Traz custo do pedido — é dele que sai a margem. '
-      + 'Só as vendas com situação CONCRETIZADA entram no resultado.',
+    verdadeDe: 'O vendedor e o custo de cada venda. O faturamento é a nota fiscal.',
+    descricao: 'Relatório de vendas do sistema. Não é a base do faturamento — a base é a nota '
+      + 'fiscal. Ele entra por duas coisas que a nota não tem: o VENDEDOR e o VALOR DO CUSTO '
+      + 'daquela venda, que é o CMV do seu próprio sistema. Só as vendas com situação '
+      + 'CONCRETIZADA entram no resultado.',
     formatos: ['xlsx', 'csv', 'pdf'],
     colunasReais: ['número do pedido', 'cliente', 'data da venda', 'vendedor', 'situação', 'valor do custo', 'valor total'],
     campos: [
@@ -130,7 +132,11 @@ export const FONTES = {
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
     ],
     ajuda: 'Inclua a coluna VENDEDOR no export. É ela que faz a comissão fechar sozinha: o '
-      + 'vendedor do pedido passa para todas as notas daquele pedido, sem você marcar nada.',
+      + 'vendedor do pedido passa para todas as notas daquele pedido, sem você marcar nada. '
+      + 'E mande SEMPRE UM MÊS DE FOLGA PARA TRÁS: a nota de setembro muitas vezes sai de pedido '
+      + 'de agosto, e sem o pedido de agosto na base essa nota fica sem vendedor e sem custo. '
+      + 'Mandar mais pedidos do que notas não atrapalha nada — pedido a mais o app ignora, '
+      + 'pedido a menos deixa buraco.',
   },
 
   orcamentos: {

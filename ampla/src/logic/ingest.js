@@ -268,11 +268,19 @@ export async function prepararNfe({ leitura }) {
         /**
          * O MODELO DO DOCUMENTO, que estava sendo lido e jogado fora.
          *
-         *   55 = NF-e      venda com nota, normalmente para empresa
+         *   55 = NF-e      venda com nota
          *   65 = NFC-e     cupom fiscal eletrônico, a venda no balcão
          *
-         * Guardar isso é o que permite a tela dizer "faltam as vendas de balcão"
-         * em vez de deixar um buraco inexplicado entre o relatório e as notas.
+         * A AMPLA não emite modelo 65 — "a gente só trabalha com a NF-e; tem uma
+         * loja que vai abrir, mas agora não tem". O campo fica guardado porque a
+         * loja vai abrir, e no dia em que abrir o app já sabe separar as duas
+         * coisas sem ninguém mexer em nada.
+         *
+         * E fica aqui o registro do erro: eu atribuí a diferença entre o
+         * relatório de produtos vendidos e as notas a uma venda de balcão que não
+         * existe, em vez de olhar o relatório linha por linha. A diferença era
+         * outra base (vendas do mês × notas do mês) mais 14 linhas com a unidade
+         * trocada. Modelo de documento não explica buraco de valor.
          */
         modelo: nota.modelo || null,
         dataEmissao: nota.dataEmissao,

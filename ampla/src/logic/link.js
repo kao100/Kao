@@ -65,11 +65,12 @@ export const TIPOS_PENDENCIA = {
     titulo: 'Nota sem pedido',
     icone: '🔗',
     gravidade: 'alta',
-    explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Ele tenta duas '
-      + 'pontes: o contas a receber, que traz nota e pedido na mesma linha, e o pedido com '
-      + 'mesmo cliente e mesmo valor. Quando nenhuma fecha com certeza, a nota vem para cá. '
-      + 'Se o seu contas a receber sai só com os títulos EM ABERTO, mande uma vez um sem esse '
-      + 'filtro: é o título já recebido que liga a nota do mês ao pedido.',
+    explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Ele tenta três '
+      + 'pontes: o número do pedido dentro do próprio XML, o contas a receber (que traz nota e '
+      + 'pedido na mesma linha) e o pedido com mesmo cliente e mesmo valor. Quando nenhuma fecha '
+      + 'com certeza, a nota vem para cá. Duas coisas resolvem a maioria: o XML das notas, e o '
+      + 'relatório de vendas com UM MÊS DE FOLGA PARA TRÁS — a nota deste mês costuma sair de '
+      + 'pedido do mês passado, e o pedido é quem traz o vendedor e o custo da venda.',
   },
   devolucao_sem_origem: {
     titulo: 'Devolução sem a venda original',

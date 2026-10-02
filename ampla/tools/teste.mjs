@@ -1443,15 +1443,95 @@ TIJOLO PACOTE;100;87,38;8.738,00;14.400,00;5.662,00`, { mesReferencia: '2026-08-
   ok('e a margem fica igual à do relatório, não negativa',
     Math.abs(linhaTijolo.margem - 39.3) < 0.2, String(linhaTijolo.margem));
 
-  // e a conferência compara a margem calculada com a que o relatório declara
-  ok('a margem bate com a declarada pelo relatório', mu.conferencia.margemConfere === true,
+  // a margem do relatório fica como REFERÊNCIA, com a base dela dita
+  ok('a margem calculada e a do relatório ficam lado a lado',
+    Math.abs(mu.conferencia.margemCalculada - 39.3) < 0.2
+    && Math.abs(mu.conferencia.margemDeclarada - 39.3) < 0.2,
     JSON.stringify([mu.conferencia.margemCalculada, mu.conferencia.margemDeclarada]));
-  ok('e por isso a tela pode mostrar os números', mu.margemConfiavel, '');
+  /**
+   * O QUE DECIDE SE A TELA MOSTRA O NÚMERO É A COBERTURA DE CUSTO, não a
+   * comparação com a margem declarada. As duas são bases diferentes de venda —
+   * o relatório conta as vendas do mês, a tela conta as notas do mês — e tratar
+   * a diferença como erro me fez caçar, por um dia, uma venda de balcão que não
+   * existe.
+   */
+  igual('toda a venda tem custo', mu.conferencia.coberturaDeCusto.semCusto, 0);
+  ok('e a cobertura de 100% é o que libera a tela',
+    mu.conferencia.coberturaDeCusto.percentual === 100 && mu.margemConfiavel === true, '');
 
   for (const x of (await store.nfs.listar()).filter((y) => y.numero === '9901')) await store.nfs.remover(x.id);
   for (const x of (await store.nfItens.listar()).filter((y) => y.nfNumero === '9901')) await store.nfItens.remover(x.id);
   for (const x of (await store.vendasProduto.listar()).filter((y) => y.mes === '2026-08')) await store.vendasProduto.remover(x.id);
   for (const x of (await store.produtos.listar()).filter((y) => y.codigo === 'TIJ01')) await store.produtos.remover(x.id);
+  await link.recalcular();
+
+  /**
+   * O CUSTO DO PEDIDO VEM ANTES DE TODOS — e dissolve o problema da unidade.
+   *
+   * "Dentro do meu sistema, o que vale de faturamento é a nota fiscal. (...) Por
+   *  que ter o pedido de venda também? (...) O que que você tem no relatório de
+   *  pedido de venda? O vendedor."
+   *
+   * O pedido tem mais que o vendedor: tem a coluna VALOR DO CUSTO, que é o CMV
+   * que o sistema dela registrou para aquela venda — na unidade da venda e sem
+   * média de período. Nenhuma fonte de custo chega perto disso, e por isso ela
+   * vem primeiro: quando a nota tem pedido, a cascata de produto não é usada.
+   */
+  const VENDC = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  await importar('pedidos', 'cp.csv', `${VENDC}
+7701;Cliente Custo Ltda;05/08/2026;Alberto;Concretizada;4.000,00;10.000,00`);
+  /**
+   * O relatório traz duas linhas: uma sã e uma FURADA, com custo maior que a
+   * venda do produto no mês inteiro. Era assim que TIJOLO COMUM 9X19X5 (PACOTE
+   * C/10) punha R$ 345.933,00 de custo sobre R$ 29.767,75 de venda e derrubava a
+   * margem declarada do relatório inteiro de 42,3% para 22,5%.
+   */
+  await importar('produtosVendidos', 'cp-pv.csv', `${PV}
+CIMENTO CP;100;30,00;3.000,00;10.000,00;7.000,00
+TIJOLO PCT;500;87,38;43.690,00;4.000,00;-39.690,00`, { mesReferencia: '2026-08-01' });
+  await importar('nfs', 'cp-nf.csv', `${FISC2}
+9902;10/08/2026;Cliente Custo Ltda;30303030000130;10.000,00;Autorizada;Venda de mercadoria`);
+  await importar('nfItens', 'cp-it.csv', `${ITENS2}
+9902;CIM01;CIMENTO CP;100;10.000,00`);
+  await link.recalcular();
+
+  const mp = await margemMod.margem({ de: '2026-08-01', ate: '2026-08-31' });
+  igual('a venda é a da nota', mp.total.venda, 10000);
+  // 4.000 é o custo do PEDIDO. 3.000 seria o do relatório, e perde.
+  igual('e o custo é o que o pedido declarou, não o do relatório', mp.total.custo, 4000);
+  igual('margem de 60%, sobre a venda', Math.round(mp.total.margem), 60);
+  igual('a nota pegou o custo pelo pedido', mp.conferencia.coberturaDeCusto.notasComPedido, 1);
+  igual('cobrindo toda a venda', mp.conferencia.coberturaDeCusto.doPedido, 10000);
+
+  /* a linha furada do relatório sai da referência e fica à vista */
+  igual('o relatório tem uma linha furada', mp.conferencia.relatorioFurado.linhas, 1);
+  igual('com o custo que não existe', mp.conferencia.relatorioFurado.custo, 43690);
+  ok('e ela aparece com nome, para ser corrigida na origem',
+    mp.conferencia.relatorioFurado.produtos[0].descricao === 'TIJOLO PCT',
+    JSON.stringify(mp.conferencia.relatorioFurado.produtos));
+  // sem ela, o relatório declara 70%; com ela, declararia -233%
+  igual('a margem de referência é a do relatório LIMPO',
+    Math.round(mp.conferencia.margemDeclarada), 70);
+  ok('e a que ele declara de fato fica registrada, sem esconder nada',
+    mp.conferencia.margemDeclaradaBruta < -200, String(mp.conferencia.margemDeclaradaBruta));
+
+  /**
+   * E A DIFERENÇA DE BASE NÃO É ERRO.
+   *
+   * "Nem toda nota fiscal que eu uso para emitir usa o pedido de venda do mês
+   *  passado. (...) Então é normal aparecer mais pedidos de venda do que notas
+   *  fiscais. Mas o ideal e o certo é ser as notas fiscais."
+   *
+   * O relatório soma R$ 14.000 e as notas R$ 10.000. Isso aparece na tela como
+   * informação, e NÃO segura a margem: quem segura é a cobertura de custo.
+   */
+  igual('a diferença entre as duas bases é medida', mp.conferencia.diferencaDeBase, 4000);
+  ok('e não impede a tela de mostrar a margem', mp.margemConfiavel === true, '');
+
+  for (const x of (await store.nfs.listar()).filter((y) => y.numero === '9902')) await store.nfs.remover(x.id);
+  for (const x of (await store.nfItens.listar()).filter((y) => y.nfNumero === '9902')) await store.nfItens.remover(x.id);
+  for (const x of (await store.vendasProduto.listar()).filter((y) => y.mes === '2026-08')) await store.vendasProduto.remover(x.id);
+  for (const x of (await store.pedidos.listar()).filter((y) => y.numero === '7701')) await store.pedidos.remover(x.id);
   await link.recalcular();
 
   /**

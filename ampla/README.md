@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 83 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 399 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -81,9 +81,40 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 
 ## Regras que o app aplica
 
-- **Faturamento é da NF emitida**, pela data de emissão. Pedido de agosto
-  faturado em setembro conta em setembro. Canceladas saem; devoluções entram
-  negativas no mês da emissão.
+- **A base de tudo é a NOTA FISCAL.** É a regra da casa, nas palavras dela:
+  *"Dentro do meu sistema, o que vale de faturamento é a nota fiscal. O relatório
+  de nota fiscal vai ser a base do faturamento mensal e do faturamento total de
+  cada vendedor. Comissão, tudo, tudo é a nota fiscal, porque ali a gente sabe
+  que o cliente foi uma venda efetiva."* Faturamento é da NF emitida, pela data
+  de emissão. Pedido de agosto faturado em setembro conta em setembro.
+  Canceladas saem; devoluções entram negativas no mês da emissão.
+- **O pedido de venda não é faturamento — é dado complementar.** Ele entra por
+  duas coisas que a nota não tem: o **vendedor** e o **valor do custo** daquela
+  venda. E a contagem dos dois nunca fecha, de propósito: *"nem toda nota fiscal
+  que eu uso para emitir usa o pedido de venda do mês passado (...) então é
+  normal aparecer mais pedidos de venda do que notas fiscais"*. O app mede essa
+  diferença e a mostra como informação; chamá-la de divergência mandaria caçar um
+  erro que não existe. Corolário prático: **mande o relatório de vendas com um
+  mês de folga para trás** — a nota de setembro costuma sair de pedido de agosto.
+- **O custo tem uma ordem de preferência, e ela é declarada na tela.**
+  1. o **"Valor custo" do pedido** que gerou a nota — o CMV do próprio sistema
+     dela, na unidade da venda, sem média de período. Rateado por valor quando um
+     pedido rendeu mais de uma nota, e só quando o pedido informa o valor total;
+  2. o **custo do cadastro de produtos**, quando a razão custo/varejo da mesma
+     linha prova que os dois estão na mesma unidade (razão acima de 1,5 reprova);
+  3. a **proporção custo/venda do relatório de produtos vendidos**, que é imune a
+     unidade porque é uma razão.
+
+  O que decide se a margem aparece como número bom não é a margem que o relatório
+  declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
+  origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
+  fora da conta.
+- **Custo maior que a venda no mês inteiro não é prejuízo: é unidade trocada.**
+  `TIJOLO COMUM 9X19X5 (PACOTE C/10)` saía do relatório com quantidade em peça e
+  custo médio do pacote: 3.959 × R$ 87,38 = R$ 345.933,00 de custo sobre
+  R$ 29.767,75 de venda. Catorze linhas assim derrubavam a margem declarada do
+  relatório inteiro de 42,3% para 22,5%. Essas linhas saem da referência e
+  aparecem com nome e valor, para serem corrigidas na origem.
 - **PDF serve.** Um dos sistemas não exporta planilha: o app abre o PDF, remonta
   a tabela pela posição do texto na página e segue o mesmo caminho de um XLSX.
   PDF escaneado não — sem OCR e sem chute, o app avisa em vez de inventar.
