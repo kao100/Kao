@@ -193,9 +193,42 @@ dois relatórios diferentes no mesmo lote o app recusa, com explicação.
 Com o XML, frete, devolução e curva ABC param de depender de qualquer relatório,
 e nada precisa ser ligado à mão: o layout é fixo e o app já o conhece.
 
-Sem ele, **frete** continua sem resposta: o campo existe e é reconhecido sozinho
-se a coluna vier num export, mas até lá a tela diz que não sabe, em vez de mostrar
-R$ 0,00 — que seria outra coisa.
+Sem ele, o **frete cobrado** fica sem resposta: o campo existe e é reconhecido
+sozinho se a coluna vier num export, mas até lá a tela diz que não sabe, em vez de
+mostrar R$ 0,00 — que seria outra coisa.
+
+### O frete tem duas metades
+
+O **cobrado** vem da nota (`vFrete`). O **pago** não existe em relatório nenhum do
+Gestão Click: mora na planilha do Google onde ela lança salário de motorista,
+extras, combustível e o que paga a transportadora. Essa planilha entra em **Custos
+de frete**, em XLSX ou CSV, com cinco colunas — data, tipo (frota própria /
+terceiro), quem, descrição e valor.
+
+Sem ela, "fulano cobrou R$ 8 mil de frete" parece resultado, e não é: a entrega
+tem custo. Com ela, o app faz a conta que existe — cobrado no período menos pago
+no período.
+
+O custo da frota é **fixo e mensal**: salário de motorista não é de uma entrega, é
+do mês. Por isso o app **não divide** esse custo por nota nem por vendedor. A
+coluna "custo rateado" é rateio proporcional ao frete cobrado: ordem de grandeza,
+não custo real de ninguém.
+
+### De onde sai o CUSTO de um produto, em ordem
+
+| | Fonte | Por que nesta ordem |
+|---|---|---|
+| 1 | o custo na própria linha do arquivo | mesma venda, mesma unidade |
+| 2 | **custo do cadastro de produtos** | custo e varejo na mesma linha, e a razão entre eles prova que a unidade é a da venda |
+| 3 | proporção custo/venda do relatório de produtos vendidos | atravessa diferença de unidade, mas é média de um período |
+| 4 | custo médio por unidade | só com verificação, e é o último recurso |
+
+**A razão custo/varejo do cadastro é um teste, não só uma conta.** Custo maior que
+o preço de tabela quer dizer prejuízo (raro) ou unidade trocada (comum: TIJOLO com
+custo de R$ 280,00 e varejo de R$ 7,20 — o custo é do pacote). Nos dois casos o
+custo daquele produto não serve, e nenhuma outra fonte serve também, porque todas
+saem do mesmo cadastro. Ele fica **sem custo** e aparece na lista com o fator que
+denuncia — melhor do que um prejuízo inventado.
 
 Os dois vêm **agregados** (totais de um período, sem número de nota), então moram
 em base própria: a Curva ABC usa os itens das notas quando eles existem, ou estes
