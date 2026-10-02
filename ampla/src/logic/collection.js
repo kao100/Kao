@@ -95,6 +95,8 @@ function montar(titulo, eventos, cliente, vendedor, referencia) {
     vencimento: titulo.vencimento,
     diasAtraso: atraso,
     vencido: emAtraso(titulo, referencia),
+    // o id vai junto do nome para a busca avançada poder filtrar por vendedor
+    vendedorId: titulo.vendedorId || null,
     vendedorNome: titulo.vendedorId ? vendedor.get(titulo.vendedorId) : (titulo.vendedorNome || null),
     telefone: dados.telefone || null,
     email: dados.email || null,

@@ -406,3 +406,30 @@ textarea.entrada { min-height: 74px; resize: vertical; font-size: 14px; }
 }
 .toast--ok { background: var(--verde); color: #04240f; border-color: transparent; }
 .toast--erro { background: var(--vermelho); color: #fff; border-color: transparent; }
+
+/* ------------------------------------------------------- busca avançada */
+/* Fecha por padrão: a tela não começa com um formulário na frente do
+   número que ela veio ver. Abre já aberta quando o filtro está mexido. */
+.filtro {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--raio);
+}
+.filtro__resumo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 13px; cursor: pointer; font-size: 13px; font-weight: 600;
+  list-style: none; color: var(--txt);
+}
+.filtro__resumo::-webkit-details-marker { display: none; }
+.filtro__lupa { font-size: 14px; }
+.filtro__seta { color: var(--muted); font-size: 11px; transition: transform .15s; }
+.filtro[open] .filtro__seta { transform: rotate(180deg); }
+.filtro__corpo { padding: 2px 13px 13px; display: flex; flex-direction: column; gap: 10px; }
+.filtro__atalhos { display: flex; gap: 6px; flex-wrap: wrap; }
+/* duas colunas no telefone: de/até cabem na mesma linha sem aperto */
+.filtro__grade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.filtro__grade:empty { display: none; }
+.filtro__grade > label:only-child { grid-column: 1 / -1; }
+.filtro__campo { display: flex; flex-direction: column; gap: 4px; }
+.filtro__rotulo { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+@media (max-width: 380px) { .filtro__grade { grid-template-columns: 1fr; } }

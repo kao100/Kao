@@ -12,26 +12,44 @@ import * as quotes from '../../logic/quotes.js';
 import * as revenue from '../../logic/revenue.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, chips, secao, botao, aviso, vazio, progresso, rankLinha } from '../components/ui.js';
-import { grafBarras } from '../components/chart.js';
-import { tabela, exportadores } from '../components/table.js';
+import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
+import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
+import * as store from '../../core/store.js';
 import { money, pct, formatDate, monthLabelShort } from '../../core/format.js';
 
 export async function telaOrcamentos({ query }) {
-  const periodo = query.p || 'mes';
-  const faixa = revenue.intervalo(periodo, query);
-  const [r, serie] = await Promise.all([
+  const busca = lerFiltro(query);
+  const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
+  const [r, serie, vendedores] = await Promise.all([
     quotes.resumo(faixa),
     quotes.porMes(6, faixa.ate),
+    store.vendedores.listar(),
   ]);
-  definirTitulo('Orçamentos', faixa.label);
+  definirTitulo('Orçamentos', descrever(busca, { vendedores }));
 
-  const chipsPeriodo = chips(revenue.PERIODOS.filter((p) => p.id !== 'personalizado'), periodo,
-    (id) => navigate(href('/orcamentos', { ...query, p: id })));
+  const chipsPeriodo = filtroAvancado({
+    rota: '/orcamentos',
+    filtro: busca,
+    rotuloData: 'Data do orçamento',
+    rotuloBusca: 'Buscar cliente ou número do orçamento',
+    aoExportar: () => exportarPlanilha({
+      titulo: 'Orçamentos', subtitulo: busca.label,
+      nomeArquivo: `orcamentos_${busca.de}_${busca.ate}`,
+      colunas: COLUNAS_MESES_ORC, linhas: linhasDosMeses(serie),
+    }),
+  });
 
   if (!r.quantidade) {
+    const todos = await store.orcamentos.listar();
+    const datas = todos.map((o) => o.data).filter(Boolean).sort();
     return h('div.empilha', { style: { gap: '14px' } },
       chipsPeriodo,
-      vazio('📝', 'Sem orçamentos no período',
+      nadaNoRecorte({
+        rota: '/orcamentos', rotulo: 'orçamento',
+        primeiraData: datas[0], ultimaData: datas[datas.length - 1],
+      }),
+      !datas.length && vazio('📝', 'Sem orçamentos ainda',
         'Importe o relatório de orçamentos para acompanhar quanto vira venda.',
         botao('Importar orçamentos', { tipo: 'primario', onClick: () => navigate('/arquivos/orcamentos') })));
   }
@@ -76,14 +94,13 @@ export async function telaOrcamentos({ query }) {
         `${r.semSituacao} orçamento(s) vieram sem situação no arquivo. Eles entram no total orçado, `
         + 'mas ficam fora da taxa de conversão — o app não decide por eles.')),
 
-    card('Orçado por mês', null,
-      grafBarras(serie.map((m) => ({
-        rotulo: monthLabelShort(m.mes),
-        valor: m.orcado,
-        meta: m.convertido || null,
-        cor: 'var(--card-3)',
-      })), { altura: 150 }),
-      h('p.mini.muted', 'A barra é o total orçado; a linha tracejada é o que virou venda.')),
+    // o gráfico saiu: ela quer o número conferível, não o desenho
+    secao('Orçado por mês',
+      exportadores(() => ({
+        titulo: 'Orçado por mês', nomeArquivo: `orcado_por_mes_${busca.de}`,
+        colunas: COLUNAS_MESES_ORC, linhas: linhasDosMeses(serie),
+      })),
+      tabela({ colunas: COLUNAS_MESES_ORC, linhas: linhasDosMeses(serie) })),
 
     r.abertos.length > 0 && secao(`Em aberto — ${r.abertos.length}`,
       exportadores(() => ({
@@ -132,3 +149,19 @@ const COLUNAS = [
   { header: 'Data', key: 'data', tipo: 'date' },
   { header: 'Valor', key: 'valorTotal', tipo: 'money', alinhar: 'direita' },
 ];
+
+const COLUNAS_MESES_ORC = [
+  { header: 'Mês', key: 'mesLabel' },
+  { header: 'Orçado', key: 'orcado', tipo: 'money', alinhar: 'direita' },
+  { header: 'Virou venda', key: 'convertido', tipo: 'money', alinhar: 'direita' },
+  { header: '% convertido', key: 'taxa', tipo: 'pct', alinhar: 'direita' },
+];
+
+function linhasDosMeses(serie) {
+  return serie.map((m) => ({
+    mesLabel: monthLabelShort(m.mes),
+    orcado: m.orcado || 0,
+    convertido: m.convertido || 0,
+    taxa: m.orcado ? (m.convertido / m.orcado) * 100 : null,
+  }));
+}

@@ -8,7 +8,9 @@ import { navigate, href } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, aviso } from '../components/ui.js';
-import { tabela, exportadores } from '../components/table.js';
+import { lerFiltro, aplicar as aplicarFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
+import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
 import { money, formatDate, today, addDays } from '../../core/format.js';
 import { cents, sum, sortBy } from '../../core/util.js';
@@ -24,8 +26,20 @@ const FILTROS = [
 
 export async function telaReceber({ query }) {
   const filtro = query.f || 'aberto';
+  /**
+   * BUSCA AVANÇADA por VENCIMENTO, e com janela para frente.
+   *
+   * "Lá na frente eu consigo ver como que vão estar os fluxos de pagamento. Aí
+   *  vem a minha análise interna: vamos prorrogar isso aqui, o fluxo de caixa vai
+   *  estar apertado nesse dia."
+   *
+   * Por isso o padrão aqui não é "este mês": é a faixa inteira, para o que está
+   * em aberto até o fim do ano aparecer. Os atalhos "Próximos 30 / 90 dias"
+   * respondem a pergunta dela sem ela digitar nada.
+   */
+  const busca = lerFiltro(query, { atalhoPadrao: 'tudo' });
   const [titulos, vendedores] = await Promise.all([store.receber.listar(), store.vendedores.listar()]);
-  definirTitulo('Contas a receber');
+  definirTitulo('Contas a receber', descrever(busca, { vendedores }));
 
   if (!titulos.length) {
     return vazio('📥', 'Nenhum título a receber',
@@ -34,19 +48,34 @@ export async function telaReceber({ query }) {
   }
 
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
-  const abertos = titulos.filter((t) => t.status === 'aberto');
+  // a busca avançada corta a base antes de tudo: os KPIs e os contadores dos
+  // chips passam a falar do mesmo recorte que a tabela, e não de bases diferentes
+  const noRecorte = aplicarFiltro(titulos, busca, {
+    data: 'vencimento',
+    texto: ['clienteNome', 'documento', 'nfNumero', 'descricao', 'clienteDoc', 'banco'],
+  });
+  const abertos = noRecorte.filter((t) => t.status === 'aberto');
   const vencidos = abertos.filter((t) => t.vencimento < today());
-  const lista = sortBy(aplicar(titulos, filtro), (t) => t.vencimento)
+  const lista = sortBy(aplicar(noRecorte, filtro), (t) => t.vencimento)
     .map((t) => ({
       ...t,
       saldoAberto: t.status === 'pago' ? 0 : cents(t.saldo ?? t.valor),
       vendedorNomeTexto: t.vendedorId ? nomeVendedor.get(t.vendedorId) : (t.vendedorNome || null),
       situacao: t.status === 'pago' ? 'Recebido' : t.vencimento < today() ? 'Vencido' : 'A vencer',
     }));
-  const contadores = Object.fromEntries(FILTROS.map((f) => [f.id, aplicar(titulos, f.id).length]));
-  const semNf = titulos.filter((t) => t.nfNumero && !t.nfId);
+  const contadores = Object.fromEntries(FILTROS.map((f) => [f.id, aplicar(noRecorte, f.id).length]));
+  const semNf = noRecorte.filter((t) => t.nfNumero && !t.nfId);
 
   return h('div.empilha', { style: { gap: '14px' } },
+    filtroAvancado({
+      rota: '/receber',
+      filtro: busca,
+      vendedores,
+      rotuloData: 'Vencimento',
+      rotuloBusca: 'Buscar cliente, título, NF ou documento',
+      aoExportar: () => exportarPlanilha(montarExportacao(lista, filtro, busca)),
+    }),
+
     h('div.grade.grade--4',
       kpi({ label: 'Total em aberto', valor: money(sum(abertos, (t) => t.saldo ?? t.valor)), icone: '📥', cor: 'info', nota: `${abertos.length} títulos` }),
       kpi({ label: 'Vencido', valor: money(sum(vencidos, (t) => t.saldo ?? t.valor)), icone: '🔴', cor: vencidos.length ? 'ruim' : 'ok', nota: `${vencidos.length} títulos` }),
@@ -57,10 +86,10 @@ export async function telaReceber({ query }) {
       'atencao', botao('Ver na conciliação', { pequeno: true, onClick: () => navigate('/conciliacao') })),
 
     chips(FILTROS.map((f) => ({ ...f, contador: contadores[f.id] })), filtro,
-      (id) => navigate(href('/receber', { f: id }))),
+      (id) => navigate(href('/receber', { ...query, f: id }))),
 
     secao(null, h('div.linha',
-      exportadores(() => montarExportacao(lista, filtro)),
+      exportadores(() => montarExportacao(lista, filtro, busca)),
       botao('Ver a inadimplência', { tipo: 'primario', pequeno: true, onClick: () => navigate('/cobranca') })),
     card(null, null, tabela({
       colunas: [
@@ -114,10 +143,10 @@ function abrirDetalhe(titulo) {
     botao('Ver a inadimplência', { tipo: 'primario', bloco: true, onClick: () => navigate('/cobranca') }));
 }
 
-function montarExportacao(lista, filtro) {
+function montarExportacao(lista, filtro, busca) {
   return {
     titulo: 'Contas a receber',
-    subtitulo: `Filtro: ${FILTROS.find((f) => f.id === filtro)?.label || filtro}`,
+    subtitulo: `${FILTROS.find((f) => f.id === filtro)?.label || filtro} · ${busca.label}`,
     periodo: `Posição em ${formatDate(today())}`,
     nomeArquivo: `contas_a_receber_${today()}`,
     colunas: [

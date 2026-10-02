@@ -5,37 +5,54 @@
 
 import { h } from '../../core/dom.js';
 import { navigate, href } from '../../core/router.js';
+import * as store from '../../core/store.js';
 import * as revenue from '../../logic/revenue.js';
 import * as commission from '../../logic/commission.js';
 import { origemVendedor } from '../../logic/link.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, rankLinha, aviso, vazio, progresso } from '../components/ui.js';
-import { grafLinha, grafBarras } from '../components/chart.js';
-import { tabela, exportadores } from '../components/table.js';
+import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
+import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { money, pct, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
 
 export async function telaComercial({ query }) {
-  const periodo = query.p || 'mes';
-  const faixa = revenue.intervalo(periodo, query);
-  const [resumo, evolucao, comparacao, mes, meses] = await Promise.all([
+  const busca = lerFiltro(query);
+  const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
+  const [resumo, comparacao, mes, meses, vendedores] = await Promise.all([
     revenue.resumo(faixa),
-    revenue.porDia({ de: faixa.de, ate: faixa.ate }),
     revenue.comparar(faixa),
     revenue.mesAtual(),
     revenue.ultimosMeses(6),
+    store.vendedores.listar(),
   ]);
-  definirTitulo('Comercial', faixa.label);
+  definirTitulo('Comercial', descrever(busca, { vendedores }));
+
+  const painel = filtroAvancado({
+    rota: '/comercial',
+    filtro: busca,
+    vendedores,
+    rotuloData: 'Emissão da nota',
+    rotuloBusca: 'Buscar cliente, NF ou documento',
+    aoExportar: () => exportarPlanilha(montarExportacaoVendedores(resumo, faixa)),
+  });
 
   if (!resumo.notas) {
+    const notas = await store.nfs.listar();
+    const datas = notas.map((n) => n.dataEmissao).filter(Boolean).sort();
     return h('div.empilha', { style: { gap: '14px' } },
-      chipsPeriodo(periodo, query),
-      vazio('📈', 'Sem faturamento no período',
+      painel,
+      nadaNoRecorte({
+        rota: '/comercial', rotulo: 'nota',
+        primeiraData: datas[0], ultimaData: datas[datas.length - 1],
+      }),
+      !datas.length && vazio('📈', 'Sem faturamento ainda',
         'Importe as NFs para acompanhar o comercial.',
         botao('Importar vendas', { tipo: 'primario', onClick: () => navigate('/arquivos/nfs') })));
   }
 
   return h('div.empilha', { style: { gap: '14px' } },
-    chipsPeriodo(periodo, query),
+    painel,
 
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(resumo.total), icone: '🧾', cor: 'info', nota: `${resumo.notas} NFs` }),
@@ -67,17 +84,29 @@ export async function telaComercial({ query }) {
         h('div.mini', `diferença de ${money(resumo.conferencia.diferenca)} · ${resumo.semVendedor.notas} NF(s) sem vendedor`)),
       h('span', '›')),
 
-    card('Evolução diária', null,
-      grafLinha(evolucao.map((d) => ({ rotulo: formatDate(d.data, 'short'), valor: d.valor })), { altura: 140 })),
-
-    card('Últimos meses', null,
-      grafBarras(meses.map((m) => ({
-        rotulo: monthLabelShort(m.mes),
-        valor: m.valor,
-        meta: m.meta || null,
-        cor: m.mes === monthKey(today()) ? 'var(--azul)' : 'var(--card-3)',
-      })), { altura: 150 }),
-      h('p.mini.muted', 'A linha tracejada é a meta de cada mês.')),
+    /**
+     * O GRÁFICO SAIU. "Eu não preciso dele. Ele está mais atrapalhando do que
+     * ajudando. É bom ter as informações 100% ali, bem perfeitinhas."
+     *
+     * No lugar, os mesmos meses em NÚMERO, que é o que ela confere: faturado,
+     * meta, e quanto faltou ou passou. Uma barra desenhada não some conferir.
+     */
+    secao('Últimos meses',
+      exportadores(() => ({
+        titulo: 'Faturamento mês a mês',
+        nomeArquivo: `meses_${faixa.de}`,
+        colunas: COLUNAS_MESES,
+        linhas: linhasDosMeses(meses),
+      })),
+      tabela({
+        colunas: COLUNAS_MESES,
+        linhas: linhasDosMeses(meses),
+        total: {
+          mesLabel: 'TOTAL',
+          valor: meses.reduce((a, m) => a + (m.valor || 0), 0),
+          meta: meses.reduce((a, m) => a + (m.meta || 0), 0),
+        },
+      })),
 
     secao('Ranking de vendedores',
       exportadores(() => montarExportacaoVendedores(resumo, faixa)),
@@ -88,7 +117,7 @@ export async function telaComercial({ query }) {
           valor: v.valor,
           percentual: v.participacao,
           sub: `${v.notas} NFs · ${v.clientes} clientes · ticket ${money(v.ticket)} · ${pct(v.participacao, 1)}`,
-          onClick: () => navigate(`/comercial/${v.vendedorId}?p=${periodo}`),
+          onClick: () => navigate(href(`/comercial/${v.vendedorId}`, query)),
         }))),
         resumo.semVendedor.notas > 0 && h('button.aviso.aviso--atencao', {
           style: { width: '100%', marginTop: '10px' }, onClick: () => navigate('/conciliacao'),
@@ -106,9 +135,22 @@ export async function telaComercial({ query }) {
         'Canceladas não entram. Devoluções entram como valor negativo no mês da emissão.')));
 }
 
-function chipsPeriodo(atual, query) {
-  return chips(revenue.PERIODOS.filter((p) => p.id !== 'personalizado'), atual,
-    (id) => navigate(href('/comercial', { ...query, p: id })));
+const COLUNAS_MESES = [
+  { header: 'Mês', key: 'mesLabel' },
+  { header: 'Faturado', key: 'valor', tipo: 'money', alinhar: 'direita' },
+  { header: 'Meta', key: 'meta', tipo: 'money', alinhar: 'direita' },
+  { header: 'Diferença', key: 'diferenca', tipo: 'money', alinhar: 'direita' },
+  { header: 'NFs', key: 'notas', tipo: 'numero', alinhar: 'direita' },
+];
+
+function linhasDosMeses(meses) {
+  return meses.map((m) => ({
+    mesLabel: monthLabelShort(m.mes),
+    valor: m.valor || 0,
+    meta: m.meta || null,
+    diferenca: m.meta ? (m.valor || 0) - m.meta : null,
+    notas: m.notas ?? null,
+  }));
 }
 
 function montarExportacaoVendedores(resumo, faixa) {
@@ -157,21 +199,27 @@ function montarExportacaoVendedores(resumo, faixa) {
 /* ---------------------------------------------------------- detalhe do vendedor */
 
 export async function telaVendedor({ params, query }) {
-  const periodo = query.p || 'mes';
-  const faixa = revenue.intervalo(periodo, query);
+  const busca = lerFiltro(query);
+  const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
   const [detalhe, calculo] = await Promise.all([
     revenue.detalheVendedor(params.id, faixa),
     commission.calcular(monthKey(faixa.ate)),
   ]);
   const nome = detalhe.vendedor?.nome || 'Vendedor';
-  definirTitulo(nome, faixa.label);
+  definirTitulo(nome, busca.label);
 
   const comissao = calculo.vendedores.find((v) => v.vendedorId === params.id);
   const meta = detalhe.vendedor?.meta || 0;
 
   return h('div.empilha', { style: { gap: '14px' } },
-    chips(revenue.PERIODOS.filter((p) => p.id !== 'personalizado'), periodo,
-      (id) => navigate(href(`/comercial/${params.id}`, { p: id }))),
+    filtroAvancado({
+      rota: `/comercial/${params.id}`,
+      filtro: busca,
+      rotuloData: 'Emissão da nota',
+      rotuloBusca: 'Buscar cliente ou NF',
+    }),
+
+    botao('‹ Voltar para o comercial', { onClick: () => navigate(href('/comercial', query)) }),
 
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(detalhe.total), icone: '🧾', cor: 'info' }),
@@ -188,8 +236,6 @@ export async function telaVendedor({ params, query }) {
       cor: detalhe.total >= meta ? 'var(--verde)' : 'var(--azul)',
     })),
 
-    card('Evolução no período', null,
-      grafLinha(detalhe.porDia.map((d) => ({ rotulo: formatDate(d.data, 'short'), valor: d.valor })), { altura: 130 })),
 
     secao('Produtos vendidos',
       exportadores(() => ({

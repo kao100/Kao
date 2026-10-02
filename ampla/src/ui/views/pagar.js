@@ -8,7 +8,9 @@ import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, selo } from '../components/ui.js';
-import { tabela, exportadores } from '../components/table.js';
+import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
+import { lerFiltro, aplicar as aplicarFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
 import { formulario, detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
 import { ok } from '../components/toast.js';
 import { money, formatDate, today, addDays, relativeDay } from '../../core/format.js';
@@ -27,8 +29,11 @@ const FILTROS = [
 
 export async function telaPagar({ query }) {
   const filtro = query.f || '7';
-  const contas = await store.pagar.listar();
-  definirTitulo('Contas a pagar');
+  // o padrão é a faixa inteira, para ela olhar o que vem até o fim do ano e
+  // decidir o que prorrogar — e não só o que cai neste mês
+  const busca = lerFiltro(query, { atalhoPadrao: 'tudo' });
+  const [contas, fornecedores] = await Promise.all([store.pagar.listar(), store.fornecedores.listar()]);
+  definirTitulo('Contas a pagar', descrever(busca));
 
   if (!contas.length) {
     return vazio('📤', 'Nenhuma conta a pagar importada',
@@ -36,10 +41,15 @@ export async function telaPagar({ query }) {
       botao('Importar contas a pagar', { tipo: 'primario', onClick: () => navigate('/arquivos/pagar') }));
   }
 
-  const abertas = contas.filter((c) => c.status !== 'pago');
+  const noRecorte = aplicarFiltro(contas, busca, {
+    data: 'vencimento',
+    cliente: 'fornecedorId',
+    texto: ['fornecedorNome', 'descricao', 'documento', 'nfNumero', 'fornecedorDoc', 'categoria', 'banco'],
+  });
+  const abertas = noRecorte.filter((c) => c.status !== 'pago');
   const atrasadas = abertas.filter((c) => vencimentoEfetivo(c) < today());
-  const lista = sortBy(aplicar(contas, filtro), (c) => vencimentoEfetivo(c));
-  const contadores = Object.fromEntries(FILTROS.map((f) => [f.id, aplicar(contas, f.id).length]));
+  const lista = sortBy(aplicar(noRecorte, filtro), (c) => vencimentoEfetivo(c));
+  const contadores = Object.fromEntries(FILTROS.map((f) => [f.id, aplicar(noRecorte, f.id).length]));
 
   const porCategoria = new Map();
   for (const c of abertas) {
@@ -48,20 +58,30 @@ export async function telaPagar({ query }) {
   }
 
   return h('div.empilha', { style: { gap: '14px' } },
+    filtroAvancado({
+      rota: '/pagar',
+      filtro: busca,
+      clientes: fornecedores,
+      rotuloEntidade: 'Fornecedor',
+      rotuloData: 'Vencimento',
+      rotuloBusca: 'Buscar fornecedor, descrição, plano de contas ou documento',
+      aoExportar: () => exportarPlanilha(montarExportacao(lista, filtro, busca)),
+    }),
+
     h('div.grade.grade--4',
       kpi({ label: 'Em aberto', valor: money(sum(abertas, (c) => c.valor)), icone: '📤', nota: `${abertas.length} compromissos`, cor: 'laranja' }),
       kpi({ label: 'Atrasados', valor: money(sum(atrasadas, (c) => c.valor)), icone: '🔴', nota: `${atrasadas.length} títulos`, cor: atrasadas.length ? 'ruim' : 'ok' }),
-      kpi({ label: 'Vence em 7 dias', valor: money(sum(aplicar(contas, '7'), (c) => c.valor)), icone: '📅' }),
-      kpi({ label: 'Vence em 30 dias', valor: money(sum(aplicar(contas, '30'), (c) => c.valor)), icone: '🗓️' })),
+      kpi({ label: 'Vence em 7 dias', valor: money(sum(aplicar(noRecorte, '7'), (c) => c.valor)), icone: '📅' }),
+      kpi({ label: 'Vence em 30 dias', valor: money(sum(aplicar(noRecorte, '30'), (c) => c.valor)), icone: '🗓️' })),
 
     chips(FILTROS.map((f) => ({ ...f, contador: contadores[f.id] })), filtro,
-      (id) => navigate(href('/pagar', { f: id }))),
+      (id) => navigate(href('/pagar', { ...query, f: id }))),
 
     h('div.lista', ...lista.slice(0, 200).map((c) => itemPagar(c))),
     lista.length === 0 && h('p.pequeno.muted.centro', { style: { padding: '18px' } }, 'Nada neste filtro.'),
 
     porCategoria.size > 0 && secao('Para onde vai o dinheiro (em aberto)',
-      exportadores(() => montarExportacao(lista, filtro)),
+      exportadores(() => montarExportacao(lista, filtro, busca)),
       card(null, null, tabela({
         colunas: [
           { header: 'Categoria', key: 'categoria' },
@@ -181,10 +201,10 @@ function abrirDetalhe(conta) {
     ]));
 }
 
-function montarExportacao(lista, filtro) {
+function montarExportacao(lista, filtro, busca) {
   return {
     titulo: 'Contas a pagar',
-    subtitulo: `Filtro: ${FILTROS.find((f) => f.id === filtro)?.label || filtro}`,
+    subtitulo: `${FILTROS.find((f) => f.id === filtro)?.label || filtro}${busca ? ` · ${busca.label}` : ''}`,
     periodo: `Posição em ${formatDate(today())}`,
     nomeArquivo: `contas_a_pagar_${today()}`,
     colunas: [

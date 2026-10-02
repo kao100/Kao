@@ -16,15 +16,33 @@ import * as collection from '../../logic/collection.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, vazio, aviso, progresso } from '../components/ui.js';
 import { tabela, exportadores } from '../components/table.js';
+import { lerFiltro, aplicar as aplicarFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
+import * as store from '../../core/store.js';
 import { money, formatDate, today, addDays } from '../../core/format.js';
 import { cents, sum } from '../../core/util.js';
 
-export async function telaCobranca() {
-  const carteira = await collection.carteira();
+export async function telaCobranca({ query }) {
+  // "Tudo" por padrão: a inadimplência é uma posição, não um mês. Mas ela pode
+  // recortar por vencimento, vendedor ou cliente como em qualquer outra tela.
+  const busca = lerFiltro(query, { atalhoPadrao: 'tudo' });
+  const [tudo, vendedores] = await Promise.all([collection.carteira(), store.vendedores.listar()]);
+  const carteira = aplicarFiltro(tudo, busca, {
+    data: 'vencimento',
+    texto: ['clienteNome', 'documento', 'nfNumero', 'clienteDoc'],
+  });
   const totais = collection.totais(carteira);
   definirTitulo('Inadimplência', totais.vencido ? `${money(totais.vencido)} vencidos` : 'nada vencido');
 
-  if (!carteira.length) {
+  const painel = filtroAvancado({
+    rota: '/cobranca',
+    filtro: busca,
+    vendedores,
+    rotuloData: 'Vencimento',
+    rotuloBusca: 'Buscar cliente, título ou NF',
+  });
+
+  if (!tudo.length) {
     return vazio('📥', 'Nenhum título a receber',
       'Importe o relatório de contas a receber para ver a inadimplência.',
       botao('Importar contas a receber', { tipo: 'primario', onClick: () => navigate('/arquivos/receber') }));
@@ -36,6 +54,8 @@ export async function telaCobranca() {
   const porCliente = agruparPorCliente(vencidos);
 
   return h('div.empilha', { style: { gap: '14px' } },
+    painel,
+
     h('div.grade.grade--3',
       kpi({
         label: 'Vencido', valor: money(totais.vencido), icone: '🔴',

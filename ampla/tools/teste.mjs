@@ -33,6 +33,8 @@ const dre = await import('../src/logic/dre.js');
 const dossie = await import('../src/logic/dossie.js');
 const quotes = await import('../src/logic/quotes.js');
 const diario = await import('../src/logic/diario.js');
+const filtro = await import('../src/logic/filtro.js');
+const carteiraMod = await import('../src/logic/carteira.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -1116,6 +1118,146 @@ console.log('\n▶ Devolução: tira do faturamento e abate a comissão de quem 
   if (ped) await store.pedidos.remover(ped.id);
   const com = (await store.comissoesRelatorio.listar()).find((x) => x.numero === '8301');
   if (com) await store.comissoesRelatorio.remover(com.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ Busca avançada: a data é digitada, e o período é uma faixa');
+{
+  /**
+   * "Eu não consigo filtrar pelo mês. Eu queria uma busca avançada onde eu
+   *  conseguisse filtrar os dias como eu quisesse. (…) Eu mesma colocar a data,
+   *  não ter que clicar na data."
+   */
+  const comAtalho = filtro.lerFiltro({ p: 'mesAnterior' });
+  ok('atalho de mês passado devolve uma faixa fechada',
+    comAtalho.de < comAtalho.ate && comAtalho.de.endsWith('-01'), `${comAtalho.de} a ${comAtalho.ate}`);
+
+  const digitado = filtro.lerFiltro({ p: 'mesAnterior', de: '2027-05-10', ate: '2027-05-12' });
+  igual('data digitada vence o atalho', [digitado.de, digitado.ate], ['2027-05-10', '2027-05-12']);
+  igual('e o atalho passa a ser "personalizado"', digitado.atalho, 'personalizado');
+
+  const soDe = filtro.lerFiltro({ de: '2027-05-10' });
+  igual('só "de" significa daí para frente, sem fim', soDe.ate, '9999-12-31');
+  const soAte = filtro.lerFiltro({ ate: '2027-05-10' });
+  igual('só "até" significa desde sempre', soAte.de, '0001-01-01');
+
+  const tudo = filtro.lerFiltro({ p: 'tudo' });
+  ok('"tudo" pega tudo', tudo.de === '0001-01-01' && tudo.ate === '9999-12-31', '');
+
+  // ida e volta pela URL: o filtro é compartilhável e sobrevive a recarregar
+  const volta = filtro.lerFiltro(
+    Object.fromEntries(Object.entries(filtro.paraQuery(digitado)).filter(([, v]) => v != null)),
+  );
+  igual('o filtro sobrevive à ida e volta pela URL', [volta.de, volta.ate], ['2027-05-10', '2027-05-12']);
+
+  // aplicar: fora do período não entra, nem por engano
+  const linhas = [
+    { data: '2027-05-09', clienteNome: 'Antes Ltda', vendedorId: 'v1' },
+    { data: '2027-05-10', clienteNome: 'Brenge Construções', vendedorId: 'v1' },
+    { data: '2027-05-11', clienteNome: 'Outro Cliente', vendedorId: 'v2', documento: '12345678' },
+    { data: '2027-05-13', clienteNome: 'Depois Ltda', vendedorId: 'v1' },
+    { data: null, clienteNome: 'Sem data', vendedorId: 'v1' },
+  ];
+  igual('só o que está dentro da faixa entra',
+    filtro.aplicar(linhas, digitado).map((l) => l.clienteNome),
+    ['Brenge Construções', 'Outro Cliente']);
+  igual('filtro de vendedor corta junto',
+    filtro.aplicar(linhas, { ...digitado, vendedorId: 'v2' }).map((l) => l.clienteNome),
+    ['Outro Cliente']);
+  igual('busca por nome não precisa de acento nem maiúscula',
+    filtro.aplicar(linhas, { ...digitado, busca: 'brenge construcoes' }).map((l) => l.clienteNome),
+    ['Brenge Construções']);
+  igual('busca por número casa com documento',
+    filtro.aplicar(linhas, { ...digitado, busca: '123456' }).map((l) => l.clienteNome),
+    ['Outro Cliente']);
+  igual('registro sem a data pedida fica de fora, para a soma do período bater',
+    filtro.aplicar(linhas, filtro.lerFiltro({ p: 'tudo' })).some((l) => l.clienteNome === 'Sem data'),
+    false);
+}
+
+console.log('\n▶ Carteira de clientes: quem compra, quem parou, quem orça e não fecha');
+{
+  /**
+   * "Quais clientes pararam, quais estão orçando e não estão fechando, quanto X
+   *  cliente compra com X vendedor."
+   */
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  const VEND = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  const COM = 'Nº;Cliente;Vendedor;Data de emissão;Valor;Comissão';
+  const ORC = 'Número;Cliente;Data;Previsão de entrega;Situação;Valor';
+
+  await importar('pedidos', 'kp.csv', `${VEND}
+8501;Fiel Ltda;03/06/2026;;Concretizada;600,00;1.000,00
+8502;Fiel Ltda;10/06/2026;;Concretizada;900,00;1.500,00
+8503;Sumiu Ltda;05/02/2026;;Concretizada;500,00;9.000,00`);
+  await importar('comissoes', 'kc.csv', `${COM}
+8501;Fiel Ltda;Ana;03/06/2026;1.000,00;20,00
+8502;Fiel Ltda;Bruno;10/06/2026;1.500,00;30,00
+8503;Sumiu Ltda;Ana;05/02/2026;9.000,00;180,00`);
+  await importar('nfs', 'kn.csv', `${FISC}
+9501;03/06/2026;Fiel Ltda;88888888000111;1.000,00;Autorizada;Venda de mercadoria
+9502;10/06/2026;Fiel Ltda;88888888000111;1.500,00;Autorizada;Venda de mercadoria
+9503;05/02/2026;Sumiu Ltda;88888888000222;9.000,00;Autorizada;Venda de mercadoria`);
+  await importar('orcamentos', 'ko.csv', `${ORC}
+7701;So Orca Ltda;08/06/2026;;Em aberto;5.000,00
+7702;Fiel Ltda;09/06/2026;;Aprovado;1.500,00`);
+  await link.recalcular();
+
+  const c = await carteiraMod.carteira({ de: '2026-06-01', ate: '2026-06-30' });
+  const achar = (nome) => c.linhas.find((l) => l.nome === nome);
+
+  const fiel = achar('Fiel Ltda');
+  igual('comprou no período é a soma das notas', fiel.comprouPeriodo, 2500);
+  igual('e duas notas', fiel.notasPeriodo, 2);
+  igual('comprou de dois vendedores', fiel.vendedores.map((v) => v.nome).sort(), ['Ana', 'Bruno']);
+  ok('e isso fica marcado: é a carteira repartida aparecendo', fiel.multiVendedor, '');
+  igual('com quanto em cada', fiel.vendedores.find((v) => v.nome === 'Bruno').valor, 1500);
+
+  const sumiu = achar('Sumiu Ltda');
+  ok('quem comprava e não comprou no período entra como "parou"', sumiu.parou, '');
+  igual('e o histórico dele continua à vista', sumiu.comprouSempre, 9000);
+  ok('está na lista de quem parou', c.pararam.some((l) => l.nome === 'Sumiu Ltda'),
+    JSON.stringify({ dias: sumiu.diasSemComprar, lista: c.pararam.map((l) => l.nome) }));
+  // "parou" é medido contra o FIM do período escolhido, não contra hoje
+  igual('e os dias sem comprar são contados até o fim do período', sumiu.diasSemComprar, 145);
+
+  const soOrca = achar('So Orca Ltda');
+  igual('quem orçou e não comprou nada aparece', soOrca.orcaENaoFecha, true);
+  igual('com o valor orçado', soOrca.orcouPeriodo, 5000);
+  ok('e não entra na lista de quem parou (nunca comprou)',
+    !c.pararam.some((l) => l.nome === 'So Orca Ltda'), '');
+  ok('mas entra na de orçou sem fechar',
+    c.orcamSemFechar.some((l) => l.nome === 'So Orca Ltda'), '');
+
+  igual('o resumo conta só quem comprou', c.resumo.clientesComCompra, 1);
+  igual('e o faturamento é o do período', c.resumo.faturamento, 2500);
+  igual('e avisa quantos têm carteira dividida', c.resumo.comMaisDeUmVendedor, 1);
+
+  // filtrar por vendedor: só os clientes daquele vendedor
+  const soAna = await carteiraMod.carteira({ de: '2026-06-01', ate: '2026-06-30', vendedorId: fiel.vendedores.find((v) => v.nome === 'Ana').vendedorId });
+  ok('filtrando por vendedor sobra quem comprou dele',
+    soAna.linhas.every((l) => l.vendedores.some((v) => v.nome === 'Ana')), '');
+
+  // a ficha de um cliente: histórico inteiro, sem recorte
+  const ficha = await carteiraMod.cliente(fiel.chave);
+  igual('a ficha soma tudo que o cliente já comprou', ficha.comprouSempre, 2500);
+  igual('e mostra com quem ele comprou', ficha.porVendedor.length, 2);
+  igual('e o mês a mês', ficha.porMes.length, 1);
+
+  // limpeza
+  for (const n of ['9501', '9502', '9503']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const n of ['8501', '8502', '8503']) {
+    const x = (await store.pedidos.listar()).find((y) => y.numero === n);
+    if (x) await store.pedidos.remover(x.id);
+    const y = (await store.comissoesRelatorio.listar()).find((z) => z.numero === n);
+    if (y) await store.comissoesRelatorio.remover(y.id);
+  }
+  for (const o of (await store.orcamentos.listar()).filter((x) => ['7701', '7702'].includes(String(x.numero)))) {
+    await store.orcamentos.remover(o.id);
+  }
   await link.recalcular();
 }
 

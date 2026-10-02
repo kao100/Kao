@@ -18,6 +18,7 @@ export const MODULOS = [
   { path: '/cobranca', icone: '🔴', label: 'Vencidos', titulo: 'Inadimplência' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
   { path: '/orcamentos', icone: '📝', label: 'Orçados', titulo: 'Orçamentos' },
+  { path: '/clientes', icone: '👥', label: 'Clientes', titulo: 'Clientes' },
   { path: '/comissoes', icone: '🎯', label: 'Comissões', titulo: 'Comissões' },
 ];
 

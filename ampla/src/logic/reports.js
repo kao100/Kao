@@ -108,21 +108,31 @@ function montarBloco(bloco) {
         ))))));
 }
 
+// mesmos apelidos em português que a tabela aceita, pelo mesmo motivo
 function formatarCelula(valor, tipo) {
   if (valor == null || valor === '') return '—';
-  if (tipo === 'money') return money(valor);
-  if (tipo === 'pct') return pct(valor);
-  if (tipo === 'date') return formatDate(valor);
-  if (tipo === 'num') return num(valor, 2);
-  if (tipo === 'int') return num(valor, 0);
+  if (tipo === 'money' || tipo === 'dinheiro') return money(valor);
+  if (tipo === 'pct' || tipo === 'percentual') return pct(valor);
+  if (tipo === 'date' || tipo === 'data') return formatDate(valor);
+  if (tipo === 'num' || tipo === 'decimal') return num(valor, 2);
+  if (tipo === 'int' || tipo === 'numero' || tipo === 'inteiro') return num(valor, 0);
   return String(valor);
 }
 
 /* ------------------------------------------------------- atalhos de colunas */
 
 /** Converte as colunas de uma tabela da tela em colunas de Excel. */
+const TIPO_EXCEL = {
+  dinheiro: 'money', percentual: 'pct', data: 'date', decimal: 'num', numero: 'int', inteiro: 'int',
+};
+
 export function colunasExcel(colunas) {
-  return colunas.map((c) => ({ header: c.header, key: c.key, type: c.tipo || 'text', width: c.largura }));
+  return colunas.map((c) => ({
+    header: c.header,
+    key: c.key,
+    type: TIPO_EXCEL[c.tipo] || c.tipo || 'text',
+    width: c.largura,
+  }));
 }
 
 export function nomeArquivoPadrao(base, periodo) {

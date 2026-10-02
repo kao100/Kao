@@ -190,7 +190,7 @@ function cardConferenciaVendedores(calculo) {
         h('span.mini', {
           style: {
             minWidth: '86px', textAlign: 'right',
-            color: v.diferenca == null ? 'var(--texto-fraco)'
+            color: v.diferenca == null ? 'var(--muted)'
               : v.diferenca < -0.005 ? 'var(--vermelho)' : 'var(--verde)',
           },
         }, v.diferenca == null ? '—' : money(v.diferenca))))),

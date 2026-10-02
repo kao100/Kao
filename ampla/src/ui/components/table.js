@@ -29,17 +29,40 @@ export function tabela({ colunas, linhas, total, aoClicar, vazio = 'Sem registro
 }
 
 function ehNumero(tipo) {
-  return ['money', 'num', 'int', 'pct'].includes(tipo);
+  return ['money', 'dinheiro', 'num', 'decimal', 'int', 'numero', 'inteiro', 'pct', 'percentual'].includes(tipo);
 }
 
+/**
+ * Os apelidos em português existem porque o resto do app escreve os tipos de
+ * campo em português ('data', 'numero', 'dinheiro') e uma coluna de tabela com o
+ * nome errado não dava erro: caía no String() e mostrava "2026-09-21" cru. Aceitar
+ * os dois nomes é mais barato do que lembrar qual é qual em cada lugar.
+ */
 export function formatar(valor, tipo) {
   if (valor == null || valor === '') return '—';
-  if (tipo === 'money') return money(valor);
-  if (tipo === 'pct') return pct(valor);
-  if (tipo === 'date') return formatDate(valor);
-  if (tipo === 'num') return num(valor, 2);
-  if (tipo === 'int') return num(valor, 0);
+  if (tipo === 'money' || tipo === 'dinheiro') return money(valor);
+  if (tipo === 'pct' || tipo === 'percentual') return pct(valor);
+  if (tipo === 'date' || tipo === 'data') return formatDate(valor);
+  if (tipo === 'num' || tipo === 'decimal') return num(valor, 2);
+  if (tipo === 'int' || tipo === 'numero' || tipo === 'inteiro') return num(valor, 0);
   return String(valor);
+}
+
+/**
+ * Exporta para Excel a MESMA coisa que os botões do cabeçalho exportariam.
+ *
+ * É o que o "Exportar isto" da busca avançada chama: ela pediu para poder
+ * exportar já filtrado, e filtro e exportação lendo o mesmo objeto é a única
+ * forma de garantir que o arquivo tem exatamente o que está na tela.
+ */
+export function exportarPlanilha(r) {
+  exportarExcel(r.nomeArquivo || r.titulo, r.planilhas || [{
+    name: String(r.titulo).slice(0, 28),
+    title: r.subtitulo ? `${r.titulo} — ${r.subtitulo}` : r.titulo,
+    columns: colunasExcel(r.colunas),
+    rows: r.linhas,
+    total: r.total,
+  }]);
 }
 
 /**

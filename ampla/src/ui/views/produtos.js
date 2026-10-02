@@ -9,21 +9,27 @@ import * as abc from '../../logic/abc.js';
 import * as revenue from '../../logic/revenue.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, aviso } from '../components/ui.js';
-import { grafBarras, barraHorizontal } from '../components/chart.js';
+import { barraHorizontal } from '../components/chart.js';
+import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
+import * as store from '../../core/store.js';
 import { tabela, exportadores } from '../components/table.js';
 import { money, moneyShort, pct, num, formatDate, monthLabelShort } from '../../core/format.js';
 
 export async function telaProdutos({ query }) {
-  const periodo = query.p || 'mes';
   const criterio = query.c || 'faturamento';
   const por = query.g === 'categoria' ? 'categoria' : 'produto';
-  const faixa = revenue.intervalo(periodo, query);
-  const resultado = await abc.curva({ de: faixa.de, ate: faixa.ate, criterio, por });
-  definirTitulo('Produtos', `${faixa.label} · ${abc.CRITERIOS[criterio].label}`);
+  const busca = lerFiltro(query);
+  const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
+  const [resultado, vendedores] = await Promise.all([
+    abc.curva({ de: faixa.de, ate: faixa.ate, criterio, por }),
+    store.vendedores.listar(),
+  ]);
+  definirTitulo('Produtos', `${descrever(busca, { vendedores })} · ${abc.CRITERIOS[criterio].label}`);
 
   if (!resultado.linhas.length && !resultado.foraDaAnalise) {
     return h('div.empilha', { style: { gap: '14px' } },
-      chipsPeriodo(periodo, query),
+      chipsPeriodo(busca, query),
       vazio('📦', 'Sem itens no período',
         'A curva ABC precisa dos itens das notas (XML das NF-e ou relatório de vendas por produto).',
         botao('Importar itens', { tipo: 'primario', onClick: () => navigate('/arquivos/nfItens') })));
@@ -32,7 +38,7 @@ export async function telaProdutos({ query }) {
   const maiorValor = resultado.linhas[0]?.valorCriterio || 0;
 
   return h('div.empilha', { style: { gap: '14px' } },
-    chipsPeriodo(periodo, query),
+    chipsPeriodo(busca, query),
 
     chips(Object.entries(abc.CRITERIOS).map(([id, c]) => ({ id, label: c.label })), criterio,
       (id) => navigate(href('/produtos', { ...query, c: id }))),
@@ -55,21 +61,12 @@ export async function telaProdutos({ query }) {
       'atencao',
       botao('Importar custos', { pequeno: true, onClick: () => navigate('/arquivos/produtos') })),
 
-    card('Top 10', null,
-      grafBarras(resultado.linhas.slice(0, 10).map((l) => ({
-        rotulo: (l.codigo || l.descricao || '').slice(0, 6),
-        valor: l.valorCriterio,
-        cor: l.classe === 'A' ? 'var(--verde)' : l.classe === 'B' ? 'var(--amarelo)' : 'var(--card-3)',
-      })), {
-        altura: 160,
-        formatar: criterio === 'faturamento' || criterio === 'margem' ? moneyShort : (v) => num(v, 0),
-      })),
 
     secao('Curva ABC',
       exportadores(() => montarExportacao(resultado, faixa, criterio)),
       h('div.lista', ...resultado.linhas.slice(0, 60).map((linha) => h(
         por === 'produto' ? 'button.item.card--clicavel' : 'div.item',
-        { onClick: por === 'produto' ? () => navigate(`/produtos/${encodeURIComponent(linha.produtoId)}?p=${periodo}`) : undefined },
+        { onClick: por === 'produto' ? () => navigate(href(`/produtos/${encodeURIComponent(linha.produtoId)}`, query)) : undefined },
         h('span.abc-classe', { class: `abc-${linha.classe}` }, linha.classe),
         h('div.item__corpo',
           h('div.item__titulo', linha.descricao || linha.codigo),
@@ -95,9 +92,12 @@ export async function telaProdutos({ query }) {
       + 'Troque o critério lá em cima para ver o que vende muito mas rende pouco.', 'info'));
 }
 
-function chipsPeriodo(atual, query) {
-  return chips(revenue.PERIODOS.filter((p) => p.id !== 'personalizado'), atual,
-    (id) => navigate(href('/produtos', { ...query, p: id })));
+function chipsPeriodo(filtro, query, rota = '/produtos') {
+  return filtroAvancado({
+    rota, filtro,
+    rotuloData: 'Emissão da nota',
+    rotuloBusca: 'Buscar produto por nome ou código',
+  });
 }
 
 function montarExportacao(resultado, faixa, criterio) {
@@ -128,19 +128,20 @@ function montarExportacao(resultado, faixa, criterio) {
 /* ------------------------------------------------------------ ficha do produto */
 
 export async function telaProduto({ params, query }) {
-  const periodo = query.p || 'mes';
-  const faixa = revenue.intervalo(periodo, query);
+  const busca = lerFiltro(query);
+  const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
   const id = decodeURIComponent(params.id);
   const [comparacao, evolucao] = await Promise.all([
     abc.compararProduto(id, faixa),
     abc.evolucaoProduto(id, 6, faixa.ate),
   ]);
   const d = comparacao.atual;
-  definirTitulo(d.descricao, faixa.label);
+  definirTitulo(d.descricao, busca.label);
 
   return h('div.empilha', { style: { gap: '14px' } },
-    chips(revenue.PERIODOS.filter((p) => p.id !== 'personalizado'), periodo,
-      (id2) => navigate(href(`/produtos/${encodeURIComponent(id)}`, { p: id2 }))),
+    chipsPeriodo(busca, query, `/produtos/${encodeURIComponent(id)}`),
+
+    botao('‹ Voltar para a curva ABC', { onClick: () => navigate(href('/produtos', query)) }),
 
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(d.faturamento), icone: '💰', cor: 'info', nota: variacaoTexto(comparacao.variacaoFaturamento) }),
@@ -164,8 +165,13 @@ export async function telaProduto({ params, query }) {
       linha('Preço médio de venda', d.precoMedio == null ? '—' : money(d.precoMedio)),
       linha('Custo no período', d.custo == null ? '—' : money(d.custo)))),
 
-    card('Evolução (6 meses)', null,
-      grafBarras(evolucao.map((e) => ({ rotulo: monthLabelShort(e.mes), valor: e.valor })), { altura: 140 })),
+    secao('Faturado mês a mês', null, tabela({
+      colunas: [
+        { header: 'Mês', key: 'mes', formatar: (v) => monthLabelShort(v) },
+        { header: 'Faturado', key: 'valor', tipo: 'money', alinhar: 'direita' },
+      ],
+      linhas: evolucao,
+    })),
 
     card('Comparação com o período anterior', null, h('div.comparativo',
       h('div',
