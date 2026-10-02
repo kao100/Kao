@@ -16,6 +16,20 @@ porque dependem de informação que só a empresa tem.
 - Toda tela de faturamento mostra a conferência
   `faturamento fiscal = soma dos vendedores`, com a diferença exposta.
 
+### Devolução
+- Quem diz o que é devolução é a **natureza da operação** do relatório fiscal.
+  Sem essa coluna o app não adivinha: a nota entra como venda, e a tela de Notas
+  fiscais avisa que é por isso que a devolução pode estar somando no faturamento.
+- **Devolução de VENDA** sai do faturamento (valor negativo no mês da emissão) e
+  abate a comissão. **Devolução de COMPRA** não é nem venda nem anti-venda: fica
+  fora do faturamento, porque somá-la negativa inventaria um estorno de receita.
+- O dono de uma devolução é o dono da **nota original**, não de um pedido: mesmo
+  cliente, mesmo valor até o centavo, nota emitida antes, até seis meses atrás, e
+  só quando não há dúvida de vendedor. Ligar devolução a pedido daria o mesmo
+  vendedor por acaso, mas penduraria no pedido uma segunda nota que nunca existiu.
+- Devolução sem a venda original na base **vira pendência própria**, e o mês de
+  comissão não fecha enquanto existir uma sem dono.
+
 ### Vendedor
 - **O vendedor vem do relatório de comissão por venda**, que traz número do
   pedido, cliente e vendedor. É ele que faz a comissão fechar sozinha: o vendedor
@@ -245,6 +259,7 @@ respondidas, o app funciona — mas com a limitação anotada ao lado.
 | 5 | Quantos dias sem contato um título deve voltar para a fila de cobrança? | hoje são **3 dias** (`RECONTATO_DIAS` em `src/logic/collection.js`) |
 | 6 | A partir de que saldo o caixa é "atenção" e "crítico"? | Ajustes traz R$ 20.000 e R$ 0 como ponto de partida |
 | 7 | Quantos dias antes da emissão ainda vale procurar o pedido? | a janela começa em **90 dias** e é trocável na própria tela |
+| 8 | Qual o nome exato das colunas nos relatórios de **comissão por produto** e **produtos vendidos**? | as fontes existem e leem por sinônimo; com os arquivos de verdade em mãos elas ganham perfil de fábrica e deixam de pedir conferência |
 
 ### Já respondidas
 

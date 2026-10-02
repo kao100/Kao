@@ -49,7 +49,9 @@ export async function telaAjustes() {
               v.meta ? h('span', `meta ${money(v.meta)}`) : null,
               v.ativo === false && selo('inativo', 'ruim'))),
           botao('Editar', { pequeno: true, onClick: () => editarVendedor(v) }))))
-        : h('p.pequeno.muted', 'Nenhum vendedor ainda — eles aparecem sozinhos quando você importa os pedidos.')),
+        : h('p.pequeno.muted',
+          'Nenhum vendedor ainda. Eles aparecem sozinhos quando você manda o relatório de '
+          + 'comissão por venda — ou cadastre aqui, em "+ Novo", se quiser adiantar.')),
       aviso('Apelidos servem para o mesmo vendedor aparecer com nomes diferentes em arquivos diferentes '
         + '(ex.: "Eduardo" e "EDU"). Sem apelido, o app trata como duas pessoas — ele não junta por semelhança.', 'info')),
 

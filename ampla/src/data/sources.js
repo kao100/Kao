@@ -307,8 +307,23 @@ export const FONTES = {
     icone: '🎯',
     periodicidade: 'demanda',
     store: 'vendedores',
+    /**
+     * NÃO APARECE NA LISTA DE RELATÓRIOS A MANDAR.
+     *
+     * "Eu acho que pode ser muito mais de eu fazer um cadastro, colocar o nome do
+     *  vendedor, porque você mesmo já consegue identificar nos próprios relatórios
+     *  os nomes. Eu não preciso ficar mandando relatório de vendedor."
+     *
+     * Ela está certa, e já era quase verdade: o relatório de comissão por venda
+     * cria cada vendedor sozinho, pelo nome que vem nele. Mandar um arquivo só de
+     * vendedores era uma tarefa a mais sem nada em troca. A fonte continua
+     * existindo (o importador ainda funciona por URL, e o backup usa a store),
+     * mas sai da lista: o caminho é cadastrar em Ajustes, em dez segundos.
+     */
+    semImportacao: true,
     verdadeDe: 'Nome oficial, apelidos e meta de cada vendedor.',
-    descricao: 'Normalmente cadastrado dentro do app mesmo. A importação é só um atalho.',
+    descricao: 'Cadastre em Ajustes. Eles também aparecem sozinhos quando você manda o '
+      + 'relatório de comissão por venda — o app cria cada vendedor pelo nome que vem nele.',
     formatos: ['xlsx', 'csv'],
     campos: [
       campo('nome', 'Nome', 'texto', { chaveNatural: true, sinonimos: ['nome', 'vendedor', 'representante'] }),
@@ -341,6 +356,74 @@ export const FONTES = {
     ],
   },
 
+  /**
+   * OS DOIS RELATÓRIOS DE PRODUTO QUE ELA JÁ TEM.
+   *
+   * "Os relatórios que eu tenho de produto é relatório de comissão por produto,
+   *  onde aparece um valor total vendido, a quantidade vendida por vendedor. É
+   *  interessante, principalmente porque eu pago uma comissão diferente por
+   *  material: o cimento tem 0,5% e os demais 2%."
+   *
+   * "Outro relatório é os produtos vendidos, onde tem a coluna produto,
+   *  quantidade, custo médio, custo total, valor total e lucro."
+   *
+   * Nenhum dos dois traz o número da nota: são TOTAIS de um período, não itens de
+   * NF. Por isso vão para uma base própria, e a Curva ABC usa os itens das notas
+   * quando eles existem, ou estes quando não — nunca os dois somados, que
+   * contaria a mesma venda duas vezes.
+   */
+  comissaoProduto: {
+    id: 'comissaoProduto',
+    nome: 'Comissão por produto',
+    icone: '🏷️',
+    periodicidade: 'mensal',
+    store: 'vendasProduto',
+    verdadeDe: 'Quanto cada produto vendeu, por vendedor — a base da regra por material.',
+    descricao: 'Relatório de comissão por produto. É o que permite conferir a regra de 0,5% no '
+      + 'cimento contra os 2% dos demais, produto por produto, em vez de confiar na palavra '
+      + '"cimento" na descrição da nota.',
+    formatos: ['xlsx', 'csv', 'pdf'],
+    colunasReais: ['produto', 'quantidade', 'valor total', 'vendedor'],
+    campos: [
+      campo('descricao', 'Produto', 'texto', { chaveNatural: true, sinonimos: ['produto', 'descricao', 'nome', 'mercadoria', 'item'] }),
+      campo('produtoCodigo', 'Código', 'texto', { sinonimos: ['codigo', 'cod', 'cod interno', 'codigo interno', 'sku'] }),
+      campo('vendedorNome', 'Vendedor', 'texto', { chaveNatural: true, sinonimos: ['vendedor', 'representante', 'responsavel'] }),
+      campo('quantidade', 'Quantidade', 'numero', { sinonimos: ['quantidade', 'qtd', 'qtde', 'qtd vendida', 'quantidade vendida'] }),
+      campo('valorTotal', 'Valor total', 'dinheiro', { sinonimos: VALOR_TOTAL }),
+      campo('comissao', 'Comissão', 'dinheiro', { sinonimos: ['comissao', 'comissão', 'vl comissao'] }),
+      campo('data', 'Data', 'data', { sinonimos: ['data', 'periodo', 'mes', 'data emissao'] }),
+    ],
+    mesObrigatorio: true,
+    ajuda: 'Se o relatório não tiver coluna de data, escolha o mês na hora de importar — sem o mês '
+      + 'o app não sabe a que período os totais pertencem, e não inventa um.',
+  },
+
+  produtosVendidos: {
+    id: 'produtosVendidos',
+    nome: 'Produtos vendidos (com custo e lucro)',
+    icone: '📦',
+    periodicidade: 'mensal',
+    store: 'vendasProduto',
+    verdadeDe: 'Quantidade, custo e lucro de cada produto — a Curva ABC por margem.',
+    descricao: 'Relatório de produtos vendidos. Traz custo médio, custo total, valor total e lucro '
+      + 'por produto, que é exatamente o que falta para a Curva ABC por MARGEM sair sem estimativa.',
+    formatos: ['xlsx', 'csv', 'pdf'],
+    colunasReais: ['produto', 'quantidade', 'custo médio', 'custo total', 'valor total', 'lucro'],
+    campos: [
+      campo('descricao', 'Produto', 'texto', { chaveNatural: true, sinonimos: ['produto', 'descricao', 'nome', 'mercadoria', 'item'] }),
+      campo('produtoCodigo', 'Código', 'texto', { sinonimos: ['codigo', 'cod', 'cod interno', 'codigo interno', 'sku'] }),
+      campo('quantidade', 'Quantidade', 'numero', { sinonimos: ['quantidade', 'qtd', 'qtde', 'quantidade vendida'] }),
+      campo('custoUnitario', 'Custo médio', 'dinheiro', { sinonimos: ['custo medio', 'custo médio', 'custo unitario', 'custo unitário'] }),
+      campo('custoTotal', 'Custo total', 'dinheiro', { sinonimos: ['custo total', 'total custo', 'custo'] }),
+      campo('valorTotal', 'Valor total', 'dinheiro', { sinonimos: VALOR_TOTAL }),
+      campo('lucro', 'Lucro', 'dinheiro', { sinonimos: ['lucro', 'margem', 'resultado', 'lucro bruto'] }),
+      campo('data', 'Data', 'data', { sinonimos: ['data', 'periodo', 'mes'] }),
+    ],
+    mesObrigatorio: true,
+    ajuda: 'Este é o relatório que faz a Curva ABC por margem funcionar sem o app estimar nada: o '
+      + 'custo vem do seu sistema, não de uma conta minha.',
+  },
+
   saldos: {
     id: 'saldos',
     nome: 'Saldos bancários',
@@ -358,7 +441,11 @@ export const FONTES = {
   },
 };
 
-export const FONTES_LISTA = Object.values(FONTES);
+/** As fontes que a tela de relatórios mostra. Vendedor se cadastra, não se manda. */
+export const FONTES_LISTA = Object.values(FONTES).filter((f) => !f.semImportacao);
+
+/** Todas, inclusive as que não aparecem na lista — o importador e o backup usam. */
+export const FONTES_TODAS = Object.values(FONTES);
 
 /** Fontes que entram no checklist da rotina. */
 export function fontesDaRotina(periodicidade) {

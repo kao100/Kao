@@ -19,7 +19,7 @@ import { definirTitulo, seloDados, atualizarAlertas } from '../shell.js';
 import { kpi, card, secao, botao, aviso, selo } from '../components/ui.js';
 import { ok } from '../components/toast.js';
 import { formulario } from '../components/sheet.js';
-import { formatDate, timestampLabel, num, money } from '../../core/format.js';
+import { formatDate, timestampLabel, num, money, monthKey, today } from '../../core/format.js';
 import { cents, sum } from '../../core/util.js';
 
 /* ------------------------------------------------------- central de arquivos */
@@ -111,6 +111,8 @@ export async function telaImportar({ params }) {
     headerRow: 0,
     mapeamento: {},
     contaId: contas[0]?.id || null,
+    // relatório de total por período não traz data em toda linha: o mês é dela
+    mesReferencia: `${monthKey(today())}-01`,
     preparo: null,
     ocupado: false,
     aviso: null,
@@ -183,6 +185,20 @@ function passoArquivo(estado, ctx) {
       h('label', 'Este extrato é de qual banco?'),
       h('select.entrada', { onChange: (e) => { estado.contaId = e.target.value; } },
         ...contas.map((c) => h('option', { value: c.id }, c.nome)))),
+
+    /**
+     * Relatório de TOTAL por período (comissão por produto, produtos vendidos)
+     * pode não ter data em nenhuma linha. Sem mês, os totais não pertencem a
+     * período nenhum — e o app não escolhe um por ela. Então ela escolhe aqui, e
+     * o padrão é o mês corrente, que é o caso comum.
+     */
+    fonte.mesObrigatorio && h('div.campo',
+      h('label', 'Este relatório é de qual mês?'),
+      h('input.entrada', {
+        type: 'month', value: String(estado.mesReferencia).slice(0, 7),
+        onChange: (e) => { estado.mesReferencia = e.target.value ? `${e.target.value}-01` : null; },
+      }),
+      h('p.mini.muted', 'Se o arquivo tiver coluna de data, ela manda — isto é só para quando não tiver.')),
 
     zona,
 
@@ -258,6 +274,8 @@ async function carregar(arquivo, estado, ctx) {
           headerRow: conhecido.headerRow,
           mapeamento: estado.mapeamento,
           contaId: estado.contaId,
+      mesReferencia: estado.mesReferencia,
+          mesReferencia: estado.mesReferencia,
         });
         estado.passo = 'conferir';
         return;

@@ -21,24 +21,39 @@ export async function telaProdutos({ query }) {
   const por = query.g === 'categoria' ? 'categoria' : 'produto';
   const busca = lerFiltro(query);
   const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
-  const [resultado, vendedores] = await Promise.all([
+  const [resultado, vendedores, origem] = await Promise.all([
     abc.curva({ de: faixa.de, ate: faixa.ate, criterio, por }),
     store.vendedores.listar(),
+    abc.origemDosNumeros({ de: faixa.de, ate: faixa.ate }),
   ]);
   definirTitulo('Produtos', `${descrever(busca, { vendedores })} · ${abc.CRITERIOS[criterio].label}`);
 
   if (!resultado.linhas.length && !resultado.foraDaAnalise) {
     return h('div.empilha', { style: { gap: '14px' } },
       chipsPeriodo(busca, query),
-      vazio('📦', 'Sem itens no período',
-        'A curva ABC precisa dos itens das notas (XML das NF-e ou relatório de vendas por produto).',
-        botao('Importar itens', { tipo: 'primario', onClick: () => navigate('/arquivos/nfItens') })));
+      vazio('📦', 'Sem itens neste recorte',
+        'A curva ABC lê os itens das notas (XML das NF-e) ou, na falta deles, o relatório de '
+        + 'PRODUTOS VENDIDOS — que é o melhor dos dois para margem, porque traz o custo do seu sistema.',
+        botao('Mandar produtos vendidos', { tipo: 'primario', onClick: () => navigate('/arquivos/produtosVendidos') })));
   }
+
+  /**
+   * De onde o número veio. Importa dizer: o relatório agregado não tem cliente
+   * nem devolução por linha, então a leitura "por clientes" fica vazia de
+   * propósito — e silêncio sobre isso pareceria bug.
+   */
+  const avisoOrigem = origem.fonte === 'relatorio-agregado'
+    ? aviso('Estes números vêm do seu relatório de produtos (totais por período), não dos itens das '
+      + 'notas. O custo e o lucro são os do seu sistema — mas a leitura "por clientes" fica vazia, '
+      + 'porque o relatório não diz quem comprou cada produto.', 'info')
+    : null;
 
   const maiorValor = resultado.linhas[0]?.valorCriterio || 0;
 
   return h('div.empilha', { style: { gap: '14px' } },
     chipsPeriodo(busca, query),
+
+    avisoOrigem,
 
     chips(Object.entries(abc.CRITERIOS).map(([id, c]) => ({ id, label: c.label })), criterio,
       (id) => navigate(href('/produtos', { ...query, c: id }))),

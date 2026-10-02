@@ -142,9 +142,26 @@ três precisam chegar:
 
 | Relatório | O que SÓ ele traz |
 |---|---|
-| **Fiscal (NF-e)** | o faturamento de verdade: valor e data de emissão |
+| **Fiscal (NF-e)** | o faturamento de verdade: valor, data e **a natureza da operação**, que é o que separa venda de DEVOLUÇÃO |
 | **Pedidos de venda** | o custo — e portanto a margem |
 | **Comissão por venda** | **o vendedor** |
+
+E dois que valem a pena mandar uma vez por mês:
+
+| Relatório | Para que serve |
+|---|---|
+| **Produtos vendidos** | custo médio, custo total e lucro por produto — é o que faz a Curva ABC por MARGEM sair sem o app estimar nada |
+| **Comissão por produto** | quanto cada produto vendeu, por vendedor — confere a regra de 0,5% no cimento contra os 2% dos demais |
+
+Os dois vêm **agregados** (totais de um período, sem número de nota), então moram
+em base própria: a Curva ABC usa os itens das notas quando eles existem, ou estes
+quando não — nunca os dois somados, que contaria a mesma venda duas vezes. Se o
+relatório não trouxer data, você escolhe o mês na importação; o app não escolhe
+um por você.
+
+**Vendedor não é relatório.** Ele se cadastra em Ajustes, em dez segundos — e
+aparece sozinho quando você manda a comissão por venda, pelo nome que vem nela.
+Mandar um arquivo só de vendedores era uma tarefa a mais sem nada em troca.
 
 E um quarto liga tudo: o **contas a receber** traz a nota e o número do pedido
 na mesma linha.

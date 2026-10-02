@@ -35,6 +35,7 @@ const quotes = await import('../src/logic/quotes.js');
 const diario = await import('../src/logic/diario.js');
 const filtro = await import('../src/logic/filtro.js');
 const carteiraMod = await import('../src/logic/carteira.js');
+const abcMod = await import('../src/logic/abc.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -1259,6 +1260,93 @@ console.log('\n▶ Carteira de clientes: quem compra, quem parou, quem orça e n
     await store.orcamentos.remover(o.id);
   }
   await link.recalcular();
+}
+
+console.log('\n▶ Os dois relatórios de produto: total por período, não item de nota');
+{
+  /**
+   * "Os relatórios que eu tenho de produto é relatório de comissão por produto,
+   *  onde aparece um valor total vendido, a quantidade vendida por vendedor. (…)
+   *  Outro relatório é os produtos vendidos, com produto, quantidade, custo
+   *  médio, custo total, valor total e lucro."
+   *
+   * Nenhum traz o número da nota: são TOTAIS de um período. Somá-los junto com os
+   * itens das notas contaria a mesma venda duas vezes, então a curva usa um OU
+   * outro, e o item da nota manda quando existe.
+   */
+  const PV = 'Produto;Código;Quantidade;Custo médio;Custo total;Valor total;Lucro';
+  const CP = 'Produto;Código;Vendedor;Quantidade;Valor total;Comissão';
+
+  await importar('produtosVendidos', 'pv.csv', `${PV}
+CIMENTO CP II 50KG;CIM50;400;32,00;12.800,00;20.000,00;7.200,00
+AREIA MEDIA M3;ARE01;100;60,00;6.000,00;9.000,00;3.000,00`, { mesReferencia: '2026-04-01' });
+
+  const linhas = (await store.vendasProduto.listar()).filter((l) => l.mes === '2026-04');
+  igual('as duas linhas entraram', linhas.length, 2);
+  const cimento = linhas.find((l) => /CIMENTO/.test(l.descricao || ''));
+  igual('com o custo total do arquivo', cimento.custoTotal, 12800);
+  igual('e o lucro do arquivo', cimento.lucro, 7200);
+  igual('e o mês escolhido na importação', cimento.mes, '2026-04');
+  ok('e o produto ganhou o custo médio no cadastro',
+    (await store.produtos.listar()).some((p) => p.codigo === 'CIM50' && p.custo === 32), '');
+
+  // reimportar ATUALIZA, não soma de novo
+  await importar('produtosVendidos', 'pv.csv', `${PV}
+CIMENTO CP II 50KG;CIM50;400;32,00;12.800,00;20.000,00;7.200,00
+AREIA MEDIA M3;ARE01;100;60,00;6.000,00;9.000,00;3.000,00`, { mesReferencia: '2026-04-01' });
+  igual('reimportar não duplica',
+    (await store.vendasProduto.listar()).filter((l) => l.mes === '2026-04').length, 2);
+
+  // a curva ABC usa o relatório quando não há item de nota no período
+  const origem = await abcMod.origemDosNumeros({ de: '2026-04-01', ate: '2026-04-30' });
+  igual('a curva lê o relatório agregado quando não há item de nota', origem.fonte, 'relatorio-agregado');
+  const curva = await abcMod.curva({ de: '2026-04-01', ate: '2026-04-30', criterio: 'faturamento' });
+  igual('e o faturamento é a soma do arquivo', curva.total, 29000);
+  igual('com o cimento na frente', curva.linhas[0].descricao, 'CIMENTO CP II 50KG');
+  const margem = await abcMod.curva({ de: '2026-04-01', ate: '2026-04-30', criterio: 'margem' });
+  igual('a margem sai sem estimativa, direto do custo do arquivo', margem.total, 10200);
+
+  // comissão por produto: o mesmo produto por dois vendedores
+  await importar('comissaoProduto', 'cp.csv', `${CP}
+CIMENTO CP II 50KG;CIM50;Ana;300;15.000,00;75,00
+CIMENTO CP II 50KG;CIM50;Bruno;100;5.000,00;25,00`, { mesReferencia: '2026-05-01' });
+  const maio = (await store.vendasProduto.listar()).filter((l) => l.mes === '2026-05');
+  igual('cada vendedor é uma linha', maio.length, 2);
+  igual('com a comissão que o sistema calculou',
+    maio.reduce((a, l) => a + (l.comissaoRelatorio || 0), 0), 100);
+
+  // o item da nota manda quando existe: o agregado não é somado em cima
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  const ITENS = 'Nota fiscal;Código do produto;Produto;Quantidade;Valor total';
+  await importar('nfs', 'pvn.csv', `${FISC}
+9601;10/04/2026;Cliente Curva Ltda;99999999000199;1.000,00;Autorizada;Venda de mercadoria`);
+  await importar('nfItens', 'pvi.csv', `${ITENS}
+9601;CIM50;CIMENTO CP II 50KG;20;1.000,00`);
+  const origem2 = await abcMod.origemDosNumeros({ de: '2026-04-01', ate: '2026-04-30' });
+  igual('com item de nota na base, a curva passa a ler o item', origem2.fonte, 'itens-da-nota');
+  const curva2 = await abcMod.curva({ de: '2026-04-01', ate: '2026-04-30', criterio: 'faturamento' });
+  igual('e NÃO soma os dois: só o item da nota', curva2.total, 1000);
+
+  // limpeza
+  for (const l of (await store.vendasProduto.listar())) await store.vendasProduto.remover(l.id);
+  for (const i of (await store.nfItens.listar()).filter((x) => x.nfNumero === '9601')) await store.nfItens.remover(i.id);
+  const nf = (await store.nfs.listar()).find((x) => x.numero === '9601');
+  if (nf) await store.nfs.remover(nf.id);
+  for (const p of (await store.produtos.listar()).filter((x) => ['CIM50', 'ARE01'].includes(x.codigo))) {
+    await store.produtos.remover(p.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ Vendedor se cadastra, não se manda por relatório');
+{
+  const { FONTES_LISTA, FONTES } = await import('../src/data/sources.js');
+  ok('a fonte "vendedores" sai da lista de relatórios a mandar',
+    !FONTES_LISTA.some((f) => f.id === 'vendedores'),
+    FONTES_LISTA.map((f) => f.id).join(','));
+  ok('mas continua existindo, para o importador e o backup', !!FONTES.vendedores, '');
+  ok('e os dois relatórios de produto entraram na lista',
+    FONTES_LISTA.some((f) => f.id === 'comissaoProduto') && FONTES_LISTA.some((f) => f.id === 'produtosVendidos'), '');
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

@@ -24,14 +24,92 @@ export function classe(acumuladoPercentual) {
   return 'C';
 }
 
+/**
+ * DUAS FONTES POSSÍVEIS, NUNCA AS DUAS SOMADAS.
+ *
+ * O ideal é o item da nota: ele tem cliente, data e devolução, então dá as quatro
+ * leituras da curva. Mas o sistema dela só exporta isso em XML, e ela tem dois
+ * relatórios AGREGADOS que servem: "produtos vendidos" (com custo e lucro) e
+ * "comissão por produto".
+ *
+ * A regra é dura, porque somar os dois contaria a mesma venda duas vezes: se
+ * existe item de nota no período, manda o item de nota. Só quando não existe
+ * nenhum é que o relatório agregado entra — e a tela diz de onde veio o número.
+ */
 async function itensDoPeriodo(de, ate) {
   const [itens, nfs] = await Promise.all([store.nfItens.listar(), store.nfs.listar()]);
   const validas = new Map(nfs
     .filter((nf) => nf.status === 'autorizada' && nf.operacao !== 'entrada' && nf.dataEmissao >= de && nf.dataEmissao <= ate)
     .map((nf) => [nf.id, nf]));
-  return itens
+  const daNota = itens
     .filter((i) => validas.has(i.nfId))
     .map((i) => ({ ...i, nf: validas.get(i.nfId), sinal: validas.get(i.nfId).devolucao ? -1 : 1 }));
+  if (daNota.length) return daNota;
+  return itensDeRelatorioAgregado(de, ate);
+}
+
+/**
+ * As linhas dos relatórios agregados, no mesmo formato que a curva espera.
+ *
+ * O que elas NÃO têm, e o app não finge que têm: cliente (então a leitura "por
+ * clientes" fica zerada) e devolução (o sinal é sempre positivo, porque esses
+ * relatórios já saem líquidos do sistema dela).
+ *
+ * Quando o mesmo produto vem nos dois relatórios no mesmo mês, vale o de
+ * "produtos vendidos": é o que traz custo, e custo é o que falta.
+ */
+async function itensDeRelatorioAgregado(de, ate) {
+  const linhas = (await store.vendasProduto.listar())
+    .filter((l) => l.data && l.data >= de && l.data <= ate);
+  if (!linhas.length) return [];
+
+  const melhor = new Map();
+  for (const l of linhas) {
+    const chave = `${l.mes}|${l.produtoId}`;
+    const atual = melhor.get(chave);
+    const ganha = !atual
+      || (l.origemRelatorio === 'produtosVendidos' && atual.origemRelatorio !== 'produtosVendidos');
+    if (ganha) melhor.set(chave, l);
+    else if (atual && l.origemRelatorio === atual.origemRelatorio) {
+      // mesmo relatório, mesmo mês, mesmo produto, vendedores diferentes: soma
+      melhor.set(chave, {
+        ...atual,
+        quantidade: (atual.quantidade || 0) + (l.quantidade || 0),
+        valorTotal: (atual.valorTotal || 0) + (l.valorTotal || 0),
+        custoTotal: atual.custoTotal == null && l.custoTotal == null
+          ? null : (atual.custoTotal || 0) + (l.custoTotal || 0),
+      });
+    }
+  }
+
+  return [...melhor.values()].map((l) => ({
+    nfId: null,
+    produtoId: l.produtoId,
+    produtoCodigo: l.produtoCodigo,
+    descricao: l.descricao,
+    unidade: null,
+    quantidade: l.quantidade,
+    valorTotal: l.valorTotal,
+    custoTotal: l.custoTotal,
+    custoUnitario: l.custoUnitario,
+    data: l.data,
+    mes: l.mes,
+    // sem cliente na linha, a leitura "por clientes" fica honestamente vazia
+    clienteId: null,
+    nf: { dataEmissao: l.data, mes: l.mes, devolucao: false, clienteId: null },
+    sinal: 1,
+    deRelatorioAgregado: true,
+  }));
+}
+
+/** De onde o número da curva veio, para a tela poder dizer. */
+export async function origemDosNumeros({ de, ate }) {
+  const itens = await itensDoPeriodo(de, ate);
+  if (!itens.length) return { fonte: 'nenhuma', itens: 0 };
+  return {
+    fonte: itens[0].deRelatorioAgregado ? 'relatorio-agregado' : 'itens-da-nota',
+    itens: itens.length,
+  };
 }
 
 /** Agrupa por produto (ou por categoria) somando tudo que importa. */

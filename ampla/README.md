@@ -127,6 +127,18 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   qual ponte, ou de uma decisão sua.
 - **Comissão de fábrica:** 2% padrão e 0,5% no cimento (pela palavra na
   descrição, já que categoria pode não vir no arquivo). Tudo editável.
+- **Devolução abate a comissão de quem vendeu**, no mês em que ela acontece —
+  mesmo que a venda tenha sido em outro mês e a comissão já tenha sido paga. Quem
+  diz o que é devolução é a coluna NATUREZA DA OPERAÇÃO do relatório fiscal: sem
+  ela, a devolução entra como faturamento e ainda gera comissão. "Devolução de
+  venda" e "devolução de compra" não são a mesma coisa, e o app separa as duas.
+- **Busca avançada em toda tela de consulta:** a data é DIGITADA (de e até), mais
+  vendedor, cliente ou fornecedor, situação e busca livre por nome, número ou
+  documento. O recorte corta a base antes dos números do topo, então KPI, chips e
+  tabela falam todos do mesmo recorte. Tudo mora na URL — dá para mandar o link.
+- **Carteira de clientes:** quanto cada um comprou, quanto orçou, quem PAROU de
+  comprar, quem orça e não fecha, e com qual vendedor comprou — inclusive quando
+  comprou de mais de um, que é a carteira dividida aparecendo.
 - **Conferência que nunca some:** faturamento fiscal = soma dos vendedores. A
   diferença aparece; o fechamento de comissão fica travado enquanto existir.
 - **Conversão de orçamento é a do seu sistema:** vem da coluna SITUAÇÃO do

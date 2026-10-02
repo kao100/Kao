@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'ampla-admin';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const STORES = {
   /** configurações, metas, preferências, marcos de atualização */
@@ -47,6 +47,20 @@ export const STORES = {
   comissoesRelatorio: {
     keyPath: 'id',
     indexes: [['byNumero', 'numero'], ['byVendedor', 'vendedorNome'], ['byMes', 'mes']],
+  },
+
+  /**
+   * Relatórios de produto que vêm AGREGADOS, não item a item.
+   *
+   * Ela tem dois: "comissão por produto" (produto, quantidade, valor, vendedor) e
+   * "produtos vendidos" (produto, quantidade, custo médio, custo total, valor,
+   * lucro). Nenhum traz o número da nota, então eles não são itens de NF — são
+   * totais de um período. Guardar junto com nfItens somaria a mesma venda duas
+   * vezes, então moram aqui, separados, e a Curva ABC usa um OU outro.
+   */
+  vendasProduto: {
+    keyPath: 'id',
+    indexes: [['byProduto', 'produtoId'], ['byMes', 'mes'], ['byVendedor', 'vendedorNome']],
   },
 
   vendedores: { keyPath: 'id', indexes: [] },

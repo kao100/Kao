@@ -178,7 +178,7 @@ export function lerParaTeste(fonteId, registro, mapeamento) {
  * Dry-run: monta os registros e diz o que vai acontecer, sem gravar nada.
  * A gravação só acontece em confirmar().
  */
-export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, headerRow = 0, mapeamento, contaId = null }) {
+export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, headerRow = 0, mapeamento, contaId = null, mesReferencia = null }) {
   const fonte = FONTES[fonteId];
   if (!fonte) throw new Error(`Fonte desconhecida: ${fonteId}`);
 
@@ -200,7 +200,7 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
     }
     try {
       const construidos = await construir(fonteId, dados, {
-        contexto, contaId, usados, linha: registro.__linha, bruto: registro,
+        contexto, contaId, mesReferencia, usados, linha: registro.__linha, bruto: registro,
       });
       for (const item of construidos) empilhar(saida, item);
     } catch (err) {
@@ -392,6 +392,7 @@ export async function prepararOfx({ leitura, contaId }) {
 async function construir(fonteId, d, ctx) {
   if (fonteId === 'nfs') return construirNf(d, ctx);
   if (fonteId === 'nfItens') return construirItem(d, ctx);
+  if (fonteId === 'comissaoProduto' || fonteId === 'produtosVendidos') return construirVendaProduto(d, ctx, fonteId);
   if (fonteId === 'pedidos') return construirPedido(d, ctx);
   if (fonteId === 'orcamentos') return construirOrcamento(d, ctx);
   if (fonteId === 'comissoes') return construirComissao(d, ctx);
@@ -442,6 +443,65 @@ function construirNf(d, ctx) {
   }];
   if (cliente) saida.push({ store: 'clientes', registro: cliente });
   return saida;
+}
+
+/**
+ * Linha de um relatório de produto AGREGADO (comissão por produto, produtos
+ * vendidos). Não é item de nota: é o total de um produto num período.
+ *
+ * A chave natural é produto + vendedor + mês. Reimportar o mesmo relatório
+ * ATUALIZA a linha em vez de somar de novo — é a mesma regra de todo o resto do
+ * app, e é o que faz o reenvio diário não inflar número nenhum.
+ *
+ * Sem mês não há chave: o registro entra com a data que vier e, se não vier
+ * nenhuma, usa o mês escolhido na importação. O app não escolhe um por ela.
+ */
+function construirVendaProduto(d, ctx, fonteId) {
+  const produtoId = store.idProduto({ codigo: d.produtoCodigo, descricao: d.descricao });
+  const data = d.data || ctx.mesReferencia || null;
+  const mes = data ? monthKey(data) : null;
+  const vendedor = d.vendedorNome ? chaveTexto(d.vendedorNome) : 'todos';
+  const custoTotal = d.custoTotal != null ? cents(d.custoTotal)
+    : (d.custoUnitario != null && d.quantidade != null ? cents(d.custoUnitario * d.quantidade) : null);
+  const valorTotal = d.valorTotal == null ? null : cents(d.valorTotal);
+  // lucro vem do relatório quando existe; na falta dele, valor − custo, que é
+  // subtração do que o arquivo trouxe, não estimativa
+  const lucro = d.lucro != null ? cents(d.lucro)
+    : (valorTotal != null && custoTotal != null ? cents(valorTotal - custoTotal) : null);
+
+  return [
+    {
+      store: 'vendasProduto',
+      registro: {
+        id: `vp_${mes || 'sem'}_${vendedor}_${produtoId}`,
+        origemRelatorio: fonteId,
+        produtoId,
+        produtoCodigo: d.produtoCodigo || null,
+        descricao: d.descricao || null,
+        vendedorNome: d.vendedorNome || null,
+        quantidade: d.quantidade ?? null,
+        valorTotal,
+        custoUnitario: d.custoUnitario ?? null,
+        custoTotal,
+        lucro,
+        comissaoRelatorio: d.comissao == null ? null : cents(d.comissao),
+        data,
+        mes,
+        origem: 'relatorio',
+      },
+    },
+    // o produto do cadastro ganha o custo que veio aqui, se ainda não tinha
+    d.descricao || d.produtoCodigo ? {
+      store: 'produtos',
+      registro: {
+        id: produtoId,
+        codigo: d.produtoCodigo || null,
+        descricao: d.descricao || null,
+        custo: d.custoUnitario ?? null,
+        origem: 'relatorio-vendas',
+      },
+    } : null,
+  ].filter(Boolean);
 }
 
 function construirItem(d, ctx) {
