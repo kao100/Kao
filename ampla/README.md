@@ -136,6 +136,14 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   vendedor, cliente ou fornecedor, situação e busca livre por nome, número ou
   documento. O recorte corta a base antes dos números do topo, então KPI, chips e
   tabela falam todos do mesmo recorte. Tudo mora na URL — dá para mandar o link.
+- **XML da NF-e entra pelo mesmo lugar do relatório fiscal** (um arquivo ou um
+  .zip com o mês). É a melhor fonte que o app tem: traz o frete cobrado, a
+  natureza da operação (devolução) e os itens de cada nota — frete por vendedor,
+  devolução e curva ABC deixam de depender de qualquer relatório.
+- **Dois cadastros para a mesma pessoa** ("EDUARDO" e "CARLOS EDUARDO APARECIDO
+  DO NASCIMENTO") o app detecta e PERGUNTA — nunca junta por semelhança. Quando
+  há vários pares, um botão junta todos de uma vez, mantendo o nome curto, que é
+  o que já carrega o faturamento.
 - **Carteira de clientes:** quanto cada um comprou, quanto orçou, quem PAROU de
   comprar, quem orça e não fecha, e com qual vendedor comprou — inclusive quando
   comprou de mais de um, que é a carteira dividida aparecendo.

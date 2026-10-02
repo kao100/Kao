@@ -17,8 +17,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { instalar } from './fake-idb.mjs';
+import { instalar as instalarDom } from './fake-dom.mjs';
 
 instalar();
+instalarDom();
 Object.defineProperty(globalThis, 'navigator', { value: { storage: {} }, configurable: true });
 
 const store = await import('../src/core/store.js');
@@ -1471,6 +1473,126 @@ console.log('\n▶ Mesmo vendedor com dois nomes: o app pergunta, não junta soz
     const x = (await store.vendedores.listar()).find((y) => y.id === v.id);
     if (x) await store.vendedores.remover(x.id);
   }
+  await link.recalcular();
+
+  // e quando são vários pares de uma vez: o nome CURTO fica em todos
+  const antes = (await store.vendedores.listar()).map((v) => v.id);
+  const a1 = await store.vendedores.salvar({ nome: 'TULIO', apelidos: [], ativo: true });
+  const a2 = await store.vendedores.salvar({ nome: 'TULIO BARROS DE SA', apelidos: [], ativo: true });
+  const b1 = await store.vendedores.salvar({ nome: 'IVONE', apelidos: [], ativo: true });
+  const b2 = await store.vendedores.salvar({ nome: 'IVONE PEREIRA LOPES', apelidos: [], ativo: true });
+
+  const feitos = await link.juntarTodosOsPares('teste em lote');
+  igual('junta os dois pares de uma vez', feitos.length, 2);
+  const restantes = await store.vendedores.listar();
+  igual('o nome curto é o que fica',
+    restantes.filter((v) => ['TULIO', 'IVONE'].includes(v.nome)).length, 2);
+  igual('e o completo some como cadastro',
+    restantes.filter((v) => [a2.id, b2.id].includes(v.id)).length, 0);
+  ok('virando apelido do que ficou',
+    restantes.find((v) => v.nome === 'TULIO').apelidos.includes('TULIO BARROS DE SA'), '');
+
+  for (const v of restantes) if (!antes.includes(v.id)) await store.vendedores.remover(v.id);
+  await link.recalcular();
+}
+
+console.log('\n▶ XML da NF-e: traz frete, devolução e os itens com custo');
+{
+  /**
+   * "Eu acho que eu mandando o XML das notas resolve 100%. Adicione um campo
+   *  para eu poder colocar o XML também."
+   *
+   * O XML é a melhor fonte que existe para este app, e por três motivos que
+   * nenhum relatório dela cobre juntos:
+   *   • vFrete  → o frete cobrado, por nota e por vendedor
+   *   • natOp / finNFe → o que é devolução, sem depender de coluna nenhuma
+   *   • det/prod → os itens, com quantidade e valor, que fazem a curva ABC
+   *
+   * A nota deste teste é inventada: CNPJ, cliente e produtos não existem.
+   */
+  const { readFile } = await import('../src/core/files/read.js');
+
+  const nfe = (numero, { natOp, finNFe, tpNF = '1', vFrete = '0.00', vNF, itens }) => `<?xml version="1.0"?>
+<nfeProc><NFe><infNFe Id="NFe3526${numero}0000000000000000000000000000000000">
+<ide><nNF>${numero}</nNF><serie>1</serie><mod>55</mod><dhEmi>2027-08-12T10:00:00-03:00</dhEmi>
+<natOp>${natOp}</natOp><tpNF>${tpNF}</tpNF><finNFe>${finNFe}</finNFe></ide>
+<emit><CNPJ>00000000000191</CNPJ><xNome>AMPLA TESTE</xNome></emit>
+<dest><CNPJ>11111111000191</CNPJ><xNome>CLIENTE DE TESTE LTDA</xNome><xMun>SAO PAULO</xMun><UF>SP</UF></dest>
+${itens}
+<total><ICMSTot><vProd>${vNF}</vProd><vFrete>${vFrete}</vFrete><vDesc>0.00</vDesc><vNF>${vNF}</vNF></ICMSTot></total>
+</infNFe></NFe></nfeProc>`;
+
+  const item = (seq, cod, nome, qtd, unit, total) => `<det nItem="${seq}"><prod><cProd>${cod}</cProd>
+<xProd>${nome}</xProd><NCM>25232910</NCM><CFOP>5102</CFOP><uCom>UN</uCom>
+<qCom>${qtd}</qCom><vUnCom>${unit}</vUnCom><vProd>${total}</vProd></prod></det>`;
+
+  const importarXml = async (nome, texto) => {
+    const leitura = await readFile(new File([texto], nome, { type: 'text/xml' }));
+    const preparo = await ingest.prepararNfe({ leitura });
+    await ingest.confirmar(preparo);
+    return preparo;
+  };
+
+  await importarXml('venda.xml', nfe('9801', {
+    natOp: 'VENDA DE MERCADORIA', finNFe: '1', vFrete: '150.00', vNF: '1000.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '20.0000', '50.0000', '1000.00'),
+  }));
+  await link.recalcular();
+
+  const nota = (await store.nfs.listar()).find((n) => n.numero === '9801');
+  ok('a nota do XML entrou', !!nota, '');
+  igual('com o frete que nenhum relatório traz', nota.valorFrete, 150);
+  igual('e a natureza da operação', nota.naturezaOperacao, 'VENDA DE MERCADORIA');
+  igual('não é devolução', nota.devolucao, false);
+  igual('é saída', nota.operacao, 'saida');
+
+  const itens = (await store.nfItens.listar()).filter((i) => i.nfNumero === '9801');
+  igual('e o item veio junto', itens.length, 1);
+  igual('com quantidade', itens[0].quantidade, 20);
+  igual('e valor', itens[0].valorTotal, 1000);
+
+  // devolução de VENDA: finNFe 4 e natureza de devolução
+  await importarXml('devolucao.xml', nfe('9802', {
+    natOp: 'DEVOLUCAO DE VENDA', finNFe: '4', vNF: '1000.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '20.0000', '50.0000', '1000.00'),
+  }));
+  await link.recalcular();
+  const dev = (await store.nfs.listar()).find((n) => n.numero === '9802');
+  igual('devolução de venda é devolução', dev.devolucao, true);
+
+  // devolução de COMPRA: finNFe 4 também, mas não é anti-venda
+  await importarXml('devcompra.xml', nfe('9803', {
+    natOp: 'DEVOLUCAO DE COMPRA', finNFe: '4', vNF: '500.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '10.0000', '50.0000', '500.00'),
+  }));
+  await link.recalcular();
+  const devCompra = (await store.nfs.listar()).find((n) => n.numero === '9803');
+  igual('devolução de COMPRA não vira faturamento negativo', devCompra.devolucao, false);
+  ok('e fica marcada à parte', devCompra.devolucaoDeCompra === true, '');
+
+  // o frete do XML alimenta a tela de frete por vendedor
+  const fr = await margemMod.frete({ de: '2027-08-01', ate: '2027-08-31' });
+  ok('o frete do XML aparece na tela de frete', fr.temDado, '');
+  igual('com o valor da nota', fr.total, 150);
+
+  // reimportar o mesmo XML não duplica
+  await importarXml('venda.xml', nfe('9801', {
+    natOp: 'VENDA DE MERCADORIA', finNFe: '1', vFrete: '150.00', vNF: '1000.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '20.0000', '50.0000', '1000.00'),
+  }));
+  igual('reimportar o mesmo XML não duplica',
+    (await store.nfs.listar()).filter((n) => n.numero === '9801').length, 1);
+
+  // limpeza
+  for (const n of ['9801', '9802', '9803']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  for (const i of (await store.nfItens.listar()).filter((x) => /980/.test(x.nfNumero || ''))) {
+    await store.nfItens.remover(i.id);
+  }
+  const prod = (await store.produtos.listar()).find((x) => x.codigo === 'CIM-XML');
+  if (prod) await store.produtos.remover(prod.id);
   await link.recalcular();
 }
 

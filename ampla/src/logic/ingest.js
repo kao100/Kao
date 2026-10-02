@@ -275,8 +275,17 @@ export async function prepararNfe({ leitura }) {
         valorFrete: nota.valorFrete == null ? null : cents(nota.valorFrete),
         valorDesconto: nota.valorDesconto == null ? null : cents(nota.valorDesconto),
         operacao: nota.operacao,
-        devolucao: nota.finalidade === '4',
-        naturezaOperacao: nota.naturezaOperacao,
+        /**
+         * No XML a devolução tem DUAS provas, e as duas valem:
+         *  • finNFe = 4 é o campo oficial da finalidade;
+         *  • a natureza da operação separa devolução de VENDA (o cliente
+         *    devolveu) de devolução de COMPRA (a AMPLA devolveu ao fornecedor),
+         *    que o campo finNFe sozinho não distingue.
+         */
+        ...classificarNatureza(nota.naturezaOperacao),
+        devolucao: nota.finalidade === '4'
+          ? !classificarNatureza(nota.naturezaOperacao).devolucaoDeCompra
+          : classificarNatureza(nota.naturezaOperacao).devolucao,
         pedidoNumero: docNumber(nota.itens.find((i) => i.pedidoXml)?.pedidoXml || '') || null,
         pedidoOrigem: nota.itens.some((i) => i.pedidoXml) ? 'xml' : null,
         vendedorNome: null,

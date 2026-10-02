@@ -1264,6 +1264,30 @@ export function vendedoresParecidos(vendedores) {
 }
 
 /**
+ * Junta TODOS os pares de uma vez, mantendo o nome CURTO.
+ *
+ * Quando ela já olhou a lista e disse "são as mesmas pessoas, só que com o nome
+ * completo", pedir quatro confirmações iguais é só atrito. O nome que fica é o
+ * curto de propósito: é o que ela usa, é o que já carrega o faturamento e é o
+ * que vai sair no relatório de comissão.
+ *
+ * Continua sendo decisão dela: este caminho só existe atrás de um botão que diz
+ * exatamente quais pares vai juntar.
+ */
+export async function juntarTodosOsPares(motivo) {
+  const pares = vendedoresParecidos(await store.vendedores.listar());
+  const feitos = [];
+  for (const par of pares) {
+    // a lista é recalculada a cada volta porque juntar um par pode desfazer outro
+    const aindaExistem = await store.vendedores.listar();
+    if (!aindaExistem.some((v) => v.id === par.curto.id) || !aindaExistem.some((v) => v.id === par.longo.id)) continue;
+    const r = await juntarVendedores(par.curto.id, par.longo.id, motivo || 'juntados de uma vez');
+    feitos.push({ fica: par.curto.nome, sai: par.longo.nome, ...r });
+  }
+  return feitos;
+}
+
+/**
  * Junta dois cadastros: o nome do outro vira apelido, e tudo que apontava para
  * ele passa a apontar para o que fica. Decisão dela, registrada.
  */

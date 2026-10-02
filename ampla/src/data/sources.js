@@ -39,13 +39,28 @@ export const FONTES = {
   /* ------------------------------------------------------------------ fiscal */
   nfs: {
     id: 'nfs',
-    nome: 'Notas fiscais (relatório fiscal)',
+    nome: 'Notas fiscais — relatório ou XML',
     icone: '🧾',
     periodicidade: 'diaria',
     store: 'nfs',
-    verdadeDe: 'Faturamento oficial: valor e data de emissão.',
-    descricao: 'Relatório fiscal de notas emitidas. É a base do faturamento — '
-      + 'o mês da venda é o mês da NOTA, não o do pedido.',
+    verdadeDe: 'Faturamento oficial: valor, data de emissão, natureza da operação e frete.',
+    descricao: 'Relatório fiscal de notas emitidas, OU o XML das NF-e (um arquivo ou um .zip com '
+      + 'vários). É a base do faturamento — o mês da venda é o mês da NOTA, não o do pedido.',
+    /**
+     * O XML é a melhor fonte que este app tem, e é importante dizer isso onde ela
+     * vai ler: ele traz três coisas que nenhum relatório dela traz juntas — o
+     * FRETE cobrado, a NATUREZA DA OPERAÇÃO (o que separa venda de devolução) e
+     * os ITENS de cada nota, que é o que faz a curva ABC e a margem por produto
+     * saírem sem depender de relatório nenhum.
+     */
+    destaque: {
+      titulo: 'Tem o XML das notas? Mande ele.',
+      texto: 'Um arquivo .xml, ou um .zip com o mês inteiro. O XML traz três coisas que nenhum '
+        + 'relatório traz juntas: o FRETE cobrado em cada nota, a NATUREZA DA OPERAÇÃO (que separa '
+        + 'venda de devolução sem depender de coluna nenhuma) e os ITENS de cada nota, com produto, '
+        + 'quantidade e valor. Com ele, frete por vendedor, devolução e curva ABC param de depender '
+        + 'de qualquer relatório — e nada precisa ser ligado à mão.',
+    },
     formatos: ['xlsx', 'csv', 'pdf', 'xml', 'zip'],
     colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação',
       'natureza da operação'],

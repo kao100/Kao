@@ -181,6 +181,13 @@ function passoArquivo(estado, ctx) {
         'Colunas que o app aproveita: ', h('strong', fonte.colunasReais.join(' · '))),
       h('p.mini.muted', { style: { marginTop: '6px' } }, `Fonte da verdade para: ${fonte.verdadeDe}`)),
 
+    // o XML das NF-e merece ser dito em voz alta: é a melhor fonte que existe
+    // aqui, e estava escondida atrás de "formatos aceitos"
+    fonte.destaque && h('div.aviso.aviso--ok',
+      h('div.crescer',
+        h('strong', fonte.destaque.titulo),
+        h('div.mini', { style: { marginTop: '3px' } }, fonte.destaque.texto))),
+
     fonte.contaObrigatoria && contas.length > 0 && h('div.campo',
       h('label', 'Este extrato é de qual banco?'),
       h('select.entrada', { onChange: (e) => { estado.contaId = e.target.value; } },

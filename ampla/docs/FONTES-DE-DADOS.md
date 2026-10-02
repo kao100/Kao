@@ -165,10 +165,25 @@ diferença. O custo fecha com R$ 6.187,77 a menos, porque 27 linhas vendidas por
 alguém não aparecem no relatório de custo — a tela mostra essa diferença em vez
 de escondê-la, porque ela faz as margens saírem um pouco MAIORES que a realidade.
 
-**Frete** não está em nenhum dos dois, nem no relatório fiscal de hoje. O campo
-existe no app e é reconhecido sozinho se um dia a coluna vier (ou pelos XMLs das
-NF-e); até lá a tela diz que não sabe, em vez de mostrar R$ 0,00 — que seria
-outra coisa.
+### O XML da NF-e é a melhor fonte que este app tem
+
+Vai no mesmo lugar do relatório fiscal: **Notas fiscais — relatório ou XML**. Um
+arquivo `.xml` ou um `.zip` com o mês inteiro.
+
+Ele traz três coisas que nenhum relatório traz juntas:
+
+| Campo do XML | O que destrava |
+|---|---|
+| `vFrete` | **frete cobrado**, por nota e por vendedor — hoje nenhum relatório traz |
+| `natOp` + `finNFe` | **devolução**, sem depender de coluna nenhuma, e separando devolução de venda da de compra |
+| `det/prod` | os **itens** de cada nota: produto, quantidade e valor — curva ABC e margem sem depender de relatório |
+
+Com o XML, frete, devolução e curva ABC param de depender de qualquer relatório,
+e nada precisa ser ligado à mão: o layout é fixo e o app já o conhece.
+
+Sem ele, **frete** continua sem resposta: o campo existe e é reconhecido sozinho
+se a coluna vier num export, mas até lá a tela diz que não sabe, em vez de mostrar
+R$ 0,00 — que seria outra coisa.
 
 Os dois vêm **agregados** (totais de um período, sem número de nota), então moram
 em base própria: a Curva ABC usa os itens das notas quando eles existem, ou estes

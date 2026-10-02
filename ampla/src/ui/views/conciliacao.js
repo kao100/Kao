@@ -8,7 +8,7 @@ import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import {
   TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
-  juntarVendedores,
+  juntarVendedores, juntarTodosOsPares, vendedoresParecidos,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -65,8 +65,23 @@ export async function telaConciliacao({ query }) {
       }));
   }
 
+  /**
+   * Quando há VÁRIOS pares de cadastro duplicado, resolver um por um é quatro
+   * vezes a mesma pergunta. O botão diz exatamente quais pares vai juntar, e o
+   * nome que fica é sempre o CURTO — é o que ela usa e o que já carrega o
+   * faturamento. Continua sendo escolha dela: nada acontece sem o toque.
+   */
+  const pares = vendedoresParecidos(vendedores);
+
   return h('div.empilha', { style: { gap: '14px' } },
     cabecalho,
+
+    pares.length > 1 && card(`${pares.length} cadastros parecem ser a mesma pessoa`,
+      botao('Juntar todos', { tipo: 'primario', pequeno: true, onClick: () => juntarTodos(pares) }),
+      h('p.mini.muted', 'Juntando, o nome CURTO fica e o completo vira apelido — é o nome curto que '
+        + 'já carrega o faturamento e que sai no relatório de comissão.'),
+      h('div.empilha', { style: { gap: '4px', marginTop: '8px' } },
+        ...pares.map((p) => h('p.mini', `${p.curto.nome} ← ${p.longo.nome}`)))),
 
     chips([
       { id: 'todas', label: 'Todas', contador: abertas.length },
@@ -363,6 +378,22 @@ async function vincularNfDoTitulo(p, { nfs }) {
  * uma escolha de verdade, porque é o nome que vai sair no relatório de comissão
  * que ela manda para o pai.
  */
+/** Junta todos os pares de uma vez, com uma confirmação só. */
+async function juntarTodos(pares) {
+  const r = await formulario({
+    titulo: `Juntar ${pares.length} pares?`,
+    descricao: `${pares.map((p) => `${p.curto.nome} ← ${p.longo.nome}`).join('\n')}\n\n`
+      + 'O nome curto fica, o completo vira apelido, e tudo que estava no completo passa para ele.',
+    campos: [],
+    confirmar: 'Juntar todos',
+  });
+  if (!r) return;
+  const feitos = await juntarTodosOsPares('confirmado: são as mesmas pessoas');
+  await atualizarAlertas();
+  ok(`${feitos.length} cadastro(s) juntado(s).`);
+  refresh();
+}
+
 async function juntar(p) {
   const vendedores = await store.vendedores.listar();
   const curto = vendedores.find((v) => v.id === p.vendedorCurtoId);
