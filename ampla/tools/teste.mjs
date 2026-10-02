@@ -1292,8 +1292,12 @@ AREIA MEDIA M3;ARE01;100;60,00;6.000,00;9.000,00;3.000,00`, { mesReferencia: '20
   igual('com o custo total do arquivo', cimento.custoTotal, 12800);
   igual('e o lucro do arquivo', cimento.lucro, 7200);
   igual('e o mês escolhido na importação', cimento.mes, '2026-04');
-  ok('e o produto ganhou o custo médio no cadastro',
-    (await store.produtos.listar()).some((p) => p.codigo === 'CIM50' && p.custo === 32), '');
+  // o custo médio de um relatório de TOTAIS não vira o custo do produto: ele é a
+  // média de um período, em unidade que pode não ser a da venda. Fica num campo
+  // próprio, e a margem só o usa como plano B, com verificação de unidade.
+  const cadastrado = (await store.produtos.listar()).find((p) => p.codigo === 'CIM50');
+  igual('o custo médio do relatório NÃO vira o custo do produto', cadastrado.custo ?? null, null);
+  igual('ele fica num campo próprio', cadastrado.custoMedioRelatorio, 32);
 
   // reimportar ATUALIZA, não soma de novo
   await importar('produtosVendidos', 'pv.csv', `${PV}
@@ -1409,6 +1413,45 @@ PRODUTO SEM CUSTO;Nair;10;500,00;10,00`, { mesReferencia: '2026-07-01' });
   ok('produto sem custo marca a margem como incompleta', !nair2.completa, '');
   igual('e o app diz quantos foram', nair2.produtosSemCusto, 1);
   igual('sem inventar custo nenhum para ele', nair2.custo, 8500);
+
+  /**
+   * CUSTO EM UNIDADE DIFERENTE — o erro mais caro desta tela.
+   *
+   * No arquivo real, TIJOLO COMUM é vendido a R$ 7,20 na nota e aparece com
+   * "custo médio" de R$ 87,38 no relatório, porque o relatório conta o pacote.
+   * Custo por unidade × quantidade da nota dava R$ 80 mil de prejuízo que não
+   * existe. A proporção CUSTO/VENDA do mesmo produto não tem unidade, e por isso
+   * atravessa essa diferença sem errar.
+   */
+  await importar('produtosVendidos', 'un.csv', `${PV}
+TIJOLO PACOTE;100;87,38;8.738,00;14.400,00;5.662,00`, { mesReferencia: '2026-08-01' });
+  const FISC2 = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  const ITENS2 = 'Nota fiscal;Código do produto;Produto;Quantidade;Valor total';
+  await importar('nfs', 'un-nf.csv', `${FISC2}
+9901;10/08/2026;Cliente Tijolo Ltda;20202020000120;7.200,00;Autorizada;Venda de mercadoria`);
+  await importar('nfItens', 'un-it.csv', `${ITENS2}
+9901;TIJ01;TIJOLO PACOTE;1000;7.200,00`);
+  await link.recalcular();
+
+  const mu = await margemMod.margem({ de: '2026-08-01', ate: '2026-08-31' });
+  console.log('    DBG itens-agosto:', JSON.stringify((await store.nfItens.listar()).filter((i) => (i.data || '').startsWith('2026-08')).map((i) => [i.produtoId, i.quantidade, i.valorTotal, i.nfStatus, i.vendedorId])));
+  const linhaTijolo = mu.vendedores[0];
+  // o relatório diz: custo 8.738 sobre venda 14.400 = 60,7% de custo.
+  // 7.200 vendidos × 60,7% = 4.369 de custo, e NÃO 1000 × 87,38 = 87.380.
+  igual('o custo vem pela proporção, não pela unidade', linhaTijolo.custo, 4369);
+  ok('e a margem fica igual à do relatório, não negativa',
+    Math.abs(linhaTijolo.margem - 39.3) < 0.2, String(linhaTijolo.margem));
+
+  // e a conferência compara a margem calculada com a que o relatório declara
+  ok('a margem bate com a declarada pelo relatório', mu.conferencia.margemConfere === true,
+    JSON.stringify([mu.conferencia.margemCalculada, mu.conferencia.margemDeclarada]));
+  ok('e por isso a tela pode mostrar os números', mu.margemConfiavel, '');
+
+  for (const x of (await store.nfs.listar()).filter((y) => y.numero === '9901')) await store.nfs.remover(x.id);
+  for (const x of (await store.nfItens.listar()).filter((y) => y.nfNumero === '9901')) await store.nfItens.remover(x.id);
+  for (const x of (await store.vendasProduto.listar()).filter((y) => y.mes === '2026-08')) await store.vendasProduto.remover(x.id);
+  for (const x of (await store.produtos.listar()).filter((y) => y.codigo === 'TIJ01')) await store.produtos.remover(x.id);
+  await link.recalcular();
 
   // frete: sem a coluna no arquivo, o app diz que não sabe — não mostra zero
   igual('sem coluna de frete, o app não finge que o frete é zero', m.frete.temDado, false);
@@ -1560,6 +1603,32 @@ ${itens}
   const dev = (await store.nfs.listar()).find((n) => n.numero === '9802');
   igual('devolução de venda é devolução', dev.devolucao, true);
 
+  /**
+   * A DEVOLUÇÃO DE VENDA VEM COMO NOTA DE ENTRADA (tpNF=0): é o certo
+   * fiscalmente, porque a empresa emite entrada para receber a mercadoria de
+   * volta. A regra "nota de entrada não é faturamento" engolia a devolução
+   * inteira — nos XMLs de um mês real, 9 devoluções não abatiam nada.
+   */
+  await importarXml('devolucao-entrada.xml', nfe('9804', {
+    natOp: 'Devolucao de venda', finNFe: '4', tpNF: '0', vNF: '300.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '6.0000', '50.0000', '300.00'),
+  }));
+  await link.recalcular();
+  const devEntrada = (await store.nfs.listar()).find((n) => n.numero === '9804');
+  igual('devolução de venda chega como nota de entrada', devEntrada.operacao, 'entrada');
+  ok('e mesmo assim conta para o faturamento', revenue.valeParaFaturamento(devEntrada), '');
+  igual('entrando NEGATIVA, que é o estorno da receita', revenue.valorFaturado(devEntrada), -300);
+
+  // compra de fornecedor continua de fora: entrada que não é devolução de venda
+  await importarXml('compra.xml', nfe('9805', {
+    natOp: 'Compra para comercializacao', finNFe: '1', tpNF: '0', vNF: '900.00',
+    itens: item(1, 'CIM-XML', 'CIMENTO XML 50KG', '18.0000', '50.0000', '900.00'),
+  }));
+  await link.recalcular();
+  const compra = (await store.nfs.listar()).find((n) => n.numero === '9805');
+  ok('compra de fornecedor continua fora do faturamento',
+    !revenue.valeParaFaturamento(compra), '');
+
   // devolução de COMPRA: finNFe 4 também, mas não é anti-venda
   await importarXml('devcompra.xml', nfe('9803', {
     natOp: 'DEVOLUCAO DE COMPRA', finNFe: '4', vNF: '500.00',
@@ -1639,7 +1708,7 @@ ${itens}
   }
 
   // limpeza
-  for (const n of ['9801', '9802', '9803']) {
+  for (const n of ['9801', '9802', '9803', '9804', '9805']) {
     const x = (await store.nfs.listar()).find((y) => y.numero === n);
     if (x) await store.nfs.remover(x.id);
   }

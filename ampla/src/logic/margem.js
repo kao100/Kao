@@ -30,8 +30,9 @@ import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
 /** Margem do período, por vendedor e total. */
 export async function margem({ de, ate }) {
-  const [linhas, vendedores, nfs] = await Promise.all([
+  const [linhas, vendedores, nfs, itens, produtos] = await Promise.all([
     store.vendasProduto.listar(), store.vendedores.listar(), store.nfs.listar(),
+    store.nfItens.listar(), store.produtos.listar(),
   ]);
   const noPeriodo = linhas.filter((l) => l.data && l.data >= de && l.data <= ate);
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
@@ -62,15 +63,176 @@ export async function margem({ de, ate }) {
     atual.quantidade += l.quantidade;
     custoPorProduto.set(l.produtoId, atual);
   }
+  /**
+   * O CUSTO MÉDIO SÓ VALE SE A UNIDADE FOR A MESMA.
+   *
+   * O relatório de produtos vendidos conta em uma unidade e a nota pode contar em
+   * outra: parafuso vendido a R$ 0,35 na nota aparecia com "custo médio" de
+   * R$ 44,40 porque o relatório conta por caixa. Multiplicar um pelo outro dava
+   * margem de −66% num vendedor — um número inventado por diferença de unidade.
+   *
+   * A verificação não é palpite sobre margem: é comparar o PREÇO MÉDIO DE VENDA
+   * do mesmo produto nos dois arquivos. Os dois descrevem a mesma venda, então o
+   * preço tem de ser o mesmo. Quando não é, a unidade (ou o período) é outra, e o
+   * custo daquele produto não entra — ele é contado como "sem custo confiável".
+   */
+  const vendaPorProduto = new Map();
+  for (const l of noPeriodo) {
+    if (l.origemRelatorio !== 'produtosVendidos') continue;
+    if (l.valorTotal == null || !l.quantidade) continue;
+    const atual = vendaPorProduto.get(l.produtoId) || { valor: 0, quantidade: 0 };
+    atual.valor += l.valorTotal;
+    atual.quantidade += l.quantidade;
+    vendaPorProduto.set(l.produtoId, atual);
+  }
+  const precoNasNotas = new Map();
+  for (const i of itens) {
+    if (!i.data || i.data < de || i.data > ate) continue;
+    if (i.valorTotal == null || !i.quantidade) continue;
+    const atual = precoNasNotas.get(i.produtoId) || { valor: 0, quantidade: 0 };
+    atual.valor += Math.abs(i.valorTotal);
+    atual.quantidade += Math.abs(i.quantidade);
+    precoNasNotas.set(i.produtoId, atual);
+  }
+
+  /**
+   * Quanto o preço pode variar entre o relatório e a nota antes de o app
+   * desconfiar da UNIDADE. Preço varia de verdade — mix, desconto, período — mas
+   * não por um fator. Trinta por cento separa variação de preço (que é normal) de
+   * contagem em caixa contra contagem em unidade (que foi o que apareceu: fatores
+   * de 4x, 7x, 23x).
+   */
+  const TOLERANCIA = 0.3;
+  const unidadeConfere = (produtoId) => {
+    const rel = vendaPorProduto.get(produtoId);
+    const nota = precoNasNotas.get(produtoId);
+    // sem um dos dois lados não há o que comparar: o custo passa como antes
+    if (!rel?.quantidade || !nota?.quantidade) return true;
+    const precoRel = rel.valor / rel.quantidade;
+    const precoNf = nota.valor / nota.quantidade;
+    if (!(precoNf > 0)) return true;
+    return Math.abs(precoRel / precoNf - 1) <= TOLERANCIA;
+  };
+
+  const produtosComUnidadeDiferente = [];
   const custoMedio = (produtoId) => {
     const c = custoPorProduto.get(produtoId);
-    return c && c.quantidade ? c.custo / c.quantidade : null;
+    if (!c || !c.quantidade) return null;
+    if (!unidadeConfere(produtoId)) {
+      if (!produtosComUnidadeDiferente.includes(produtoId)) produtosComUnidadeDiferente.push(produtoId);
+      return null;
+    }
+    return c.custo / c.quantidade;
   };
+
+  /**
+   * A PROPORÇÃO DE CUSTO DO PRODUTO — imune a diferença de unidade.
+   *
+   * Custo por unidade quebra quando os dois arquivos contam em unidades
+   * diferentes: TIJOLO COMUM vendido a R$ 7,20 na nota aparecia com custo médio
+   * de R$ 87,38, porque o relatório conta o pacote. Multiplicar isso pela
+   * quantidade da nota dava R$ 80 mil de prejuízo onde não havia nenhum.
+   *
+   * Mas o relatório traz VALOR e CUSTO do mesmo produto, na MESMA unidade, seja
+   * ela qual for. A razão entre os dois é a proporção de custo daquele produto —
+   * e uma razão não tem unidade. Aplicada ao valor vendido na nota, dá o custo
+   * daquela venda sem precisar saber se o arquivo contou em peça, pacote ou
+   * palete.
+   *
+   * É o custo que o sistema DELA calculou, em forma de proporção. Não é uma
+   * estimativa minha: é o lucro que o relatório já declara, por produto.
+   */
+  const proporcaoDeCusto = (produtoId) => {
+    const c = custoPorProduto.get(produtoId);
+    const v = vendaPorProduto.get(produtoId);
+    if (!c?.custo || !v?.valor) return null;
+    const razao = c.custo / v.valor;
+    // razão fora de qualquer realidade é dado estragado, não margem: fica de fora
+    return razao > 0 && razao < 5 ? razao : null;
+  };
+
+  /**
+   * DE ONDE SAI "QUANTO CADA VENDEDOR VENDEU DE CADA PRODUTO".
+   *
+   * O melhor caminho são os ITENS DAS NOTAS: a nota tem o vendedor, tem a data e
+   * tem a devolução, então o recorte é exato e o período é o que ela escolheu.
+   * Isso só existe com o XML das NF-e.
+   *
+   * Sem XML, vale o relatório de comissão por produto — que é um total do
+   * período inteiro do relatório, não do recorte da tela. Os dois nunca somam
+   * juntos: seria contar a mesma venda duas vezes.
+   */
+  // as notas do período, uma vez só: o frete por vendedor e a conferência leem daqui
+  const doPeriodo = nfs.filter((n) => valeParaFaturamento(n) && n.dataEmissao >= de && n.dataEmissao <= ate);
+
+  const itensDoPeriodo = itens.filter((i) => i.data && i.data >= de && i.data <= ate
+    && (i.vendedorId || i.nfStatus === 'autorizada'));
+  const temItensDeNota = itensDoPeriodo.length > 0;
+
+  /**
+   * A ORDEM DAS FONTES DE CUSTO, da mais confiável para a menos:
+   *
+   *  1. o custo da PRÓPRIA LINHA, quando o arquivo traz — mesma venda, mesma unidade;
+   *  2. o custo do CADASTRO DE PRODUTOS, que vem do relatório de produtos: ele tem
+   *     código interno (casa com o cProd do XML) e custo por unidade de venda;
+   *  3. o custo médio do relatório de produtos vendidos — média de um período, em
+   *     unidade que pode não ser a da venda, e por isso só com verificação.
+   */
+  const custoDoCadastro = new Map(produtos.map((p) => [p.id, p.custo]));
+  const custoMedioDoRelatorio = new Map(produtos.map((p) => [p.id, p.custoMedioRelatorio]));
+  const custoUnitario = (produtoId, doItem) => {
+    if (doItem != null) return doItem;
+    const cadastro = custoDoCadastro.get(produtoId);
+    if (cadastro != null) return cadastro;
+    return null;
+  };
+
+  /** O custo de uma linha, pelo caminho mais confiável que existir para ela. */
+  const custoDaLinha = (produtoId, quantidade, valor, custoDoItem) => {
+    const unit = custoUnitario(produtoId, custoDoItem);
+    if (unit != null && quantidade != null) return unit * quantidade;
+    const razao = proporcaoDeCusto(produtoId);
+    if (razao != null && valor != null) return valor * razao;
+    return null;
+  };
+
 
   /* por vendedor, a partir do relatório de comissão por produto */
   const porVendedor = new Map();
   let semCusto = 0;
-  for (const l of noPeriodo) {
+
+  if (temItensDeNota) {
+    const nfPorId = new Map(nfs.map((n) => [n.id, n]));
+    for (const item of itensDoPeriodo) {
+      const nf = nfPorId.get(item.nfId);
+      if (!nf || !valeParaFaturamento(nf)) continue;
+      const vid = item.vendedorId || nf.vendedorId || null;
+      const chave = vid || 'sem';
+      if (!porVendedor.has(chave)) {
+        porVendedor.set(chave, {
+          vendedorId: vid,
+          nome: vid ? (nomeVendedor.get(vid) || 'Vendedor') : 'sem vendedor',
+          venda: 0, custo: 0, quantidade: 0, produtos: 0, produtosSemCusto: 0,
+        });
+      }
+      const v = porVendedor.get(chave);
+      const sinal = nf.devolucao ? -1 : 1;
+      const quantidade = Math.abs(item.quantidade || 0) * sinal;
+      v.venda += Math.abs(item.valorTotal || 0) * sinal;
+      v.quantidade += quantidade;
+      v.produtos += 1;
+      const custoDaVenda = custoDaLinha(
+        item.produtoId,
+        quantidade,
+        Math.abs(item.valorTotal || 0) * sinal,
+        item.custoUnitario ?? (item.custoTotal != null && item.quantidade
+          ? item.custoTotal / item.quantidade : null),
+      );
+      if (custoDaVenda == null) { v.produtosSemCusto += 1; semCusto += 1; } else v.custo += custoDaVenda;
+    }
+  }
+
+  for (const l of temItensDeNota ? [] : noPeriodo) {
     if (l.origemRelatorio !== 'comissaoProduto') continue;
     const vid = vendedorDa(l);
     const chave = vid || `nome:${normalize(l.vendedorNome) || 'sem'}`;
@@ -85,14 +247,30 @@ export async function margem({ de, ate }) {
     v.venda += l.valorTotal || 0;
     v.quantidade += l.quantidade || 0;
     v.produtos += 1;
-    const unit = custoMedio(l.produtoId);
-    if (unit == null || l.quantidade == null) { v.produtosSemCusto += 1; semCusto += 1; } else v.custo += unit * l.quantidade;
+    const custoDaVenda = custoDaLinha(l.produtoId, l.quantidade, l.valorTotal, null);
+    if (custoDaVenda == null) { v.produtosSemCusto += 1; semCusto += 1; } else v.custo += custoDaVenda;
+  }
+
+  /**
+   * O FRETE DE CADA VENDEDOR, ao lado da margem dele.
+   *
+   * "O Guilherme vende perto do custo" só é metade da história se ele cobra
+   * frete. Material pesado sai com margem apertada e o resultado está no frete —
+   * então os dois números ficam na mesma linha, e existe a soma dos dois.
+   */
+  const fretePorVendedor = new Map();
+  for (const nf of doPeriodo) {
+    if (nf.valorFrete == null) continue;
+    const chave = nf.vendedorId || 'sem';
+    const sinal = nf.devolucao ? -1 : 1;
+    fretePorVendedor.set(chave, cents((fretePorVendedor.get(chave) || 0) + (nf.valorFrete || 0) * sinal));
   }
 
   const lista = [...porVendedor.values()].map((v) => {
     const venda = cents(v.venda);
     const custo = cents(v.custo);
     const lucro = cents(venda - custo);
+    const freteDele = fretePorVendedor.get(v.vendedorId || 'sem') || 0;
     return {
       ...v,
       venda,
@@ -102,6 +280,11 @@ export async function margem({ de, ate }) {
       // de margem no balcão. A margem sobre o custo (markup) é outro número e
       // misturar os dois é a confusão mais comum deste assunto.
       margem: venda ? (lucro / venda) * 100 : null,
+      frete: freteDele,
+      // o que sobra quando o frete entra na conta: é por aqui que uma margem
+      // apertada em material pesado pode virar resultado
+      lucroComFrete: cents(lucro + freteDele),
+      margemComFrete: venda + freteDele ? ((lucro + freteDele) / (venda + freteDele)) * 100 : null,
       markup: custo ? (lucro / custo) * 100 : null,
       // margem só é confiável quando todo produto do vendedor tinha custo
       completa: v.produtosSemCusto === 0,
@@ -114,6 +297,11 @@ export async function margem({ de, ate }) {
 
   /* o total do relatório de produtos vendidos, que não depende do vendedor */
   const doRelatorio = noPeriodo.filter((l) => l.origemRelatorio === 'produtosVendidos');
+  const totalDasNotas = temItensDeNota ? {
+    venda: cents(sum(lista, (v) => v.venda)),
+    custo: cents(sum(lista, (v) => v.custo)),
+    produtos: itensDoPeriodo.length,
+  } : null;
   const totalRelatorio = {
     venda: cents(sum(doRelatorio, (l) => l.valorTotal || 0)),
     custo: cents(sum(doRelatorio, (l) => l.custoTotal || 0)),
@@ -133,21 +321,92 @@ export async function margem({ de, ate }) {
    * Se NÃO bate, a diferença aparece — porque uma margem negativa que na verdade
    * é buraco de atribuição mandaria ela cobrar a pessoa errada.
    */
+  /**
+   * Contra o que conferir depende de onde o número veio.
+   *
+   * Vindo dos ITENS DAS NOTAS, o par certo é o FATURAMENTO do período — é a
+   * mesma base, e tem de bater. Vindo do relatório de comissão por produto, o
+   * par é o relatório de produtos vendidos, que cobre o mesmo período dele.
+   */
+/**
+   * O alvo é o valor dos PRODUTOS, não o total da nota.
+   *
+   * A soma dos itens é vProd; o total da nota é vProd + frete. Comparar os dois
+   * daria uma diferença do tamanho do frete e pareceria erro — quando na verdade
+   * é a resposta à pergunta dela: a margem é sobre a mercadoria, e o frete é
+   * receita à parte.
+   */
+  const alvo = temItensDeNota
+    ? {
+      venda: cents(sum(doPeriodo, (n) => (n.devolucao ? -1 : 1)
+        * Math.abs(n.valorProdutos ?? ((n.valorTotal || 0) - (n.valorFrete || 0))))),
+      custo: null,
+    }
+    : { venda: totalRelatorio.venda, custo: totalRelatorio.custo };
   const conferencia = {
+    base: temItensDeNota ? 'faturamento do período' : 'relatório de produtos vendidos',
     vendaSomada: venda,
-    vendaRelatorio: totalRelatorio.venda,
+    vendaRelatorio: alvo.venda,
     custoSomado: custo,
-    custoRelatorio: totalRelatorio.custo,
-    diferencaVenda: cents(venda - totalRelatorio.venda),
-    diferencaCusto: cents(custo - totalRelatorio.custo),
+    custoRelatorio: alvo.custo,
+    diferencaVenda: cents(venda - alvo.venda),
+    diferencaCusto: alvo.custo == null ? null : cents(custo - alvo.custo),
   };
-  conferencia.ok = Math.abs(conferencia.diferencaVenda) < 1 && Math.abs(conferencia.diferencaCusto) < 1;
+  conferencia.ok = Math.abs(conferencia.diferencaVenda) < 1
+    && (conferencia.diferencaCusto == null || Math.abs(conferencia.diferencaCusto) < 1);
+
+  /**
+   * A SEGUNDA CONFERÊNCIA, que é a que decide se a MARGEM pode ser mostrada.
+   *
+   * A primeira confere a VENDA — e ela fecha fácil, porque venda é um número só
+   * que sai das notas. O custo é que é cruzado de outro arquivo, e é nele que
+   * mora o erro possível.
+   *
+   * Por sorte o relatório de produtos vendidos declara o próprio lucro. Se a
+   * margem que o app calcula e a que o relatório declara não baterem, alguma
+   * coisa no cruzamento está errada — provavelmente o relatório é de outro
+   * período que não o da tela — e a margem por vendedor não pode ser levada a
+   * sério, por mais bonita que esteja a tabela.
+   *
+   * Dois pontos percentuais de folga: mix de produtos muda a média, mas não a
+   * dobra.
+   */
+  const margemCalculada = venda ? ((venda - custo) / venda) * 100 : null;
+  const margemDeclarada = totalRelatorio.margem;
+  conferencia.margemCalculada = margemCalculada;
+  conferencia.margemDeclarada = margemDeclarada;
+  conferencia.margemConfere = margemCalculada == null || margemDeclarada == null
+    ? null
+    : Math.abs(margemCalculada - margemDeclarada) <= 2;
 
   return {
     periodo: { de, ate },
     vendedores: lista,
     total: { venda, custo, lucro, margem: venda ? (lucro / venda) * 100 : null },
     totalRelatorio,
+    // de onde vieram os números por vendedor, para a tela poder dizer
+    fonte: temItensDeNota ? 'itens-da-nota' : 'relatorio-por-produto',
+    // a margem só é confiável quando ela bate com a que o relatório declara
+    margemConfiavel: conferencia.margemConfere !== false,
+    /**
+     * Os produtos cujo preço não bate entre o relatório e a nota. Não é erro do
+     * app nem dela: é o mesmo produto contado em unidades diferentes nos dois
+     * lugares. Fica à vista para poder ser corrigido na origem.
+     */
+    unidadeDiferente: produtosComUnidadeDiferente.map((id) => {
+      const rel = vendaPorProduto.get(id);
+      const nota = precoNasNotas.get(id);
+      const nome = (noPeriodo.find((l) => l.produtoId === id) || {}).descricao
+        || (itens.find((i) => i.produtoId === id) || {}).descricao || id;
+      return {
+        produtoId: id,
+        descricao: nome,
+        precoNoRelatorio: cents(rel.valor / rel.quantidade),
+        precoNaNota: cents(nota.valor / nota.quantidade),
+        fator: Math.round((rel.valor / rel.quantidade) / (nota.valor / nota.quantidade) * 100) / 100,
+      };
+    }).sort((a, b) => b.fator - a.fator),
+    totalDasNotas,
     conferencia,
     produtosSemCusto: semCusto,
     temComissaoPorProduto: noPeriodo.some((l) => l.origemRelatorio === 'comissaoProduto'),

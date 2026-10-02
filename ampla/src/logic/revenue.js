@@ -14,11 +14,30 @@ import { monthKey, monthStart, monthEnd, today, yesterday, addDays, addMonths, w
 import { sum, cents, sortBy } from '../core/util.js';
 
 export function valeParaFaturamento(nf) {
-  if (nf.status !== 'autorizada' || nf.operacao === 'entrada') return false;
+  if (nf.status !== 'autorizada') return false;
+
   // devolução de COMPRA é nota emitida, mas não é venda nem anti-venda: a AMPLA
   // devolveu mercadoria ao fornecedor. Somá-la como receita (ou como receita
   // negativa) seria inventar um movimento de venda que não houve.
   if (nf.devolucaoDeCompra) return false;
+
+  /**
+   * DEVOLUÇÃO DE VENDA ENTRA, MESMO SENDO NOTA DE ENTRADA.
+   *
+   * Quando o cliente devolve, a empresa emite uma nota de ENTRADA (tpNF=0) para
+   * receber a mercadoria de volta — é o certo fiscalmente. Só que a regra "nota
+   * de entrada não é faturamento" então engolia a devolução inteira: ela não
+   * saía do faturamento e não abatia comissão de ninguém.
+   *
+   * Nos XMLs de um mês real eram 9 devoluções que não abatiam nada.
+   *
+   * A exclusão de entrada existe para compra de fornecedor não virar receita, e
+   * isso continua: compra tem devolucao=false e segue de fora. Devolução de
+   * venda é o ESTORNO de uma receita, e estorno entra negativo.
+   */
+  if (nf.devolucao) return true;
+
+  if (nf.operacao === 'entrada') return false;
   return true;
 }
 

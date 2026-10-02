@@ -302,7 +302,7 @@ export async function prepararNfe({ leitura }) {
         saida.erros.push({ linha: `NF ${nota.numero} item ${item.seq}`, motivo: 'Item sem quantidade ou valor.' });
         continue;
       }
-      const produtoId = store.idProduto({ codigo: item.produtoCodigo, descricao: item.descricao });
+      const produtoId = idDoProduto({ codigo: item.produtoCodigo, descricao: item.descricao }, { contexto });
       empilhar(saida, {
         store: 'nfItens',
         registro: {
@@ -476,7 +476,7 @@ function construirVendaProduto(d, ctx, fonteId) {
    */
   if (!temConteudo(d.descricao) && !temConteudo(d.produtoCodigo)) return [];
 
-  const produtoId = store.idProduto({ codigo: d.produtoCodigo, descricao: d.descricao });
+  const produtoId = idDoProduto({ codigo: d.produtoCodigo, descricao: d.descricao }, ctx);
   const data = d.data || ctx.mesReferencia || null;
   const mes = data ? monthKey(data) : null;
   const vendedor = d.vendedorNome ? chaveTexto(d.vendedorNome) : 'todos';
@@ -511,14 +511,26 @@ function construirVendaProduto(d, ctx, fonteId) {
         origem: 'relatorio',
       },
     },
-    // o produto do cadastro ganha o custo que veio aqui, se ainda não tinha
+    /**
+     * O produto do cadastro NÃO recebe este custo como `custo`.
+     *
+     * O "custo médio" de um relatório de totais é a média de um período, numa
+     * unidade que pode não ser a da venda — no arquivo real, parafuso com custo
+     * médio de R$ 44,40 vendido a R$ 0,35, porque o relatório conta por caixa.
+     * Gravar isso como o custo do produto contaminava o cadastro e saía como
+     * margem de −66% num vendedor.
+     *
+     * Ele entra num campo próprio, que a margem usa só como plano B e com
+     * verificação de unidade. O custo de verdade é o do RELATÓRIO DE PRODUTOS,
+     * que traz código interno e custo por unidade de venda.
+     */
     d.descricao || d.produtoCodigo ? {
       store: 'produtos',
       registro: {
         id: produtoId,
         codigo: d.produtoCodigo || null,
         descricao: d.descricao || null,
-        custo: d.custoUnitario ?? null,
+        custoMedioRelatorio: d.custoUnitario ?? null,
         origem: 'relatorio-vendas',
       },
     } : null,
@@ -528,7 +540,7 @@ function construirVendaProduto(d, ctx, fonteId) {
 function construirItem(d, ctx) {
   const nfId = idNf({ numero: d.nfNumero, serie: d.nfSerie });
   const nfExistente = ctx.contexto.nfs.get(nfId);
-  const produtoId = store.idProduto({ codigo: d.produtoCodigo, descricao: d.descricao });
+  const produtoId = idDoProduto({ codigo: d.produtoCodigo, descricao: d.descricao }, ctx);
   const data = nfExistente?.dataEmissao || null;
   const seq = d.seq || chaveTexto(d.produtoCodigo || d.descricao || '') || daLinha(ctx);
   const custoTotal = d.custoTotal != null ? d.custoTotal
@@ -782,7 +794,7 @@ function construirSaldo(d, ctx) {
 
 function construirProduto(d, ctx) {
   const id = d.codigo || d.descricao
-    ? store.idProduto({ codigo: d.codigo, descricao: d.descricao })
+    ? idDoProduto({ codigo: d.codigo, descricao: d.descricao }, ctx)
     : unico(`prod_x${daLinha(ctx)}`, ctx.usados);
   return [{
     store: 'produtos',
@@ -1012,8 +1024,51 @@ function mesclarRegistro(base, novo) {
 }
 
 async function montarContexto() {
-  const [nfs, contas] = await Promise.all([store.nfs.listar(), store.contas.listar()]);
-  return { nfs: new Map(nfs.map((n) => [n.id, n])), contas };
+  const [nfs, contas, produtos] = await Promise.all([
+    store.nfs.listar(), store.contas.listar(), store.produtos.listar(),
+  ]);
+  const porDescricao = new Map();
+  for (const p of produtos) {
+    const chave = chaveTexto(p.descricao || '');
+    if (chave && !porDescricao.has(chave)) porDescricao.set(chave, p.id);
+  }
+  return {
+    nfs: new Map(nfs.map((n) => [n.id, n])),
+    contas,
+    produtos: new Map(produtos.map((p) => [p.id, p])),
+    produtoPorDescricao: porDescricao,
+  };
+}
+
+/**
+ * O MESMO PRODUTO VISTO POR DOIS ARQUIVOS DIFERENTES.
+ *
+ * O XML da NF-e identifica o produto pelo CÓDIGO interno; o relatório de
+ * produtos vendidos só traz a DESCRIÇÃO. Sem reconciliar, "AREIA MEDIA ENSACADA
+ * 20KG - PEDRASIL" virava dois produtos — e o custo que veio pelo relatório
+ * nunca encontrava a venda que veio pelo XML. Na prática: margem de 100% e 2.430
+ * itens "sem custo".
+ *
+ * A reconciliação é por DESCRIÇÃO IDÊNTICA, não parecida: mesmo texto, mesmo
+ * produto. E só vale quando não há conflito de código — se os dois já têm código
+ * e são códigos diferentes, são produtos diferentes mesmo com o nome igual, e o
+ * app não junta.
+ */
+function idDoProduto({ codigo, descricao }, ctx) {
+  const contexto = ctx?.contexto;
+  if (codigo) {
+    const porCodigo = store.idProduto({ codigo });
+    if (contexto?.produtos?.has(porCodigo)) return porCodigo;
+  }
+  const chave = chaveTexto(descricao || '');
+  const existente = chave ? contexto?.produtoPorDescricao?.get(chave) : null;
+  if (existente) {
+    const antigo = contexto.produtos.get(existente);
+    const mesmoCodigo = !antigo?.codigo || !codigo
+      || chaveTexto(antigo.codigo) === chaveTexto(codigo);
+    if (mesmoCodigo) return existente;
+  }
+  return store.idProduto({ codigo, descricao });
 }
 
 /** Compara com o que já existe no banco: novo, atualizado ou repetido. */

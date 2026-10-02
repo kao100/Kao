@@ -9,6 +9,7 @@
 import * as store from '../core/store.js';
 import { addDays, eachDay, monthKey, addMonths } from '../core/format.js';
 import { cents, sum, sortBy } from '../core/util.js';
+import { valeParaFaturamento } from './revenue.js';
 
 export const CRITERIOS = {
   faturamento: { label: 'Faturamento', sufixo: 'R$', descricao: 'O que mais gera receita.' },
@@ -38,8 +39,11 @@ export function classe(acumuladoPercentual) {
  */
 async function itensDoPeriodo(de, ate) {
   const [itens, nfs] = await Promise.all([store.nfItens.listar(), store.nfs.listar()]);
+  // a mesma regra do faturamento, para a curva não contar o que o faturamento
+  // não conta — inclusive a devolução de venda, que é nota de entrada e precisa
+  // entrar com sinal negativo
   const validas = new Map(nfs
-    .filter((nf) => nf.status === 'autorizada' && nf.operacao !== 'entrada' && nf.dataEmissao >= de && nf.dataEmissao <= ate)
+    .filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate)
     .map((nf) => [nf.id, nf]));
   const daNota = itens
     .filter((i) => validas.has(i.nfId))

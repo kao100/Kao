@@ -30,6 +30,24 @@ porque dependem de informação que só a empresa tem.
 - Devolução sem a venda original na base **vira pendência própria**, e o mês de
   comissão não fecha enquanto existir uma sem dono.
 
+### Margem e custo
+- A **venda** vem das notas. O **custo** é cruzado de outro arquivo, e é nele que
+  mora o erro possível — por isso a tela confere a margem calculada contra a que
+  o relatório de produtos vendidos declara, e avisa em vermelho quando diverge
+  mais de 2 pontos. Margem bonita que não fecha é pior do que margem nenhuma.
+- O custo entra pela **proporção custo/venda do produto**, não pelo custo por
+  unidade: os dois arquivos podem contar em unidades diferentes (o relatório em
+  pacote, a nota em peça — TIJOLO COMUM vendido a R$ 7,20 com "custo médio" de
+  R$ 87,38). Uma razão não tem unidade, e é o lucro que o próprio relatório
+  declara por produto.
+- O custo médio de um relatório de totais **não vira o custo do produto no
+  cadastro**: ele fica num campo próprio. O custo do cadastro é o do relatório de
+  produtos, que tem código interno e é por unidade de venda.
+- **Margem é sobre a VENDA** ("de 100, quantos por cento sobram"), não sobre o
+  custo. E é sobre a mercadoria: o **frete** aparece em coluna própria, com a
+  margem recalculada ao lado — material pesado sai com margem apertada de
+  propósito e o resultado pode estar no frete.
+
 ### Vendedor
 - **O vendedor vem do relatório de comissão por venda**, que traz número do
   pedido, cliente e vendedor. É ele que faz a comissão fechar sozinha: o vendedor

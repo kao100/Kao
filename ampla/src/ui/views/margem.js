@@ -27,6 +27,8 @@ const COLUNAS = [
   { header: 'Custo', key: 'custo', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Lucro', key: 'lucro', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Margem', key: 'margem', tipo: 'percentual', alinhar: 'direita' },
+  { header: 'Frete', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Com frete', key: 'margemComFrete', tipo: 'percentual', alinhar: 'direita' },
 ];
 
 const COLUNAS_FRETE = [
@@ -61,7 +63,7 @@ export async function telaMargem({ query }) {
   });
 
   /* o que falta para o número existir — dito antes de qualquer número */
-  if (!r.temProdutosVendidos) {
+  if (!r.temProdutosVendidos && r.fonte !== 'itens-da-nota') {
     return h('div.empilha', { style: { gap: '14px' } },
       painel,
       vazio('📐', 'Falta o relatório de produtos vendidos',
@@ -75,6 +77,14 @@ export async function telaMargem({ query }) {
     painel,
 
     /* o total, que não depende de vendedor nenhum */
+    r.fonte === 'itens-da-nota' && r.temProdutosVendidos && r.totalDasNotas
+      && Math.abs(r.totalDasNotas.venda - r.totalRelatorio.venda) > 1
+      && aviso('O seu relatório de PRODUTOS VENDIDOS soma '
+        + `${money(r.totalRelatorio.venda)} neste período, e as notas somam `
+        + `${money(r.totalDasNotas.venda)}. Os dois deveriam ser a mesma coisa — se não são, o `
+        + 'relatório é de outro período. Confira o mês que você escolheu ao importá-lo: os números '
+        + 'por vendedor usam as NOTAS, mas o custo vem dele.', 'atencao'),
+
     secao('A margem do período',
       exportadores(() => ({
         titulo: 'Margem do período',
@@ -102,14 +112,38 @@ export async function telaMargem({ query }) {
      * pode ser levada a sério. Margem baixa num vendedor é notícia; margem baixa
      * por buraco de atribuição é cobrar a pessoa errada.
      */
-    r.temComissaoPorProduto && (r.conferencia.ok
-      ? aviso(`✅ A soma dos vendedores bate com o relatório: ${money(r.conferencia.vendaSomada)} `
-        + `vendidos e ${money(r.conferencia.custoSomado)} de custo. Cada produto foi atribuído a `
-        + 'alguém — a margem de cada um é comparável.', 'ok')
-      : aviso(`⚠️ A soma dos vendedores NÃO bate com o relatório de produtos vendidos: `
-        + `${money(r.conferencia.diferencaVenda)} de diferença em venda e `
-        + `${money(r.conferencia.diferencaCusto)} em custo. Enquanto isso existir, a margem por `
-        + 'vendedor é indicativa, não exata — e o buraco pode estar inteiro em um deles.', 'ruim')),
+    /**
+     * O AVISO QUE SEGURA O NÚMERO.
+     *
+     * Quando a margem calculada não bate com a que o próprio relatório declara, a
+     * tabela por vendedor continua visível — escondê-la não ajudaria ninguém —
+     * mas com o aviso vermelho em cima, dizendo o que conferir. Mostrar uma
+     * margem bonita que não fecha é pior do que não mostrar nada.
+     */
+    r.conferencia.margemConfere === false && aviso(
+      `⚠️ NÃO USE ESTES NÚMEROS AINDA. O app calcula ${pct(r.conferencia.margemCalculada, 1)} de `
+      + `margem no período, e o seu relatório de produtos vendidos declara `
+      + `${pct(r.conferencia.margemDeclarada, 1)}. A venda fecha com as notas; o que não fecha é o `
+      + 'CUSTO, que vem do relatório. O motivo mais provável é o relatório ser de outro período '
+      + 'que não o desta tela — ele soma '
+      + `${money(r.totalRelatorio.venda)} e as notas do período somam ${money(r.total.venda)}. `
+      + 'Mande o relatório de produtos vendidos DO MESMO PERÍODO, ou o relatório de produtos (o do '
+      + 'cadastro, com código interno e valor de custo), que casa produto a produto com o XML.',
+      'ruim'),
+
+    r.fonte === 'itens-da-nota' && aviso('Estes números vêm dos ITENS DAS NOTAS (o XML das NF-e): '
+      + 'cada item traz produto, quantidade e valor, e a nota traz o vendedor e a data. É o recorte '
+      + 'exato do período que você escolheu — e inclui as devoluções, com sinal negativo.', 'ok'),
+
+    (r.temComissaoPorProduto || r.fonte === 'itens-da-nota') && (r.conferencia.ok
+      ? aviso(`✅ A soma dos vendedores bate com o ${r.conferencia.base}: `
+        + `${money(r.conferencia.vendaSomada)} vendidos. Cada venda foi atribuída a alguém — a `
+        + 'margem de cada um é comparável.', 'ok')
+      : aviso(`⚠️ A soma dos vendedores NÃO bate com o ${r.conferencia.base}: `
+        + `${money(r.conferencia.diferencaVenda)} de diferença em venda`
+        + (r.conferencia.diferencaCusto == null ? '' : ` e ${money(r.conferencia.diferencaCusto)} em custo`)
+        + '. Enquanto isso existir, a margem por vendedor é indicativa, não exata — e o buraco pode '
+        + 'estar inteiro em um deles.', 'ruim')),
 
     /* por vendedor, que é o que ela pediu, e que depende da segunda ponte */
     !r.temComissaoPorProduto
@@ -117,7 +151,7 @@ export async function telaMargem({ query }) {
         + 'que diz quanto cada vendedor vendeu de cada produto. Com os dois, o app cruza: custo do '
         + 'vendedor = o que ele vendeu de cada produto × o custo médio daquele produto.', 'atencao',
       botao('Mandar comissão por produto', { pequeno: true, onClick: () => navigate('/arquivos/comissaoProduto') }))
-      : secao('Margem por vendedor',
+      : secao(r.margemConfiavel ? 'Margem por vendedor' : 'Margem por vendedor (não confere)',
         exportadores(() => ({
           titulo: 'Margem por vendedor',
           subtitulo: `${formatDate(filtro.de)} a ${formatDate(filtro.ate)}`,
@@ -132,10 +166,19 @@ export async function telaMargem({ query }) {
           total: { nome: 'TOTAL', venda: r.total.venda, custo: r.total.custo, lucro: r.total.lucro, margem: r.total.margem },
         }),
         h('p.mini.muted', { style: { marginTop: '8px' } },
-          'Custo do vendedor = o que ele vendeu de cada produto × o CUSTO MÉDIO daquele produto no '
-          + 'período, que é o que o seu relatório traz. Se o produto foi comprado por preços '
-          + 'diferentes, o custo de uma venda específica pode ter sido outro — o app usa a média '
-          + 'do seu sistema e não finge que é exato.'),
+          'Custo do vendedor = o que ele vendeu de cada produto × o CUSTO MÉDIO daquele produto, '
+          + 'que é o que o seu relatório traz. Se o produto foi comprado por preços diferentes, o '
+          + 'custo de uma venda específica pode ter sido outro — o app usa a média do seu sistema '
+          + 'e não finge que é exato.'),
+        /**
+         * A coluna que responde "ele vende perto do custo, mas ganha no frete?".
+         * Margem e frete lado a lado, e a soma dos dois — porque material pesado
+         * sai com margem apertada de propósito e o resultado está no frete.
+         */
+        h('p.mini.muted',
+          'VENDEU e MARGEM são só a mercadoria. O FRETE é cobrado à parte, e "COM FRETE" é a '
+          + 'margem quando ele entra na conta — é aí que uma margem apertada em material pesado '
+          + 'pode virar resultado.'),
         r.produtosSemCusto > 0 && aviso(`${r.produtosSemCusto} linha(s) de venda ficaram sem custo: `
           + 'o produto não apareceu no relatório de produtos vendidos deste período. A margem '
           + 'desses vendedores sai maior do que a real — a linha fica marcada abaixo.', 'atencao'),
