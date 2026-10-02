@@ -2143,6 +2143,49 @@ console.log('\n▶ RT: a comissão de quem traz a obra');
   await link.recalcular();
 }
 
+console.log('\n▶ O XML não diz que a nota foi cancelada');
+{
+  /**
+   * "Todas as que foram para ignoradas são as notas que foram canceladas."
+   *
+   * O cancelamento da NF-e é OUTRO documento — um evento, em arquivo separado. O
+   * XML da própria nota continua dizendo "Autorizado o uso da NF-e" para sempre,
+   * mesmo depois de cancelada. Então um lote grande sem nenhum evento ou é um mês
+   * sem cancelamento, ou é um export incompleto — e no segundo caso a nota
+   * cancelada conta como faturamento e gera comissão.
+   *
+   * O app não tem como saber qual dos dois é. Ele avisa, e não escolhe.
+   */
+  const { readFiles } = await import('../src/core/files/read.js');
+  const umaNota = (numero) => `<?xml version="1.0"?>
+<nfeProc><NFe><infNFe Id="NFe3526${numero}0000000000000000000000000000000000">
+<ide><nNF>${numero}</nNF><serie>1</serie><mod>55</mod><dhEmi>2027-09-10T10:00:00-03:00</dhEmi>
+<natOp>VENDA</natOp><tpNF>1</tpNF><finNFe>1</finNFe></ide>
+<emit><CNPJ>00000000000191</CNPJ><xNome>AMPLA TESTE</xNome></emit>
+<dest><CNPJ>11111111000191</CNPJ><xNome>CLIENTE DE TESTE LTDA</xNome></dest>
+<total><ICMSTot><vProd>100.00</vProd><vFrete>0.00</vFrete><vDesc>0.00</vDesc><vNF>100.00</vNF></ICMSTot></total>
+</infNFe></NFe></nfeProc>`;
+
+  const arquivos = [];
+  for (let i = 0; i < 20; i += 1) {
+    const n = String(9600 + i);
+    arquivos.push(new File([umaNota(n)], `n${n}.xml`, { type: 'text/xml' }));
+  }
+  const leitura = await readFiles(arquivos);
+  const preparo = await ingest.prepararNfe({ leitura });
+  igual('as vinte notas foram lidas', leitura.nfe.notas.length, 20);
+  igual('e nenhum evento de cancelamento veio junto', preparo.cancelamentos.length, 0);
+  ok('então o app avisa, em vez de supor que ninguém cancelou nada',
+    preparo.avisos.some((a) => /cancelamento/i.test(a) && /SITUAÇÃO/.test(a)),
+    JSON.stringify(preparo.avisos));
+
+  /* lote pequeno não avisa: uma nota avulsa sem evento é o normal */
+  const soUma = await readFiles([new File([umaNota('9699')], 'n9699.xml', { type: 'text/xml' })]);
+  const preparoUm = await ingest.prepararNfe({ leitura: soUma });
+  ok('uma nota avulsa não vira aviso',
+    !preparoUm.avisos.some((a) => /cancelamento/i.test(a)), JSON.stringify(preparoUm.avisos));
+}
+
 console.log('\n▶ A mesma nota vista pelo relatório e pelo XML é UMA nota');
 {
   /**

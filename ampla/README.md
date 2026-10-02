@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 452 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 456 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **O XML não diz que a nota foi cancelada.** O cancelamento é outro documento
+  — um evento (`tpEvento` 110111), em arquivo separado. O XML da própria nota
+  continua dizendo *"Autorizado o uso da NF-e"* para sempre. O app lê os eventos
+  quando eles vêm no ZIP; quando um lote grande chega sem nenhum, ele **avisa**,
+  porque nota cancelada que o app não conhece conta como faturamento e gera
+  comissão. Quem corrige isso em definitivo é o **relatório de notas fiscais com
+  a coluna Situação**.
 - **O título do financeiro chega à nota por dois caminhos.** Pelo número da NF
   que ele cita, e — quando esse falha ou nem veio — pelo **número do pedido**,
   que os dois lados carregam: o título se chama *"Venda de nº 871"* e o XML traz

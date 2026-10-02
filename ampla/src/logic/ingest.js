@@ -367,6 +367,27 @@ export async function prepararNfe({ leitura }) {
     saida.cancelamentos.push(evento);
   }
 
+  /**
+   * O XML DA NOTA NÃO DIZ QUE ELA FOI CANCELADA.
+   *
+   * O cancelamento é outro documento — um evento (tpEvento 110111), em arquivo
+   * separado. O XML da própria nota continua dizendo "Autorizado o uso da NF-e"
+   * para sempre, mesmo depois de cancelada.
+   *
+   * Num lote de 550 notas sem nenhum evento, ou ninguém cancelou nada no mês, ou
+   * (o caso comum) o export não trouxe os eventos — e aí a nota cancelada conta
+   * como faturamento e gera comissão. O app não tem como saber qual dos dois é,
+   * então ele AVISA, em vez de escolher.
+   */
+  if (notas.length >= 20 && !saida.cancelamentos.length) {
+    saida.avisos.push(
+      `${notas.length} notas e nenhum evento de cancelamento no lote. O XML da nota não diz que ela `
+      + 'foi cancelada — isso vem em arquivo separado. Se houve cancelamento no período, mande o '
+      + 'relatório de notas fiscais com a coluna SITUAÇÃO: é ele que marca "Cancelada", e a nota '
+      + 'cancelada sai do faturamento e da comissão.',
+    );
+  }
+
   await classificar(saida, contexto);
   return saida;
 }

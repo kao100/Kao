@@ -207,6 +207,18 @@ function acoes(p, contexto) {
     botoes.push(botao(`✓ ${motivoRapido(p.tipo)}`, {
       tipo: 'ok', pequeno: true, onClick: () => ignorar(p, motivoRapido(p.tipo)),
     }));
+    /**
+     * O SEGUNDO MOTIVO DE UM TOQUE.
+     *
+     * "Todas as que foram para ignoradas são as notas que foram canceladas."
+     *
+     * Nota cancelada é um motivo concreto e frequente — e é diferente de "não
+     * está na base". Guardar qual dos dois foi é o que permite rever depois: um
+     * se resolve mandando o XML, o outro não se resolve, acabou.
+     */
+    for (const extra of MOTIVOS_EXTRA[p.tipo] || []) {
+      botoes.push(botao(`✓ ${extra}`, { tipo: 'ok', pequeno: true, onClick: () => ignorar(p, extra) }));
+    }
     botoes.push(botao('Outro motivo…', { pequeno: true, onClick: () => ignorar(p) }));
   }
   return botoes;
@@ -216,6 +228,12 @@ function acoes(p, contexto) {
  * O motivo de um toque, escrito na língua de cada pendência: "está correta" não
  * quer dizer a mesma coisa numa nota e num movimento de banco.
  */
+/** Motivos de um toque que valem só para alguns tipos, ao lado do principal. */
+const MOTIVOS_EXTRA = {
+  receber_sem_nf: ['A NF foi cancelada'],
+  nf_sem_pedido: ['A NF foi cancelada'],
+};
+
 const MOTIVO_RAPIDO = {
   nf_sem_pedido: 'A nota está correta',
   nf_vendedor_nao_vende: 'Pode deixar como está',
