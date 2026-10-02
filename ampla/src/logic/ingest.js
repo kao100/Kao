@@ -252,7 +252,10 @@ export async function prepararNfe({ leitura }) {
       saida.erros.push({ linha: nota.chave || nota.numero || '?', motivo: 'XML sem número, data de emissão ou valor total.' });
       continue;
     }
-    const nfId = idNf({ chave: nota.chave, numero: nota.numero, serie: nota.serie });
+    const nfId = idDaNota(
+      { chave: nota.chave, numero: nota.numero, serie: nota.serie },
+      { contexto },
+    );
     const cliente = montarCliente(
       { cidade: nota.clienteMunicipio },
       { nome: nota.clienteNome, documento: nota.clienteDoc },
@@ -441,7 +444,7 @@ function daLinha(ctx) {
 
 function construirNf(d, ctx) {
   const id = d.numero
-    ? idNf(d)
+    ? idDaNota(d, ctx)
     : unico(`nf_x${daLinha(ctx)}`, ctx.usados);
   const cliente = montarCliente(d, { nome: d.clienteNome, documento: d.clienteDoc });
   const saida = [{
@@ -920,6 +923,24 @@ function situacaoOrcamento(status) {
 
 /* ------------------------------------------------------------ chaves naturais */
 
+/** "serie-numero", que é como a nota se identifica fora do XML. */
+function chaveDeSerieNumero({ numero, serie }) {
+  const n = docNumber(numero) || String(numero || '').trim();
+  if (!n) return null;
+  return `${String(serie ?? '').trim() || '1'}-${n}`;
+}
+
+/**
+ * O id da nota, reaproveitando o de uma nota que já está na base com o mesmo
+ * número e série — venha ela do XML ou do relatório. É o que faz os dois
+ * arquivos descreverem a MESMA nota em vez de duas.
+ */
+function idDaNota(dados, ctx) {
+  const chave = chaveDeSerieNumero(dados);
+  const existente = chave ? ctx?.contexto?.nfPorSerieNumero?.get(chave) : null;
+  return existente || idNf(dados);
+}
+
 export function idNf({ chave, numero, serie }) {
   if (chave && digits(chave).length === 44) return `nf_${digits(chave)}`;
   const n = docNumber(numero) || String(numero || '').trim();
@@ -1100,11 +1121,30 @@ async function montarContexto() {
     const chave = chaveTexto(p.descricao || '');
     if (chave && !porDescricao.has(chave)) porDescricao.set(chave, p.id);
   }
+  /**
+   * A MESMA NOTA VISTA POR DOIS ARQUIVOS.
+   *
+   * O XML identifica a nota pela CHAVE de 44 dígitos; o relatório fiscal só tem
+   * número e série. Sem reconciliar, a NF 4061 entrava duas vezes — uma como
+   * nf_<chave> e outra como nf_1-4061 — e aí o título que cita a 4061 achava
+   * DUAS candidatas e o app se recusava a ligar, que é a regra certa aplicada a
+   * um problema inventado por ele mesmo.
+   *
+   * Número e série identificam a nota sem ambiguidade dentro de um CNPJ: duas
+   * notas com o mesmo par não existem. Então o par é a identidade, e a chave
+   * entra como um dado a mais.
+   */
+  const porSerieNumero = new Map();
+  for (const n of nfs) {
+    const chave = chaveDeSerieNumero(n);
+    if (chave && !porSerieNumero.has(chave)) porSerieNumero.set(chave, n.id);
+  }
   return {
     nfs: new Map(nfs.map((n) => [n.id, n])),
     contas,
     produtos: new Map(produtos.map((p) => [p.id, p])),
     produtoPorDescricao: porDescricao,
+    nfPorSerieNumero: porSerieNumero,
   };
 }
 

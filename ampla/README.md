@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 444 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 450 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,6 +109,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
+- **A mesma nota vista por dois arquivos é UMA nota.** O XML identifica a nota
+  pela chave de 44 dígitos; o relatório fiscal só tem número e série. Sem
+  reconciliar, a NF 4061 entrava duas vezes — e o título que a citava achava
+  duas candidatas, então o app se recusava a ligar: a regra certa (*"só liga
+  quando não há dúvida"*) aplicada a uma dúvida que ele mesmo criou. Número e
+  série identificam a nota sem ambiguidade dentro de um CNPJ, então é esse par
+  que manda, e a chave entra como dado a mais.
 - **Quem emite a nota não é, por isso, quem vendeu.** O app não adivinha isso —
   ele **pergunta**, uma vez por nome, na conciliação: *"Fulano é vendedor(a)?"*,
   com dois botões. Respondido "não vende", **toda nota no nome dessa pessoa vira

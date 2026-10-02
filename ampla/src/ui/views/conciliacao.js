@@ -175,7 +175,7 @@ function acoes(p, contexto) {
   } else if (p.tipo === 'extrato_sem_vinculo') {
     botoes.push(botao('Vincular', { tipo: 'primario', pequeno: true, onClick: () => vincularMovimento(p, contexto) }));
   } else if (p.tipo === 'receber_sem_nf') {
-    botoes.push(botao('Escolher NF', { tipo: 'primario', pequeno: true, onClick: () => vincularNfDoTitulo(p, contexto) }));
+    botoes.push(botao('Vincular à NF', { tipo: 'primario', pequeno: true, onClick: () => vincularNfDoTitulo(p, contexto) }));
   } else if (p.tipo === 'divergencia_faturamento') {
     botoes.push(botao('Ver o que falta', { tipo: 'primario', pequeno: true, onClick: () => navigate(href('/conciliacao', { t: 'pedido_sem_vendedor' })) }));
   } else if (p.tipo === 'produto_sem_custo') {
@@ -223,7 +223,15 @@ const MOTIVO_RAPIDO = {
   vendedor_a_confirmar: 'Depois eu digo',
   devolucao_sem_origem: 'A devolução está correta',
   pedido_sem_vendedor: 'O pedido está correto',
-  receber_sem_nf: 'O título está correto',
+  /**
+   * "Eu pus 'o título está correto' e ele vai para as ignoradas, mas continua
+   *  sem nota fiscal identificada. Eu preciso vincular, não ignorar."
+   *
+   * O motivo de um toque dizia a coisa errada: o título estar correto não
+   * resolve o vínculo. O único motivo legítimo de deixar de lado é a nota não
+   * estar na base — e é isso que o botão diz agora.
+   */
+  receber_sem_nf: 'A NF não está na base',
   extrato_sem_vinculo: 'O movimento está correto',
   pago_sem_banco: 'A baixa está correta',
   divergencia_faturamento: 'A diferença está explicada',
@@ -448,40 +456,103 @@ async function vincularMovimento(p, { titulos, pagamentos }) {
   refresh();
 }
 
+/**
+ * VINCULAR, NÃO IGNORAR.
+ *
+ * "Eu pus 'o título está correto' e ele vai para as ignoradas. Aí continua com o
+ *  título sem nota fiscal identificada. Eu vou em 'escolher nota' e só aparece
+ *  uma outra, nada a ver. Eu preciso vincular, não ignorar."
+ *
+ * Duas coisas estavam erradas aqui. A lista de candidatas não trazia na frente a
+ * nota que o PRÓPRIO TÍTULO CITA — ela se perdia no meio de sessenta notas do
+ * mesmo cliente. E não havia como simplesmente DIGITAR o número, que é o que
+ * alguém faz quando já sabe qual é.
+ *
+ * Agora: a nota citada vem primeiro e marcada, dá para digitar o número, e o
+ * resto vem ordenado por quem tem mais chance — mesmo valor, depois o cliente.
+ */
 async function vincularNfDoTitulo(p, { nfs }) {
   const titulo = (await store.receber.listar()).find((t) => t.id === p.alvo?.id);
   if (!titulo) { erro('Título não encontrado.'); return; }
-  const candidatas = sortBy(
-    nfs.filter((n) => n.clienteId === titulo.clienteId || String(n.numero).includes(String(titulo.nfNumero || ''))),
-    (n) => n.dataEmissao, 'desc',
-  ).slice(0, 60);
 
-  if (!candidatas.length) { erro('Nenhuma NF candidata na base. Importe as notas do período.'); return; }
+  const soDigitos = (x) => String(x ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  const citado = soDigitos(titulo.nfNumero);
+  const mesmoNumero = (n) => !!citado && soDigitos(n.numero) === citado;
+  const mesmoValor = (n) => titulo.valor != null && n.valorTotal != null
+    && Math.abs(n.valorTotal - titulo.valor) < 0.01;
+
+  const peso = (n) => (mesmoNumero(n) ? 0 : mesmoValor(n) ? 1 : n.clienteId === titulo.clienteId ? 2 : 3);
+  const candidatas = nfs
+    .filter((n) => mesmoNumero(n) || mesmoValor(n) || n.clienteId === titulo.clienteId)
+    .sort((a, b) => peso(a) - peso(b) || String(b.dataEmissao).localeCompare(String(a.dataEmissao)))
+    .slice(0, 80);
+
+  const rotulo = (n) => [
+    `NF ${n.numero}`,
+    formatDate(n.dataEmissao),
+    money(n.valorTotal),
+    (n.clienteNome || '').slice(0, 24),
+    mesmoNumero(n) ? '\u2190 a que o título cita' : mesmoValor(n) ? '\u2190 mesmo valor' : '',
+  ].filter(Boolean).join(' \u00b7 ');
 
   const r = await formulario({
-    titulo: `Título ${titulo.documento} — escolher NF`,
-    descricao: `${titulo.clienteNome} · ${money(titulo.valor)} · vence ${formatDate(titulo.vencimento)}`,
+    titulo: `Título ${titulo.documento || ''} — vincular à NF`,
+    descricao: [
+      titulo.clienteNome,
+      money(titulo.valor),
+      `vence ${formatDate(titulo.vencimento)}`,
+      titulo.nfNumero ? `o título cita a NF ${titulo.nfNumero}` : null,
+    ].filter(Boolean).join(' \u00b7 '),
     campos: [
       {
-        chave: 'nfId',
-        label: 'Nota fiscal',
-        tipo: 'select',
-        opcoes: candidatas.map((n) => ({
-          valor: n.id,
-          label: `NF ${n.numero} · ${formatDate(n.dataEmissao)} · ${money(n.valorTotal)} · ${n.clienteNome || ''}`,
-        })),
+        chave: 'numero',
+        label: 'Número da NF',
+        tipo: 'texto',
+        valor: titulo.nfNumero || '',
+        ajuda: 'Digite o número e o app acha a nota. Apague para escolher na lista.',
       },
-      { chave: 'motivo', label: 'Motivo', tipo: 'texto', obrigatorio: true },
-    ],
+      candidatas.length ? {
+        chave: 'nfId',
+        label: 'Ou escolha na lista',
+        tipo: 'select',
+        opcoes: candidatas.map((n) => ({ valor: n.id, label: rotulo(n) })),
+      } : null,
+      { chave: 'motivo', label: 'Motivo', tipo: 'texto', obrigatorio: true, valor: 'conferido no relatório' },
+    ].filter(Boolean),
     confirmar: 'Vincular',
   });
   if (!r) return;
-  const nf = candidatas.find((n) => n.id === r.nfId);
-  await store.receber.salvar({ ...titulo, nfId: nf.id, nfNumero: nf.numero, vendedorId: nf.vendedorId || titulo.vendedorId });
+
+  /**
+   * O NÚMERO DIGITADO MANDA — e se ele não achar nada, o app DIZ, em vez de
+   * ligar na nota que estava selecionada na lista por acaso. Vincular o título à
+   * nota errada é pior do que não vincular.
+   */
+  let nf = null;
+  const digitado = soDigitos(r.numero);
+  if (digitado) {
+    const achadas = nfs.filter((n) => soDigitos(n.numero) === digitado);
+    if (!achadas.length) {
+      erro(`Não existe NF ${r.numero} na base. Importe o XML dessa nota, ou apague o número para escolher na lista.`);
+      return;
+    }
+    if (achadas.length > 1) {
+      erro(`Existe mais de uma NF ${r.numero} na base. Escolha na lista qual é.`);
+      return;
+    }
+    [nf] = achadas;
+  } else {
+    nf = candidatas.find((n) => n.id === r.nfId);
+  }
+  if (!nf) { erro('Escolha uma nota.'); return; }
+
+  await store.receber.salvar({
+    ...titulo, nfId: nf.id, nfNumero: nf.numero, vendedorId: nf.vendedorId || titulo.vendedorId,
+  });
   await store.registrar('titulo_nf', { alvoId: titulo.id, alvo: titulo.documento, para: `NF ${nf.numero}`, motivo: r.motivo });
   await recalcular();
   await atualizarAlertas();
-  ok('Título vinculado à NF.');
+  ok(`Título vinculado à NF ${nf.numero}.`);
   refresh();
 }
 

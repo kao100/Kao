@@ -347,7 +347,13 @@ export async function recalcular() {
     let nfId = titulo.nfId || null;
     let vendedorId = titulo.vendedorId || null;
     if (titulo.nfNumero) {
-      const candidatas = nfsPorNumero.get(String(titulo.nfNumero)) || [];
+      /**
+       * A BUSCA TEM DE USAR A MESMA NORMALIZAÇÃO DA CHAVE, senão "04061" no
+       * título nunca acha "4061" na nota — e o app acusa um buraco que não
+       * existe, exatamente onde ela precisa de um vínculo.
+       */
+      const k = String(docNumber(titulo.nfNumero) || titulo.nfNumero);
+      const candidatas = nfsPorNumero.get(k) || [];
       // só liga quando não há dúvida: uma única NF com aquele número
       if (candidatas.length === 1) nfId = candidatas[0].id;
     }
@@ -1180,9 +1186,19 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     const n = Number(docNumber(t.nfNumero));
     const dentroDaFaixa = Number.isFinite(n) && menorNota != null && n >= menorNota && n <= maiorNota;
     if (!dentroDaFaixa) continue;
+    /**
+     * POR QUE ESTE TÍTULO NÃO ACHOU A NOTA. Dizer "não identificada" e parar aí
+     * deixava ela procurando às cegas — e as duas causas pedem coisas opostas:
+     * nota ausente se resolve mandando o XML, nota repetida se resolve
+     * escolhendo qual é.
+     */
+    const quantas = (nfs.filter((x) => Number(docNumber(x.numero)) === n)).length;
+    const porque = quantas > 1
+      ? `existe mais de uma NF ${t.nfNumero} na base — escolha qual é`
+      : 'essa nota não está na base';
     nova('receber_sem_nf', t.id, {
       titulo: `Título ${t.documento} cita a NF ${t.nfNumero}`,
-      detalhe: `${t.clienteNome} · vence ${formatDate(t.vencimento)}`,
+      detalhe: `${t.clienteNome} · vence ${formatDate(t.vencimento)} · ${porque}`,
       valor: t.valor,
       alvo: { store: 'receber', id: t.id },
     });

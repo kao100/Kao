@@ -2143,5 +2143,75 @@ console.log('\n▶ RT: a comissão de quem traz a obra');
   await link.recalcular();
 }
 
+console.log('\n▶ A mesma nota vista pelo relatório e pelo XML é UMA nota');
+{
+  /**
+   * "Título venda número 871 cita a nota fiscal 4061. Eu vou em escolher nota e
+   *  só aparece uma outra, nada a ver."
+   *
+   * A NF 4061 ESTAVA na base — duas vezes. Uma veio do XML, identificada pela
+   * chave de 44 dígitos; a outra veio do relatório fiscal, identificada por
+   * série e número. Como havia duas candidatas, o app se recusava a ligar o
+   * título — a regra certa ("só liga quando não há dúvida") aplicada a uma
+   * dúvida que ele mesmo tinha criado.
+   *
+   * Número e série identificam a nota sem ambiguidade dentro de um CNPJ. Então
+   * é esse par que manda, e a chave entra como dado a mais.
+   */
+  const { readFile } = await import('../src/core/files/read.js');
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+
+  /* primeiro o relatório fiscal, que é como ela costuma mandar */
+  await importar('nfs', 'fis.csv', `${FISC}
+9820;12/08/2027;CLIENTE DE TESTE LTDA;11111111000191;1.000,00;Autorizada;Venda de mercadoria`);
+  igual('o relatório trouxe a nota',
+    (await store.nfs.listar()).filter((n) => n.numero === '9820').length, 1);
+
+  /* e depois o XML da MESMA nota */
+  const xml = `<?xml version="1.0"?>
+<nfeProc><NFe><infNFe Id="NFe35269820000000000000000000000000000000000000">
+<ide><nNF>9820</nNF><serie>1</serie><mod>55</mod><dhEmi>2027-08-12T10:00:00-03:00</dhEmi>
+<natOp>VENDA DE MERCADORIA</natOp><tpNF>1</tpNF><finNFe>1</finNFe></ide>
+<emit><CNPJ>00000000000191</CNPJ><xNome>AMPLA TESTE</xNome></emit>
+<dest><CNPJ>11111111000191</CNPJ><xNome>CLIENTE DE TESTE LTDA</xNome><xMun>SAO PAULO</xMun><UF>SP</UF></dest>
+<det nItem="1"><prod><cProd>P9</cProd><xProd>PRODUTO NOVE</xProd><NCM>25232910</NCM><CFOP>5102</CFOP>
+<uCom>UN</uCom><qCom>10.0000</qCom><vUnCom>100.0000</vUnCom><vProd>1000.00</vProd></prod></det>
+<total><ICMSTot><vProd>1000.00</vProd><vFrete>0.00</vFrete><vDesc>0.00</vDesc><vNF>1000.00</vNF></ICMSTot></total>
+</infNFe></NFe></nfeProc>`;
+  const leitura = await readFile(new File([xml], 'n9820.xml', { type: 'text/xml' }));
+  await ingest.confirmar(await ingest.prepararNfe({ leitura }));
+  await link.recalcular();
+
+  const notas9820 = (await store.nfs.listar()).filter((n) => n.numero === '9820');
+  igual('o XML da mesma nota NÃO cria uma segunda', notas9820.length, 1);
+  ok('e a nota passa a ter a chave do XML', !!notas9820[0].chave, String(notas9820[0].chave));
+  ok('sem perder os itens', (await store.nfItens.listar()).some((i) => i.nfId === notas9820[0].id), '');
+
+  /**
+   * E É ISSO QUE FAZ O TÍTULO ACHAR A NOTA. Com duas candidatas ele não ligava;
+   * com uma, liga sozinho e a pendência nem chega a existir.
+   */
+  const REC = 'Documento;Cliente;CPF/CNPJ;Vencimento;Valor;Situação;Nota fiscal';
+  await importar('receber', 'rec9820.csv', `${REC}
+Venda de nº 871;CLIENTE DE TESTE LTDA;11111111000191;20/09/2027;1.000,00;Em aberto;9820`);
+  await link.recalcular();
+
+  const titulo = (await store.receber.listar()).find((t) => t.nfNumero === '9820');
+  ok('o título que cita a NF 9820 acha a nota sozinho', titulo?.nfId === notas9820[0].id,
+    JSON.stringify([titulo?.nfId, notas9820[0].id]));
+  igual('e não sobra pendência de título sem NF',
+    (await store.pendencias.listar()).filter((p) => p.tipo === 'receber_sem_nf'
+      && p.alvo?.id === titulo?.id).length, 0);
+
+  for (const t of (await store.receber.listar()).filter((x) => x.nfNumero === '9820')) {
+    await store.receber.remover(t.id);
+  }
+  for (const n of notas9820) await store.nfs.remover(n.id);
+  for (const i of (await store.nfItens.listar()).filter((x) => x.nfNumero === '9820')) {
+    await store.nfItens.remover(i.id);
+  }
+  await link.recalcular();
+}
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);
