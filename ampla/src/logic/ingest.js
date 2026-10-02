@@ -113,6 +113,48 @@ function temConteudo(valor) {
   return t !== '' && !/^[-–—_.]+$/.test(t);
 }
 
+/**
+ * COLUNA NOVA NUM RELATÓRIO CONHECIDO.
+ *
+ * Quando um perfil de fábrica casa, o app usava SÓ o mapa do perfil — então uma
+ * coluna que ela passasse a exportar (a natureza da operação, o valor de varejo)
+ * era ignorada em silêncio, e ela teria que esperar o perfil ser atualizado.
+ *
+ * Agora o perfil manda no que ele conhece, e o reconhecimento por sinônimo
+ * preenche o resto. Coluna já usada pelo perfil não é reaproveitada, para duas
+ * coisas nunca saírem da mesma coluna.
+ */
+export function completarMapeamento(fonteId, cabecalho, mapa) {
+  const base = sugerirMapeamento(fonteId, cabecalho);
+  const ocupadas = new Set();
+  for (const valor of Object.values(mapa || {})) {
+    for (const col of Array.isArray(valor) ? valor : [valor]) if (col) ocupadas.add(col);
+  }
+  const completo = { ...mapa };
+  for (const [campo, coluna] of Object.entries(base)) {
+    if (completo[campo] != null) continue;
+    if (ocupadas.has(coluna)) continue;
+    completo[campo] = coluna;
+    ocupadas.add(coluna);
+  }
+  return completo;
+}
+
+/**
+ * CPF E CNPJ VÊM EM DUAS COLUNAS SEPARADAS, cada linha preenchendo só a sua.
+ * O app guarda um documento só por registro, então aqui a coluna que veio
+ * preenchida vira o documento. Nunca sobrescreve o que já existe: se as duas
+ * vierem na mesma linha, o CNPJ manda (é o documento da empresa).
+ */
+function juntarDocumentos(dados) {
+  const pares = [['clienteDoc', 'clienteCpf'], ['fornecedorDoc', 'fornecedorCpf']];
+  for (const [principal, reserva] of pares) {
+    if (!temConteudo(dados[principal]) && temConteudo(dados[reserva])) dados[principal] = dados[reserva];
+    delete dados[reserva];
+  }
+  return dados;
+}
+
 /** Converte uma linha inteira. Devolve o que deu para ler e os avisos do caminho. */
 function lerLinha(fonte, registro, mapeamento) {
   const dados = {};
@@ -150,6 +192,7 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
 
   for (const registro of registros) {
     const { dados, avisos, vazia } = lerLinha(fonte, registro, mapeamento);
+    juntarDocumentos(dados);
     // linha totalmente vazia é separador/rodapé do relatório: passa batido
     if (vazia) continue;
     if (avisos.length) {
@@ -388,8 +431,7 @@ function construirNf(d, ctx) {
       valorProdutos: d.valorProdutos == null ? null : cents(d.valorProdutos),
       valorFrete: d.valorFrete == null ? null : cents(d.valorFrete),
       operacao: interpretarOperacao(d.operacao),
-      devolucao: /devolu/i.test(d.naturezaOperacao || ''),
-      naturezaOperacao: d.naturezaOperacao || null,
+      ...classificarNatureza(d.naturezaOperacao),
       pedidoNumero: d.pedidoNumero ? docNumber(d.pedidoNumero) : null,
       pedidoOrigem: d.pedidoNumero ? 'relatorio' : null,
       vendedorNome: d.vendedorNome || null,
@@ -669,6 +711,14 @@ function construirProduto(d, ctx) {
       descricao: d.descricao || null,
       custo: d.custo ?? null,
       ncm: d.ncm || null,
+      /**
+       * O GRUPO vinha sendo lido do arquivo e jogado fora na montagem: a Curva
+       * ABC por categoria agrupava 3.600 produtos em "Sem categoria". Agora
+       * entra, junto com o preço de varejo e o estoque.
+       */
+      categoria: d.categoria || null,
+      precoVenda: d.precoVenda ?? null,
+      estoque: d.estoque ?? null,
       custoAtualizadoEm: d.custo != null ? today() : null,
       origem: 'cadastro',
     },
@@ -776,6 +826,28 @@ function acharConta(contas, texto) {
     || contas.find((c) => chaveTexto(c.banco) === alvo)
     || contas.find((c) => alvo.includes(chaveTexto(c.banco)) && chaveTexto(c.banco))
     || null;
+}
+
+/**
+ * O QUE A NATUREZA DA OPERAÇÃO DIZ.
+ *
+ * "Devolução de VENDA" é o cliente devolvendo para a AMPLA: tira do faturamento
+ * e abate a comissão. "Devolução de COMPRA" é a AMPLA devolvendo para o
+ * fornecedor — nota emitida, mas não é venda nem anti-venda, e somar isso com
+ * sinal negativo no faturamento seria inventar um estorno que não existe.
+ *
+ * Quando a natureza não vem no arquivo, nada é devolução: é o que o app sabe, e
+ * a tela avisa que sem essa coluna a devolução passa como venda.
+ */
+function classificarNatureza(texto) {
+  const t = normalize(texto || '');
+  const ehDevolucao = /devolu/.test(t);
+  const deCompra = ehDevolucao && /(compra|fornecedor)/.test(t);
+  return {
+    naturezaOperacao: texto || null,
+    devolucao: ehDevolucao && !deCompra,
+    devolucaoDeCompra: deCompra,
+  };
 }
 
 function interpretarOperacao(texto) {

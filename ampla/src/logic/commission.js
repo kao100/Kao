@@ -200,12 +200,52 @@ export async function calcular(mes = monthKey()) {
   const atribuido = cents(sum(doMes.filter((nf) => nf.vendedorId), valorFaturado));
   const semVendedor = doMes.filter((nf) => !nf.vendedorId);
 
+  /**
+   * AS DEVOLUÇÕES DO MÊS, em lista própria.
+   *
+   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
+   *  desse mês essas notas fiscais devolvidas."
+   *
+   * O abatimento já acontece no cálculo — a devolução entra com sinal negativo —
+   * mas sem aparecer em lista seria um desconto invisível, e desconto que não dá
+   * para conferir é pior do que nenhum. A nota original vem junto quando o app
+   * conseguiu identificá-la.
+   */
+  const devolucoes = doMes.filter((nf) => nf.devolucao).map((nf) => ({
+    nfId: nf.id,
+    numero: nf.numero,
+    data: nf.dataEmissao,
+    clienteNome: nf.clienteNome,
+    valor: cents(Math.abs(nf.valorTotal || 0)),
+    vendedorId: nf.vendedorId || null,
+    vendedorNome: nf.vendedorId ? (nomeVendedor.get(nf.vendedorId) || 'Vendedor') : null,
+    notaDevolvida: nf.notaDevolvida || null,
+    origem: nf.vendedorOrigem || null,
+    comissaoAbatida: cents(sum(linhas.filter((l) => l.nfId === nf.id), (l) => l.comissao || 0)),
+  })).sort((x, y) => y.valor - x.valor);
+  const resumoDevolucoes = {
+    quantidade: devolucoes.length,
+    valor: cents(sum(devolucoes, (d) => d.valor)),
+    comissaoAbatida: cents(sum(devolucoes, (d) => d.comissaoAbatida)),
+    semDono: devolucoes.filter((d) => !d.vendedorId).length,
+    valorSemDono: cents(sum(devolucoes.filter((d) => !d.vendedorId), (d) => d.valor)),
+  };
+
   const bloqueios = [];
   if (semVendedor.length) {
     bloqueios.push({
       tipo: 'sem_vendedor',
       texto: `${semVendedor.length} NF(s) sem vendedor — mande o relatório de comissão por venda`,
       valor: cents(sum(semVendedor, valorFaturado)),
+      rota: '/conciliacao',
+    });
+  }
+  if (resumoDevolucoes.semDono) {
+    bloqueios.push({
+      tipo: 'devolucao_sem_dono',
+      texto: `${resumoDevolucoes.semDono} devolução(ões) sem vendedor — a comissão não foi abatida de ninguém`,
+      valor: resumoDevolucoes.valorSemDono,
       rota: '/conciliacao',
     });
   }
@@ -263,6 +303,8 @@ export async function calcular(mes = monthKey()) {
     conferencia: { fiscal, atribuido, diferenca: cents(fiscal - atribuido), ok: Math.abs(cents(fiscal - atribuido)) < 0.01 },
     semVendedor: { quantidade: semVendedor.length, valor: cents(sum(semVendedor, valorFaturado)), notas: semVendedor },
     conferenciaVendedores,
+    devolucoes,
+    resumoDevolucoes,
     avisos,
     bloqueios,
     podeFechar: bloqueios.length === 0,

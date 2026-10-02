@@ -1032,5 +1032,92 @@ console.log('\n▶ Contas a receber só com os "em aberto": o app avisa');
   await link.recalcular();
 }
 
+console.log('\n▶ Devolução: tira do faturamento e abate a comissão de quem vendeu');
+{
+  /**
+   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
+   *  desse mês essas notas fiscais devolvidas."
+   *
+   * Quem diz o que é devolução é a coluna NATUREZA DA OPERAÇÃO. Sem ela, a
+   * devolução entra como venda: soma no faturamento e ainda gera comissão.
+   */
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  const VEND = 'Número do Pedido;Cliente;Data da Venda;Vendedor;Situação;Valor do Custo;Valor Total';
+  const COM = 'Nº;Cliente;Vendedor;Data de emissão;Valor;Comissão';
+
+  await importar('pedidos', 'dv.csv', `${VEND}
+8301;Devolve Ltda;02/03/2027;;Concretizada;3.000,00;5.000,00`);
+  await importar('comissoes', 'dc.csv', `${COM}
+8301;Devolve Ltda;Teodoro;02/03/2027;5.000,00;100,00`);
+  // a venda em março, a devolução em ABRIL — e uma devolução de COMPRA no meio
+  await importar('nfs', 'dn.csv', `${FISC}
+9301;03/03/2027;Devolve Ltda;77777777000177;5.000,00;Autorizada;Venda de mercadoria
+9302;05/04/2027;Devolve Ltda;77777777000177;5.000,00;Autorizada;Devolução de venda
+9303;06/04/2027;Fornecedor Qualquer Ltda;77777777000288;900,00;Autorizada;Devolução de compra`);
+  await link.recalcular();
+
+  const nota = async (n) => (await store.nfs.listar()).find((x) => x.numero === n);
+  const venda = await nota('9301');
+  const devolucao = await nota('9302');
+  const devCompra = await nota('9303');
+
+  igual('a natureza do arquivo diz o que é devolução', devolucao.devolucao, true);
+  igual('e a venda normal não é devolução', venda.devolucao, false);
+  igual('devolução de COMPRA não é devolução de venda', devCompra.devolucao, false);
+  ok('mas fica marcada à parte, para não virar faturamento negativo por engano',
+    devCompra.devolucaoDeCompra === true, JSON.stringify(devCompra.devolucaoDeCompra));
+
+  igual('a devolução achou de quem era a venda', devolucao.vendedorId, venda.vendedorId);
+  igual('e a origem diz que veio da nota devolvida', devolucao.vendedorOrigem, 'devolucao-nota');
+  igual('com o número da nota original guardado', devolucao.notaDevolvida, '9301');
+  igual('a devolução NÃO gruda no pedido da venda', devolucao.pedidoNumero, null);
+
+  // faturamento: a venda soma em março, a devolução subtrai em abril
+  const marco = await revenue.resumo({ de: '2027-03-01', ate: '2027-03-31' });
+  const abril = await revenue.resumo({ de: '2027-04-01', ate: '2027-04-30' });
+  igual('março fatura a venda', marco.total, 5000);
+  igual('abril fica negativo pela devolução', abril.total, -5000);
+
+  // comissão: 2% em março, −2% em abril, do MESMO vendedor
+  const cMarco = await commission.calcular('2027-03');
+  const cAbril = await commission.calcular('2027-04');
+  const teodoroMarco = cMarco.vendedores.find((v) => v.nome === 'Teodoro');
+  const teodoroAbril = cAbril.vendedores.find((v) => v.nome === 'Teodoro');
+  igual('março paga a comissão da venda', teodoroMarco.comissao, 100);
+  igual('abril abate a comissão da devolução', teodoroAbril.comissao, -100);
+
+  igual('e a devolução aparece na lista do mês', cAbril.resumoDevolucoes.quantidade, 1);
+  igual('com o valor devolvido', cAbril.resumoDevolucoes.valor, 5000);
+  igual('e quanto foi abatido de comissão', cAbril.resumoDevolucoes.comissaoAbatida, -100);
+  igual('nenhuma devolução ficou sem dono', cAbril.resumoDevolucoes.semDono, 0);
+  igual('abatido do vendedor certo', cAbril.devolucoes[0].vendedorNome, 'Teodoro');
+
+  // devolução cujo original não está na base: vira pendência, não some
+  await importar('nfs', 'dn2.csv', `${FISC}
+9304;07/04/2027;Cliente Sumido Ltda;77777777000399;1.234,56;Autorizada;Devolução de venda`);
+  await link.recalcular();
+  const orfa = await nota('9304');
+  igual('devolução sem a venda original não ganha vendedor nenhum', orfa.vendedorId, null);
+  const pend = (await store.pendencias.listar())
+    .filter((x) => x.status === 'aberta' && x.tipo === 'devolucao_sem_origem' && x.titulo.includes('9304'));
+  igual('e vira pendência própria, com pergunta própria', pend.length, 1);
+  const cAbril2 = await commission.calcular('2027-04');
+  ok('e o mês não pode fechar com devolução sem dono',
+    cAbril2.bloqueios.some((b) => b.tipo === 'devolucao_sem_dono'),
+    JSON.stringify(cAbril2.bloqueios.map((b) => b.tipo)));
+
+  // limpeza
+  for (const n of ['9301', '9302', '9303', '9304']) {
+    const x = await nota(n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  const ped = (await store.pedidos.listar()).find((x) => x.numero === '8301');
+  if (ped) await store.pedidos.remover(ped.id);
+  const com = (await store.comissoesRelatorio.listar()).find((x) => x.numero === '8301');
+  if (com) await store.comissoesRelatorio.remover(com.id);
+  await link.recalcular();
+}
+
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

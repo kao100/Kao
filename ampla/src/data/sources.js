@@ -47,7 +47,8 @@ export const FONTES = {
     descricao: 'Relatório fiscal de notas emitidas. É a base do faturamento — '
       + 'o mês da venda é o mês da NOTA, não o do pedido.',
     formatos: ['xlsx', 'csv', 'pdf', 'xml', 'zip'],
-    colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação'],
+    colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação',
+      'natureza da operação'],
     campos: [
       campo('numero', 'Número da nota', 'texto', { chaveNatural: true, sinonimos: ['nota', 'nf', 'numero nota', 'num nota', 'nro nota', 'numero', 'documento'] }),
       campo('dataEmissao', 'Data', 'data', { sinonimos: ['data', 'emissao', 'emissão', 'data emissao', 'data da nota'] }),
@@ -55,12 +56,25 @@ export const FONTES = {
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
       campo('valorTotal', 'Total', 'dinheiro', { sinonimos: VALOR_TOTAL }),
       campo('status', 'Situação', 'texto', { sinonimos: SITUACAO }),
+      /**
+       * NATUREZA DA OPERAÇÃO — é ela que diz o que é DEVOLUÇÃO.
+       *
+       * Sem esta coluna, uma devolução entra como venda normal: soma no
+       * faturamento e gera comissão sobre dinheiro que voltou. Ela sempre
+       * existiu no XML, mas não havia como ligá-la num relatório — agora há.
+       */
+      campo('naturezaOperacao', 'Natureza da operação', 'texto', {
+        sinonimos: ['natureza', 'natureza da operacao', 'natureza da operação', 'natureza operacao',
+          'nat operacao', 'nat op', 'cfop descricao', 'tipo de operacao', 'tipo operacao', 'finalidade'],
+      }),
       // existem no XML, e em alguns relatórios; se não vier, tudo bem
       campo('serie', 'Série', 'texto', { sinonimos: ['serie', 'série'] }),
       campo('pedidoNumero', 'Pedido', 'texto', { sinonimos: ['pedido', 'num pedido', 'numero pedido', 'nro pedido'] }),
     ],
-    ajuda: 'Este relatório não traz o pedido nem o vendedor — quem faz essa ponte é o '
-      + 'CONTAS A RECEBER, que tem a nota e o número do pedido na mesma linha.',
+    ajuda: 'INCLUA A COLUNA NATUREZA DA OPERAÇÃO. É ela que separa venda de DEVOLUÇÃO: sem ela, '
+      + 'a devolução entra como faturamento e ainda gera comissão. Este relatório também não traz '
+      + 'o pedido nem o vendedor — quem faz essa ponte é o CONTAS A RECEBER, que tem a nota e o '
+      + 'número do pedido na mesma linha.',
   },
 
   /* ------------------------------------------------------------------ vendas */
@@ -155,7 +169,13 @@ export const FONTES = {
       'conta bancária', 'vencimento', 'situação', 'valor total', 'nota fiscal'],
     campos: [
       campo('clienteNome', 'Destinado a', 'texto', { sinonimos: ['destinado a', 'destinatario', 'cliente', 'razao social', 'nome', 'sacado'] }),
-      campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
+      /**
+       * O relatório dela sai com CPF e CNPJ em DUAS colunas, cada linha
+       * preenchendo só a sua. Ligar as duas no mesmo campo deixava uma de fora.
+       * Agora são dois campos, e o app usa a que vier preenchida.
+       */
+      campo('clienteDoc', 'CNPJ', 'texto', { sinonimos: ['cnpj', 'cnpj cliente', 'cnpj do cliente'] }),
+      campo('clienteCpf', 'CPF', 'texto', { sinonimos: ['cpf', 'cpf cliente', 'cpf do cliente'] }),
       campo('descricao', 'Descrição (nº do pedido)', 'texto', { chaveNatural: true, sinonimos: ['descricao', 'descrição', 'historico', 'observacao', 'referencia', 'pedido'] }),
       campo('nfNumero', 'Nota fiscal', 'texto', { sinonimos: ['nota fiscal', 'nota', 'nf', 'numero nf', 'num nota'] }),
       campo('formaPagamento', 'Forma de pagamento', 'texto', { sinonimos: ['forma de pagamento', 'forma pagamento', 'forma', 'tipo pagamento', 'meio'] }),
@@ -184,7 +204,9 @@ export const FONTES = {
       'conta bancária', 'data de vencimento', 'situação', 'valor total', 'nota fiscal'],
     campos: [
       campo('fornecedorNome', 'Destinado a', 'texto', { sinonimos: ['destinado a', 'fornecedor', 'credor', 'favorecido', 'beneficiario', 'razao social', 'nome'] }),
-      campo('fornecedorDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
+      // duas colunas separadas, como vem no export (ver contas a receber)
+      campo('fornecedorDoc', 'CNPJ', 'texto', { sinonimos: ['cnpj', 'cnpj fornecedor'] }),
+      campo('fornecedorCpf', 'CPF', 'texto', { sinonimos: ['cpf', 'cpf fornecedor'] }),
       campo('descricao', 'Descrição', 'texto', { chaveNatural: true, sinonimos: ['descricao', 'descrição', 'historico', 'observacao'] }),
       campo('categoria', 'Plano de contas', 'texto', { sinonimos: ['plano de contas', 'plano contas', 'categoria', 'classificacao', 'centro de custo', 'conta', 'natureza', 'grupo'] }),
       campo('formaPagamento', 'Forma de pagamento', 'texto', { sinonimos: ['forma de pagamento', 'forma pagamento', 'forma', 'meio'] }),
@@ -228,12 +250,11 @@ export const FONTES = {
     icone: '🏷️',
     periodicidade: 'mensal',
     store: 'produtos',
-    verdadeDe: 'Nome, custo e NCM de cada produto.',
-    descricao: 'Relatório de produtos. O app usa código interno, nome, valor de custo, NCM e '
-      + 'grupo (que é como a Curva ABC agrupa). Estoque, fornecedor e valor de varejo vêm no '
-      + 'relatório mas ainda não são usados por nenhuma tela.',
+    verdadeDe: 'Nome, custo, preço de venda e NCM de cada produto.',
+    descricao: 'Relatório de produtos. O app usa código interno, nome, valor de custo, VALOR DE '
+      + 'VAREJO (o preço de venda), NCM e grupo (que é como a Curva ABC agrupa).',
     formatos: ['xlsx', 'csv', 'pdf'],
-    colunasReais: ['código interno', 'nome', 'valor de custo', 'NCM', 'grupo'],
+    colunasReais: ['código interno', 'nome', 'valor de custo', 'NCM', 'grupo', 'vr. varejo'],
     campos: [
       campo('codigo', 'Código interno', 'texto', { chaveNatural: true, sinonimos: ['codigo interno', 'código interno', 'codigo', 'cod', 'sku', 'referencia', 'ref'] }),
       campo('descricao', 'Nome', 'texto', { sinonimos: ['nome', 'descricao', 'descrição', 'produto', 'mercadoria'] }),
@@ -241,6 +262,16 @@ export const FONTES = {
       campo('ncm', 'NCM', 'texto', { sinonimos: ['ncm'] }),
       // é por esta coluna que a Curva ABC agrupa por categoria
       campo('categoria', 'Grupo', 'texto', { sinonimos: ['grupo', 'categoria', 'familia', 'linha', 'departamento'] }),
+      /**
+       * VR. VAREJO é o preço de venda. Com ele e o custo na mesma linha, a
+       * margem do cadastro dá para ser conferida contra a margem realizada na
+       * nota — que é o jeito de ver onde o desconto está comendo o lucro.
+       */
+      campo('precoVenda', 'Valor de varejo (venda)', 'dinheiro', {
+        sinonimos: ['vr varejo', 'vr. varejo', 'valor varejo', 'valor de varejo', 'preco de venda',
+          'preço de venda', 'preco venda', 'venda', 'varejo', 'preco'],
+      }),
+      campo('estoque', 'Estoque', 'numero', { sinonimos: ['estoque', 'saldo', 'quantidade em estoque', 'qtd estoque'] }),
     ],
   },
 

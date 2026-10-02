@@ -14,7 +14,12 @@ import { monthKey, monthStart, monthEnd, today, yesterday, addDays, addMonths, w
 import { sum, cents, sortBy } from '../core/util.js';
 
 export function valeParaFaturamento(nf) {
-  return nf.status === 'autorizada' && nf.operacao !== 'entrada';
+  if (nf.status !== 'autorizada' || nf.operacao === 'entrada') return false;
+  // devolução de COMPRA é nota emitida, mas não é venda nem anti-venda: a AMPLA
+  // devolveu mercadoria ao fornecedor. Somá-la como receita (ou como receita
+  // negativa) seria inventar um movimento de venda que não houve.
+  if (nf.devolucaoDeCompra) return false;
+  return true;
 }
 
 /** Valor que a nota soma no faturamento (devolução entra negativa). */

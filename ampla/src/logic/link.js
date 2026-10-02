@@ -71,6 +71,14 @@ export const TIPOS_PENDENCIA = {
       + 'Se o seu contas a receber sai só com os títulos EM ABERTO, mande uma vez um sem esse '
       + 'filtro: é o título já recebido que liga a nota do mês ao pedido.',
   },
+  devolucao_sem_origem: {
+    titulo: 'Devolução sem a venda original',
+    icone: '↩️',
+    gravidade: 'alta',
+    explicacao: 'A comissão desta venda já foi paga, e esta devolução tem de abatê-la do vendedor '
+      + 'certo. O app procura a nota original pelo mesmo cliente e mesmo valor, até seis meses '
+      + 'antes — se ela não está na base, ou se a devolução é parcial, diga aqui de quem era.',
+  },
   pedido_sem_vendedor: {
     titulo: 'Venda sem vendedor',
     icone: '🙋',
@@ -211,23 +219,54 @@ export async function recalcular() {
     pedidoPorClienteValor.get(k).push(pedido);
   }
 
-  /* 3. NFs: vendedor e mês de faturamento */
-  const nfsAtualizadas = [];
+  /**
+   * DEVOLUÇÃO: de quem era a venda que voltou.
+   *
+   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
+   *  desse mês."
+   *
+   * Para abater no vendedor certo, a devolução precisa do dono da NOTA ORIGINAL —
+   * não de um pedido. Índice: notas que NÃO são devolução, por cliente + valor.
+   */
+  const notaOriginalPorClienteValor = new Map();
   for (const nf of nfs) {
+    if (nf.devolucao || nf.status === 'cancelada') continue;
+    const k = chaveClienteValor(nf.clienteNome, nf.valorTotal);
+    if (!k) continue;
+    if (!notaOriginalPorClienteValor.has(k)) notaOriginalPorClienteValor.set(k, []);
+    notaOriginalPorClienteValor.get(k).push(nf);
+  }
+
+  /**
+   * 3. NFs: vendedor e mês de faturamento.
+   *
+   * A ORDEM IMPORTA. A devolução depende do vendedor da nota ORIGINAL, então as
+   * notas normais são resolvidas primeiro e as devoluções depois, consultando o
+   * que acabou de ser decidido. Tudo de uma vez deixava a devolução procurando
+   * um vendedor que, naquele instante, ainda não existia.
+   */
+  const nfsAtualizadas = [];
+  const vendedorJaResolvido = new Map();
+  const naOrdem = [...nfs.filter((n) => !n.devolucao), ...nfs.filter((n) => n.devolucao)];
+  for (const nf of naOrdem) {
     const antes = {
       vendedorId: nf.vendedorId,
       vendedorOrigem: nf.vendedorOrigem,
       pedidoId: nf.pedidoId,
       pedidoOrigem: nf.pedidoOrigem,
+      notaDevolvida: nf.notaDevolvida,
     };
     const resolvido = resolverVendedorDaNf(nf, {
       porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor,
-      novosVendedores, doRelatorioDeComissao,
+      notaOriginalPorClienteValor, vendedorJaResolvido, novosVendedores, doRelatorioDeComissao,
     });
+    vendedorJaResolvido.set(nf.id, resolvido.vendedorId || null);
     const mes = nf.dataEmissao ? monthKey(nf.dataEmissao) : null;
     const mudouNumero = String(resolvido.pedidoNumero ?? '') !== String(nf.pedidoNumero ?? '');
     if (resolvido.vendedorId !== antes.vendedorId || resolvido.vendedorOrigem !== antes.vendedorOrigem
       || resolvido.pedidoId !== antes.pedidoId || resolvido.pedidoOrigem !== antes.pedidoOrigem
+      || (resolvido.notaDevolvida ?? null) !== (antes.notaDevolvida ?? null)
       || nf.mes !== mes || mudouNumero) {
       nfsAtualizadas.push({ ...nf, ...resolvido, mes });
     }
@@ -376,6 +415,8 @@ export const ORIGEM_VENDEDOR = {
   'pedido-nf': 'pedido → NF',
   'pedido-confirmado': 'pedido que você confirmou',
   'vendedor-valor': 'pedidos iguais, todos do mesmo vendedor',
+  'devolucao-nota': 'vendedor da nota devolvida',
+  'devolucao-vendedor': 'notas devolvidas, todas do mesmo vendedor',
   manual: 'definido à mão',
 };
 
@@ -432,6 +473,44 @@ export function candidatosPorClienteValor(nf, indice) {
 }
 
 /**
+ * Quantos dias uma devolução pode vir depois da venda. Ela mesma disse que a
+ * venda de um mês é devolvida no mês seguinte, e às vezes depois: meio ano é
+ * folga suficiente sem transformar a busca em palpite, porque a exigência de
+ * cliente e valor idênticos continua valendo.
+ */
+export const JANELA_DEVOLUCAO = 180;
+
+/**
+ * De quem era a venda que voltou. Mesmo cliente, mesmo valor até o centavo, nota
+ * emitida ANTES da devolução, e só vale quando não há dúvida de vendedor:
+ *
+ *  - uma única nota original candidata → o vendedor dela
+ *  - várias, mas todas do mesmo vendedor → o vendedor é certo de qualquer jeito
+ *  - várias de vendedores diferentes, ou nenhuma → o app não escolhe
+ *
+ * Nota original sem vendedor não serve: abater de ninguém não é abater.
+ */
+function vendedorDaNotaDevolvida(nf, indice, jaResolvido) {
+  const k = chaveClienteValor(nf.clienteNome, nf.valorTotal);
+  if (!k || !indice || !nf.dataEmissao) return null;
+  // o vendedor da original pode ter sido decidido agora, neste mesmo recálculo:
+  // vale o que já foi resolvido, não o que estava gravado antes
+  const donoDe = (o) => (jaResolvido?.has(o.id) ? jaResolvido.get(o.id) : o.vendedorId) || null;
+  const candidatas = (indice.get(k) || []).filter((o) => {
+    if (o.id === nf.id || !donoDe(o) || !o.dataEmissao) return false;
+    const d = diasEntre(o.dataEmissao, nf.dataEmissao);
+    return d != null && d >= 0 && d <= JANELA_DEVOLUCAO;
+  });
+  if (!candidatas.length) return null;
+  if (candidatas.length === 1) {
+    return { vendedorId: donoDe(candidatas[0]), origem: 'devolucao-nota', numero: candidatas[0].numero };
+  }
+  const donos = new Set(candidatas.map(donoDe));
+  if (donos.size === 1) return { vendedorId: [...donos][0], origem: 'devolucao-vendedor', numero: null };
+  return null;
+}
+
+/**
  * A segunda ponte em si. Três respostas possíveis, e nenhuma delas é um palpite:
  *
  *  - um único candidato  → é o pedido desta nota
@@ -459,7 +538,7 @@ export function origemVendedor(valor) {
 /** Origens que vieram de uma decisão sua: o recálculo não mexe nelas. */
 const DECIDIDO_POR_VOCE = new Set(['manual', 'pedido-confirmado']);
 
-function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor, novosVendedores, doRelatorioDeComissao }) {
+function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor, notaOriginalPorClienteValor, vendedorJaResolvido, novosVendedores, doRelatorioDeComissao }) {
   if (DECIDIDO_POR_VOCE.has(nf.vendedorOrigem) && nf.vendedorId) {
     return {
       vendedorId: nf.vendedorId,
@@ -474,6 +553,35 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
     if (v) {
       return { vendedorId: v.id, vendedorOrigem: 'nf', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
     }
+  }
+
+  /**
+   * DEVOLUÇÃO tem caminho próprio, e vem antes de qualquer ponte de pedido: o
+   * dono de uma devolução é o dono da venda que voltou. Ligar devolução a pedido
+   * daria o mesmo vendedor por acaso, mas penduraria no pedido uma segunda nota
+   * que nunca existiu — e aí o pedido pareceria faturado duas vezes.
+   */
+  if (nf.devolucao) {
+    const daOriginal = vendedorDaNotaDevolvida(nf, notaOriginalPorClienteValor, vendedorJaResolvido);
+    if (daOriginal) {
+      return {
+        vendedorId: daOriginal.vendedorId,
+        vendedorOrigem: daOriginal.origem,
+        notaDevolvida: daOriginal.numero || null,
+        pedidoId: null,
+        pedidoNumero: null,
+        pedidoOrigem: null,
+      };
+    }
+    // sem a nota original na base não há como saber de quem abater: pendência
+    return {
+      vendedorId: null,
+      vendedorOrigem: null,
+      notaDevolvida: null,
+      pedidoId: null,
+      pedidoNumero: null,
+      pedidoOrigem: null,
+    };
   }
 
   // o relatório de comissão pode citar a própria nota: bate identificador com
@@ -693,6 +801,14 @@ export async function notasSemVendedor() {
     // nota cujo pedido está na base e tem vendedor não cai aqui: ela já tem dono
     const pedido = nf.pedidoNumero ? pedidoPorNumero.get(String(nf.pedidoNumero)) : null;
     if (pedido?.vendedorId) continue;
+    if (nf.devolucao) {
+      saida.push({
+        nf, pedido: null, valor: nf.valorTotal || 0, motivo: 'devolucao_sem_original',
+        explicacao: 'devolução: nenhuma nota original com este cliente e este mesmo valor nos '
+          + 'últimos seis meses — diga de quem era a venda, para abater dele',
+      });
+      continue;
+    }
     const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);
     saida.push({ nf, pedido: pedido || null, valor: nf.valorTotal || 0, motivo, explicacao });
   }
@@ -724,11 +840,13 @@ export async function vendasSemVendedor() {
     ...notas.map((x) => ({
       tipo: 'nota',
       chave: `nf:${x.nf.id}`,
-      titulo: `NF ${x.nf.numero || '(sem número)'}`,
+      titulo: `${x.nf.devolucao ? 'Devolução ' : ''}NF ${x.nf.numero || '(sem número)'}`,
       cliente: x.nf.clienteNome || 'cliente não identificado',
       data: x.nf.dataEmissao || null,
       valor: x.valor,
-      nota: 'nota emitida',
+      // devolução marcar vendedor é ABATER dele, não somar: o rótulo diz isso
+      nota: x.nf.devolucao ? 'abate do vendedor' : 'nota emitida',
+      devolucao: !!x.nf.devolucao,
       explicacao: x.explicacao,
       nf: x.nf,
     })),
@@ -847,6 +965,22 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   for (const nf of nfs) {
     if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
     if (nf.vendedorId) continue;
+
+    // devolução é outro problema, com outra pergunta: não "de qual pedido veio",
+    // e sim "de quem era a venda que voltou, para abater dele"
+    if (nf.devolucao) {
+      nova('devolucao_sem_origem', nf.id, {
+        titulo: `Devolução NF ${nf.numero}`,
+        detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)}`
+          + ' · nenhuma nota original com este cliente e este mesmo valor',
+        valor: nf.valorTotal,
+        mes: nf.mes,
+        motivo: 'devolucao_sem_original',
+        alvo: { store: 'nfs', id: nf.id },
+      });
+      continue;
+    }
+
     if (pedidoDaNota(nf)) continue;    // o pedido dela responde
 
     const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);

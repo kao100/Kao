@@ -118,7 +118,7 @@ function monkeyMes(iso) { return monthKey(iso); }
  */
 function integridade(tarefas, pendenciasAbertas) {
   const essenciaisAtrasadas = tarefas.filter((t) => t.essencial && !t.feito && !t.bloqueada);
-  const graves = pendenciasAbertas.filter((p) => ['nf_sem_pedido', 'pedido_sem_vendedor', 'divergencia_faturamento'].includes(p.tipo));
+  const graves = pendenciasAbertas.filter((p) => ['nf_sem_pedido', 'pedido_sem_vendedor', 'devolucao_sem_origem', 'divergencia_faturamento'].includes(p.tipo));
   if (essenciaisAtrasadas.length || graves.length) {
     return {
       nivel: 'vermelho',

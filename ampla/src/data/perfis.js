@@ -51,6 +51,9 @@ export const PERFIS = [
       valorTotal: 'Total',
       status: 'Situação',
     },
+    observacao: 'Se o export trouxer a coluna NATUREZA DA OPERAÇÃO, ela é reconhecida sozinha — e '
+      + 'é ela que separa venda de DEVOLUÇÃO. Sem ela, a devolução entra como faturamento e '
+      + 'ainda gera comissão.',
   },
   {
     id: 'gc-comissao',
@@ -76,7 +79,9 @@ export const PERFIS = [
       'Situação', 'Valor', 'Valor total', 'NF-e'],
     mapa: {
       clienteNome: 'Destinado à',
-      clienteDoc: ['CNPJ', 'CPF'],
+      // o export traz CPF e CNPJ em colunas separadas: cada um no seu campo
+      clienteDoc: 'CNPJ',
+      clienteCpf: 'CPF',
       descricao: 'Descrição',
       formaPagamento: 'Forma de pagamento',
       vencimento: 'Vencimento',
@@ -93,7 +98,8 @@ export const PERFIS = [
       'Situação', 'Valor', 'Valor total', 'NF-e'],
     mapa: {
       fornecedorNome: 'Destinado à',
-      fornecedorDoc: ['CNPJ', 'CPF'],
+      fornecedorDoc: 'CNPJ',
+      fornecedorCpf: 'CPF',
       descricao: 'Descrição',
       formaPagamento: 'Forma de pagamento',
       vencimento: 'Data de vencimento',
@@ -128,9 +134,10 @@ export const PERFIS = [
       custo: 'Valor de custo',
       ncm: 'NCM',
       categoria: 'Grupo',
+      precoVenda: 'Vr. Varejo',
+      estoque: 'Estoque',
     },
-    observacao: 'Estoque, fornecedor e valor de varejo vêm no relatório, mas ainda não são '
-      + 'usados por nenhuma tela — quando forem, entram sem você precisar reenviar nada.',
+    observacao: 'Entra tudo: custo, valor de varejo (o preço de venda), grupo, NCM e estoque.',
   },
   {
     id: 'gc-clientes',

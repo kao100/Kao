@@ -62,6 +62,8 @@ export async function telaComissoes({ query }) {
           h('div.mini', `fiscal ${money(calculo.conferencia.fiscal)} × vendedores ${money(calculo.conferencia.atribuido)}`)),
         h('span', '›')),
 
+    cardDevolucoes(calculo),
+
     cardConferenciaVendedores(calculo),
 
     calculo.bloqueios.length > 0 && card('Resolver antes de fechar', null,
@@ -111,6 +113,51 @@ export async function telaComissoes({ query }) {
             calculo.status !== 'aprovada' && botao('Marcar como revisada', { onClick: () => mudarStatus(mes, 'revisada') }),
             botao('Aprovar', { onClick: () => mudarStatus(mes, 'aprovada') }),
             botao('🔒 Fechar mês', { tipo: 'ok', desabilitado: !calculo.podeFechar, onClick: () => fecharMes(mes) }))))));
+}
+
+/**
+ * AS DEVOLUÇÕES DO MÊS, à vista.
+ *
+ * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+ *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
+ *  desse mês essas notas fiscais devolvidas."
+ *
+ * O abatimento o app faz sozinho. Esta lista existe para ele ser CONFERÍVEL: de
+ * quem foi abatido, quanto, e de qual nota original — porque desconto invisível
+ * em folha de comissão é briga garantida.
+ */
+function cardDevolucoes(calculo) {
+  const r = calculo.resumoDevolucoes;
+  if (!r?.quantidade) return null;
+
+  return card(`${r.quantidade} devolução(ões) neste mês`,
+    h('span.num.forte', { style: { color: 'var(--vermelho)' } }, `−${money(r.comissaoAbatida)}`),
+    h('p.mini.muted',
+      'Venda devolvida tira do faturamento e abate a comissão de quem vendeu — mesmo que a venda '
+      + 'tenha sido em outro mês e a comissão já tenha sido paga. O abatimento está nos números '
+      + `acima: ${money(r.valor)} devolvidos, ${money(r.comissaoAbatida)} de comissão a menos.`),
+
+    r.semDono > 0 && h('div.aviso.aviso--ruim', { style: { marginTop: '10px' } },
+      h('div.crescer',
+        h('strong', `${r.semDono} devolução(ões) sem vendedor`),
+        h('div.mini', `${money(r.valorSemDono)} que não foram abatidos de ninguém. O app procura a `
+          + 'nota original pelo mesmo cliente e mesmo valor, até seis meses antes — se ela não está '
+          + 'na base, ou se a devolução é parcial, diga em Conciliação de quem era.'))),
+
+    h('div.empilha', { style: { gap: '6px', marginTop: '10px' } },
+      ...calculo.devolucoes.slice(0, 30).map((d) => h('div.linha.linha--entre', { style: { alignItems: 'flex-start' } },
+        h('div.crescer',
+          h('div', `NF ${d.numero || '—'} · ${d.clienteNome || 'cliente não identificado'}`),
+          h('div.mini.muted',
+            [formatDate(d.data),
+              d.vendedorNome ? `abatido de ${d.vendedorNome}` : 'SEM VENDEDOR',
+              d.notaDevolvida ? `devolve a NF ${d.notaDevolvida}` : null,
+            ].filter(Boolean).join(' · '))),
+        h('div.empilha', { style: { alignItems: 'flex-end' } },
+          h('span.num', `−${money(d.valor)}`),
+          h('span.mini.muted', d.comissaoAbatida ? `−${money(d.comissaoAbatida)} de comissão` : 'sem comissão a abater')))),
+      calculo.devolucoes.length > 30
+        && h('p.mini.muted', `… e mais ${calculo.devolucoes.length - 30}.`)));
 }
 
 /**

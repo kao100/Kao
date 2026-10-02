@@ -115,6 +115,10 @@ function acoes(p, contexto) {
     botoes.push(botao('Mandar contas a receber', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/receber') }));
     botoes.push(botao('Definir vendedor', { pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
+  } else if (p.tipo === 'devolucao_sem_origem') {
+    // o que resolve é dizer de QUEM abater: a venda original não está na base
+    botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
+    botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
   } else if (p.tipo === 'pedido_sem_vendedor') {
     botoes.push(botao('Mandar comissão por venda', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/comissoes') }));
     botoes.push(botao('Definir à mão', { pequeno: true, onClick: () => navigate('/conciliacao/vendedores') }));
@@ -137,9 +141,46 @@ function acoes(p, contexto) {
   if (p.status === 'ignorada') {
     botoes.push(botao('Reabrir', { pequeno: true, onClick: () => reabrir(p) }));
   } else {
-    botoes.push(botao('Ignorar', { pequeno: true, onClick: () => ignorar(p) }));
+    /**
+     * IGNORAR EM UM TOQUE.
+     *
+     * "Quando se clica em ignorar seria interessante ter uma forma mais rápida,
+     *  em vez de ter que escrever o motivo. Poderia ser algo como 'a nota está
+     *  correta', e aí seria um botão escrito isso que só clicando já faria a
+     *  ação acontecer."
+     *
+     * Ignorar quase sempre quer dizer a mesma coisa: o app está certo, isto não
+     * é problema. Então o motivo mais comum é um botão, e digitar virou a
+     * exceção — mas continua existindo, porque o registro de POR QUE alguém
+     * ignorou é o que permite rever depois.
+     */
+    botoes.push(botao(`✓ ${motivoRapido(p.tipo)}`, {
+      tipo: 'ok', pequeno: true, onClick: () => ignorar(p, motivoRapido(p.tipo)),
+    }));
+    botoes.push(botao('Outro motivo…', { pequeno: true, onClick: () => ignorar(p) }));
   }
   return botoes;
+}
+
+/**
+ * O motivo de um toque, escrito na língua de cada pendência: "está correta" não
+ * quer dizer a mesma coisa numa nota e num movimento de banco.
+ */
+const MOTIVO_RAPIDO = {
+  nf_sem_pedido: 'A nota está correta',
+  devolucao_sem_origem: 'A devolução está correta',
+  pedido_sem_vendedor: 'O pedido está correto',
+  receber_sem_nf: 'O título está correto',
+  extrato_sem_vinculo: 'O movimento está correto',
+  pago_sem_banco: 'A baixa está correta',
+  divergencia_faturamento: 'A diferença está explicada',
+  item_sem_nf: 'Está correto',
+  produto_sem_custo: 'Está correto',
+  pagar_sem_categoria: 'Está correto',
+};
+
+function motivoRapido(tipo) {
+  return MOTIVO_RAPIDO[tipo] || 'Está correto';
 }
 
 /* ------------------------------------------------------------------- ações */
@@ -311,18 +352,22 @@ async function vincularNfDoTitulo(p, { nfs }) {
   refresh();
 }
 
-async function ignorar(p) {
-  const r = await formulario({
-    titulo: 'Ignorar esta pendência',
-    descricao: 'Ela some da lista, mas continua registrada — e volta se o motivo deixar de existir.',
-    campos: [{ chave: 'motivo', label: 'Por quê?', tipo: 'texto', obrigatorio: true }],
-    confirmar: 'Ignorar',
-  });
-  if (!r) return;
-  await store.pendencias.salvar({ ...p, status: 'ignorada', motivoIgnorada: r.motivo, ignoradaEm: Date.now() });
-  await store.registrar('pendencia_ignorada', { alvoId: p.id, alvo: p.titulo, motivo: r.motivo });
+async function ignorar(p, motivoPronto) {
+  let motivo = motivoPronto;
+  if (!motivo) {
+    const r = await formulario({
+      titulo: 'Ignorar esta pendência',
+      descricao: 'Ela some da lista, mas continua registrada — e volta se o motivo deixar de existir.',
+      campos: [{ chave: 'motivo', label: 'Por quê?', tipo: 'texto', obrigatorio: true }],
+      confirmar: 'Ignorar',
+    });
+    if (!r) return;
+    motivo = r.motivo;
+  }
+  await store.pendencias.salvar({ ...p, status: 'ignorada', motivoIgnorada: motivo, ignoradaEm: Date.now() });
+  await store.registrar('pendencia_ignorada', { alvoId: p.id, alvo: p.titulo, motivo });
   await atualizarAlertas();
-  ok('Pendência ignorada.');
+  ok(`Pendência ignorada — ${motivo.toLowerCase()}.`);
   refresh();
 }
 

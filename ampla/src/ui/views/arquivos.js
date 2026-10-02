@@ -247,14 +247,16 @@ async function carregar(arquivo, estado, ctx) {
       const conhecido = reconhecer(linhas);
       if (conhecido && conhecido.perfil.fonte === fonte.id) {
         estado.headerRow = conhecido.headerRow;
-        estado.mapeamento = conhecido.perfil.mapa;
+        // o perfil manda no que conhece; coluna nova do arquivo entra por sinônimo
+        const { cabecalho: cabPerfil } = rowsToObjects(linhas, conhecido.headerRow);
+        estado.mapeamento = ingest.completarMapeamento(fonte.id, cabPerfil, conhecido.perfil.mapa);
         estado.perfil = conhecido.perfil;
         estado.preparo = await ingest.prepararTabular({
           fonteId: fonte.id,
           leitura,
           planilhaIndex: 0,
           headerRow: conhecido.headerRow,
-          mapeamento: conhecido.perfil.mapa,
+          mapeamento: estado.mapeamento,
           contaId: estado.contaId,
         });
         estado.passo = 'conferir';
@@ -271,7 +273,9 @@ async function carregar(arquivo, estado, ctx) {
       estado.headerRow = detectHeaderRow(linhas);
       const { cabecalho } = rowsToObjects(linhas, estado.headerRow);
       const perfil = perfis.find((p) => p.fonte === fonte.id && p.assinatura === assinatura(cabecalho));
-      estado.mapeamento = perfil?.mapa || ingest.sugerirMapeamento(fonte.id, cabecalho);
+      estado.mapeamento = perfil?.mapa
+        ? ingest.completarMapeamento(fonte.id, cabecalho, perfil.mapa)
+        : ingest.sugerirMapeamento(fonte.id, cabecalho);
       estado.perfilSalvo = !!perfil;
       estado.passo = 'mapear';
     }
