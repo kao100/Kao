@@ -1899,20 +1899,36 @@ console.log('\n▶ Custo do frete: o cobrado paga o pago?');
    * Com o vendedor na linha, o custo de cada um é MEDIDO — e o rateio, que era
    * só ordem de grandeza, sai de cena.
    */
+  /* um vendedor com nome composto no cadastro, como no caso real */
+  await store.vendedores.salvar({ nome: 'Marcelo Santana', apelidos: [], ativo: true });
   const FRV = 'Período;Nota fiscal ou pedido;Vendedor;Responsável pela entrega;Valor';
   await importar('fretes', 'frv.csv', `${FRV}
 MANHÃ;NF 9910;Alberto;Messias;135,00
 TARDE;PED 7001;Alberto;Elias;150,00
 MANHÃ;NOTA 9911;Beatriz;Moises;90,00
+TARDE;NF 9914;Alb;Elias;10,00
+MANHÃ;PED 7003;Marcelo;Geraldo;120,00
 MANHÃ;PEDIDO No.7002;;Diego;200,00
 TARDE;NF 9912;Alberto;Val;0,00
 NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
 
   const fv = await margemMod.frete({ de: '2026-12-01', ate: '2026-12-31' });
-  igual('as seis entregas entraram', fv.custo.entregas, 6);
-  igual('e o custo é a soma do que foi lançado', fv.custo.total, 575);
+  igual('as oito entregas entraram', fv.custo.entregas, 8);
+  igual('e o custo é a soma do que foi lançado', fv.custo.total, 705);
+  /* o formulário diz MARCELO, o cadastro diz MARCELO SANTANA: é a mesma pessoa */
+  const mar = fv.vendedores.find((v) => v.nome === 'Marcelo Santana');
+  igual('o primeiro nome acha o vendedor de nome composto', (mar || {}).custoReal ?? 'não achou', 120);
+  /* e ele entra na tabela mesmo sem ter cobrado frete em nota nenhuma */
+  igual('quem tem custo de entrega e não cobrou frete aparece assim mesmo', (mar || {}).frete, 0);
+  /**
+   * O primeiro nome resolve, porque pertence a um vendedor só — é o caso real:
+   * o formulário diz MARCELO e o cadastro diz MARCELO SANTANA. "Alb" não é o
+   * primeiro nome de ninguém, então fica de fora em vez de ser adivinhado.
+   */
+  ok('primeiro nome parecido mas incompleto não vira vínculo',
+    fv.custo.semVendedor === 210, String(fv.custo.semVendedor));
   ok('o custo agora é por vendedor, não rateio', fv.custo.porVendedor === true, '');
-  igual('a entrega sem vendedor fica à parte', fv.custo.semVendedor, 200);
+
   // R$ 0,00 é entrega sem custo de terceiro; valor em branco o app não conta
   igual('entrega com zero é contada como sem cobrança', fv.custo.semCobranca, 1);
   igual('e a de valor em branco não vira zero', fv.custo.semValor, 1);
@@ -1938,6 +1954,9 @@ NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
     (await store.fretes.listar()).filter((l) => l.mes === '2026-11').length, 4);
 
   // limpeza
+  for (const v of (await store.vendedores.listar()).filter((x) => x.nome === 'Marcelo Santana')) {
+    await store.vendedores.remover(v.id);
+  }
   for (const l of (await store.fretes.listar())) await store.fretes.remover(l.id);
   for (const n of ['9910', '9911']) {
     const x = (await store.nfs.listar()).find((y) => y.numero === n);

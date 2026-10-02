@@ -50,7 +50,7 @@ const COLUNAS_FRETE = [
 const COLUNAS_FRETE_MEDIDO = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Frete cobrado', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
-  { header: 'Entregas custaram', key: 'custoReal', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'Custo', key: 'custoReal', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Sobra', key: 'resultado', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Frete / faturamento', key: 'peso', tipo: 'percentual', alinhar: 'direita' },
@@ -301,10 +301,23 @@ export async function telaMargem({ query }) {
             nota: r.frete.custo.cobertura == null ? null
               : `o cobrado paga ${pct(r.frete.custo.cobertura, 0)} do pago`,
           }),
-          r.frete.custo.temDado && kpi({
-            label: 'Frota própria', valor: money(r.frete.custo.frotaPropria), icone: '🚛',
-            nota: `terceiros ${money(r.frete.custo.terceiros)}`,
-          })),
+          /**
+           * SÓ MOSTRA A SEPARAÇÃO QUANDO ELA EXISTE.
+           *
+           * A planilha de entregas não tem coluna de tipo, e aí "frota própria
+           * R$ 0,00 / terceiros R$ 0,00" não é informação: é o app dizendo zero
+           * onde devia dizer "não sei". No lugar vai o que o arquivo tem mesmo.
+           */
+          r.frete.custo.temDado && (r.frete.custo.frotaPropria || r.frete.custo.terceiros
+            ? kpi({
+              label: 'Frota própria', valor: money(r.frete.custo.frotaPropria), icone: '🚛',
+              nota: `terceiros ${money(r.frete.custo.terceiros)}`,
+            })
+            : kpi({
+              label: 'Entregas', valor: num(r.frete.custo.entregas, 0), icone: '📦',
+              nota: r.frete.custo.semCobranca
+                ? `${r.frete.custo.semCobranca} sem custo de terceiro` : null,
+            }))),
 
         /**
          * A conta que ela pediu, escrita por extenso. "O Guilherme tem um frete,

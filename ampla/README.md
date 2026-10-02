@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 405 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 415 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →

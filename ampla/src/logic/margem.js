@@ -672,6 +672,27 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
     idPorNome.set(normalize(v.nome), v.id);
     for (const a of v.apelidos || []) idPorNome.set(normalize(a), v.id);
   }
+  /**
+   * NA PLANILHA DE ENTREGAS O VENDEDOR VEM PELO PRIMEIRO NOME.
+   *
+   * Quem preenche o formulário escreve MARCELO; o cadastro diz MARCELO SANTANA.
+   * Sem isto, as entregas dele caíam todas em "sem vendedor".
+   *
+   * Não é semelhança de texto: é primeiro nome que pertence a UM vendedor só.
+   * Se dois vendedores começassem com o mesmo nome, nenhum dos dois seria
+   * escolhido — é a mesma regra do par único que liga nota a pedido.
+   */
+  const porPrimeiroNome = new Map();
+  for (const v of vendedores) {
+    const primeiro = normalize(v.nome).split(' ')[0];
+    if (!primeiro) continue;
+    porPrimeiroNome.set(primeiro, porPrimeiroNome.has(primeiro) ? null : v.id);
+  }
+  const vendedorPeloNome = (texto) => {
+    const t = normalize(texto || '');
+    if (!t) return null;
+    return idPorNome.get(t) || porPrimeiroNome.get(t.split(' ')[0]) || null;
+  };
   const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate);
   const comFrete = doPeriodo.filter((nf) => nf.valorFrete != null);
 
@@ -723,11 +744,25 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
   const custoPorVendedor = new Map();
   let custoSemVendedor = 0;
   for (const c of doPeriodoCusto) {
-    const vid = c.vendedorId || idPorNome.get(normalize(c.vendedorNome || '')) || null;
+    const vid = c.vendedorId || vendedorPeloNome(c.vendedorNome);
     if (!vid) { custoSemVendedor += c.valor || 0; continue; }
     custoPorVendedor.set(vid, cents((custoPorVendedor.get(vid) || 0) + (c.valor || 0)));
   }
   const temCustoPorVendedor = custoPorVendedor.size > 0;
+
+  /**
+   * O VENDEDOR QUE TEM CUSTO DE ENTREGA MAS NÃO COBROU FRETE também entra na
+   * tabela. Senão o custo dele sumia da vista: aparecia no total e em lugar
+   * nenhum — que é exatamente o número que faz falta.
+   */
+  for (const [vid, valor] of custoPorVendedor) {
+    if (porVendedor.has(vid)) continue;
+    porVendedor.set(vid, {
+      vendedorId: vid,
+      nome: nomeVendedor.get(vid) || 'Vendedor',
+      frete: 0, notas: 0, faturamento: 0, custoSemCobranca: valor,
+    });
+  }
 
   const lista = [...porVendedor.values()].map((v) => ({
     ...v,
