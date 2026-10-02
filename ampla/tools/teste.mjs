@@ -1978,7 +1978,7 @@ console.log('\n▶ Quem emite nota não é, por isso, vendedor');
    * pessoa para outra por conta própria é exatamente o que ele não pode fazer.
    * Ele deixa a pendência com o botão de dizer de quem era.
    */
-  const emissora = await store.vendedores.salvar({ nome: 'Vitoria Emissora', naoVende: true, ativo: true });
+  const emissora = await store.vendedores.salvar({ nome: 'Vitoria Emissora', ativo: true });
   const FX = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
   await importar('nfs', 'emis.csv', `${FX}
 9950;10/10/2026;Cliente da Obra Ltda;40404040000140;7.000,00;Autorizada;Venda de mercadoria`);
@@ -1986,6 +1986,23 @@ console.log('\n▶ Quem emite nota não é, por isso, vendedor');
   const nf = (await store.nfs.listar()).find((x) => x.numero === '9950');
   await store.nfs.salvar({ ...nf, vendedorNome: 'Vitoria Emissora' });
   await link.recalcular();
+
+  /**
+   * ANTES DE QUALQUER COISA, O APP PERGUNTA — e pergunta na conciliação, não em
+   * Ajustes: "não precisa ir em ajustes, vendedores, editar o papel; isso é
+   * diferente para mim".
+   */
+  const pergunta = (await store.pendencias.listar()).filter((p) => p.tipo === 'vendedor_a_confirmar'
+    && p.alvo.id === emissora.id);
+  igual('o nome novo vira uma pergunta de um toque', pergunta.length, 1);
+  ok('dizendo em quantas notas ele apareceu', /1 nota/.test(pergunta[0].detalhe), pergunta[0].detalhe);
+
+  /* ela responde "não vende" — é isso que liga a pendência das notas */
+  await store.vendedores.salvar({ ...emissora, confirmado: true, naoVende: true });
+  await link.recalcular();
+  igual('respondida, a pergunta não volta',
+    (await store.pendencias.listar()).filter((p) => p.tipo === 'vendedor_a_confirmar'
+      && p.alvo.id === emissora.id).length, 0);
 
   const pend = (await store.pendencias.listar()).filter((p) => p.tipo === 'nf_vendedor_nao_vende');
   igual('a nota no nome de quem não vende vira pendência', pend.length, 1);
@@ -1995,8 +2012,8 @@ console.log('\n▶ Quem emite nota não é, por isso, vendedor');
   const depois = (await store.nfs.listar()).find((x) => x.numero === '9950');
   igual('o app não tirou a nota dela por conta própria', depois.vendedorId, emissora.id);
 
-  /* quem vende não gera pendência nenhuma */
-  await store.vendedores.salvar({ ...emissora, naoVende: false });
+  /* e a volta atrás: dizer que ela vende limpa tudo */
+  await store.vendedores.salvar({ ...emissora, confirmado: true, naoVende: false });
   await link.recalcular();
   igual('marcada como vendedora, a pendência some',
     (await store.pendencias.listar()).filter((p) => p.tipo === 'nf_vendedor_nao_vende').length, 0);

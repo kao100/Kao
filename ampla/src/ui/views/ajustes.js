@@ -47,6 +47,11 @@ export async function telaAjustes() {
               v.codigo && h('span', `cód. ${v.codigo}`),
               v.apelidos?.length ? h('span', `também: ${v.apelidos.join(', ')}`) : h('span.muted', 'sem apelidos'),
               v.meta ? h('span', `meta ${money(v.meta)}`) : null,
+              /**
+               * O papel é decidido na CONCILIAÇÃO, em um toque, não aqui — "ir
+               * em ajustes, vendedores, editar o papel é diferente para mim".
+               * Aqui ele só aparece, para o cadastro não mentir.
+               */
               v.naoVende && selo('só emite nota', 'atencao'),
               v.ativo === false && selo('inativo', 'ruim'))),
           botao('Editar', { pequeno: true, onClick: () => editarVendedor(v) }))))
@@ -206,27 +211,6 @@ async function editarVendedor(vendedor) {
         ajuda: 'Separe por vírgula. Ex.: EDU, Eduardo S.',
       },
       { chave: 'meta', label: 'Meta mensal', tipo: 'dinheiro', valor: vendedor?.meta ?? '' },
-      /**
-       * QUEM EMITE NOTA NÃO É, POR ISSO, VENDEDOR.
-       *
-       * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas
-       *  não é vendedora."
-       *
-       * Marcado aqui, toda nota que sair no nome dela vira pendência para você
-       * dizer de quem era a venda. O app não move a nota sozinho.
-       */
-      {
-        chave: 'papel',
-        label: 'Papel',
-        tipo: 'opcoes',
-        valor: vendedor?.naoVende ? 'emite' : 'vende',
-        opcoes: [
-          { valor: 'vende', label: 'Vende (entra na comissão)' },
-          { valor: 'emite', label: 'Só emite nota, não vende' },
-        ],
-        ajuda: 'Quem só emite nota não entra no ranking. Toda nota no nome dessa pessoa vira '
-          + 'pendência para você vincular ao vendedor certo.',
-      },
       {
         chave: 'ativo',
         label: 'Situação',
@@ -244,7 +228,6 @@ async function editarVendedor(vendedor) {
     codigo: r.codigo || null,
     apelidos: r.apelidos ? r.apelidos.split(',').map((s) => s.trim()).filter(Boolean) : [],
     meta: r.meta ? Number(r.meta) : null,
-    naoVende: r.papel === 'emite',
     ativo: r.ativo !== 'nao',
   });
   await recalcular();

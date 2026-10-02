@@ -80,6 +80,15 @@ export const TIPOS_PENDENCIA = {
       + 'certo. O app procura a nota original pelo mesmo cliente e mesmo valor, até seis meses '
       + 'antes — se ela não está na base, ou se a devolução é parcial, diga aqui de quem era.',
   },
+  vendedor_a_confirmar: {
+    titulo: 'Esta pessoa é vendedora?',
+    icone: '🙋',
+    gravidade: 'media',
+    explicacao: 'Este nome apareceu como vendedor nas notas, mas quem emite a nota nem sempre é '
+      + 'quem vendeu — às vezes é só quem estava no balcão na hora. Confirme em um toque. Se a '
+      + 'resposta for "não vende", toda nota no nome dessa pessoa passa a vir para cá, para você '
+      + 'dizer de quem era a venda.',
+  },
   frete_sem_valor: {
     titulo: 'Entrega sem custo informado',
     icone: '🚚',
@@ -1024,6 +1033,39 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
    */
   const naoVendem = new Set((vendedores || []).filter((v) => v.naoVende).map((v) => v.id));
   const nomeDoVendedor = new Map((vendedores || []).map((v) => [v.id, v.nome]));
+
+  /**
+   * A PERGUNTA VEM ANTES, E VEM AQUI.
+   *
+   * "Não precisa ir em ajustes, vendedores, editar o papel — isso é diferente
+   *  para mim. A gente já pode ir para a segunda etapa: toda nota que sair no
+   *  nome da Maria Vitória vira pendência. Aí eu vou lá e ajusto. Mais simples."
+   *
+   * O app não tem como saber sozinho quem vende e quem só emite nota, e adivinhar
+   * seria mover comissão por conta própria. Então ele PERGUNTA, uma vez por nome,
+   * no lugar onde ela já trabalha — e a resposta "não vende" é que liga a
+   * pendência das notas. Nenhuma viagem a Ajustes.
+   */
+  const notasPorVendedor = new Map();
+  for (const nf of nfs) {
+    if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
+    if (!nf.vendedorId) continue;
+    const atual = notasPorVendedor.get(nf.vendedorId) || { notas: 0, valor: 0 };
+    atual.notas += 1;
+    atual.valor += nf.valorTotal || 0;
+    notasPorVendedor.set(nf.vendedorId, atual);
+  }
+  for (const v of vendedores || []) {
+    if (v.confirmado === true || v.naoVende) continue;
+    const resumo = notasPorVendedor.get(v.id);
+    if (!resumo) continue;      // sem nota, não há o que perguntar ainda
+    nova('vendedor_a_confirmar', v.id, {
+      titulo: `${v.nome} é vendedor(a)?`,
+      detalhe: `${resumo.notas} nota(s) no nome dessa pessoa neste período`,
+      valor: cents(resumo.valor),
+      alvo: { store: 'vendedores', id: v.id },
+    });
+  }
   if (naoVendem.size) {
     for (const nf of nfs) {
       if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;

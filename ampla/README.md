@@ -37,7 +37,7 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 441 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 444 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -109,11 +109,13 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   declara — é a **cobertura de custo**: quanto da venda faturada tem custo de
   origem verificada. Abaixo de 98% a tela diz, em vermelho, quantos reais estão
   fora da conta.
-- **Quem emite a nota não é, por isso, quem vendeu.** Um vendedor pode ser
-  marcado como *"só emite nota, não vende"* — e aí toda nota que sair no nome
-  dele vira **pendência** com o botão de dizer de quem era a venda. O app não
-  move a nota sozinho: trocar o dono de um faturamento e de uma comissão é
-  decisão dela, não dedução dele.
+- **Quem emite a nota não é, por isso, quem vendeu.** O app não adivinha isso —
+  ele **pergunta**, uma vez por nome, na conciliação: *"Fulano é vendedor(a)?"*,
+  com dois botões. Respondido "não vende", **toda nota no nome dessa pessoa vira
+  pendência** com o botão de dizer de quem era a venda. A decisão mora onde ela
+  já trabalha, e não numa tela de configuração: *"ir em ajustes, vendedores,
+  editar o papel — isso é diferente para mim"*. O app nunca move a nota sozinho:
+  trocar o dono de um faturamento e de uma comissão é decisão dela.
 - **Quem entrega é cadastro, não dedução.** Cada nome da planilha de entregas é
   classificado uma vez como **carro nosso** ou **freteiro**, e vale para sempre.
   O app não infere isso do valor: R$ 0,00 numa entrega quer dizer que não houve

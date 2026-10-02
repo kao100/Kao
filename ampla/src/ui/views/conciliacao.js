@@ -83,6 +83,25 @@ export async function telaConciliacao({ query }) {
       h('div.empilha', { style: { gap: '4px', marginTop: '8px' } },
         ...pares.map((p) => h('p.mini', `${p.curto.nome} ← ${p.longo.nome}`)))),
 
+    /**
+     * A primeira importação pergunta por todo mundo. Confirmar um por um seria
+     * seis toques dizendo a mesma coisa — então existe o botão que confirma
+     * todos, e quem não for vendedor ela marca depois, pelo nome.
+     */
+    (() => {
+      const aConfirmar = abertas.filter((p) => p.tipo === 'vendedor_a_confirmar');
+      if (aConfirmar.length < 2) return null;
+      return card(`${aConfirmar.length} nomes apareceram como vendedor`,
+        botao('São todos vendedores', {
+          tipo: 'primario', pequeno: true, onClick: () => confirmarTodosVendedores(aConfirmar),
+        }),
+        h('p.mini.muted', 'Quem emite nota nem sempre é quem vendeu. Confirme os que vendem de uma '
+          + 'vez e marque "não vende" só em quem não for — as notas dessa pessoa passam a vir para '
+          + 'cá, uma a uma, para você dizer de quem era.'),
+        h('div.empilha', { style: { gap: '4px', marginTop: '8px' } },
+          ...aConfirmar.map((p) => h('p.mini', p.titulo))));
+    })(),
+
     chips([
       { id: 'todas', label: 'Todas', contador: abertas.length },
       ...[...porTipo.entries()].map(([tipo, n]) => ({
@@ -139,11 +158,16 @@ function acoes(p, contexto) {
     // o que resolve é dizer de QUEM abater: a venda original não está na base
     botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
+  } else if (p.tipo === 'vendedor_a_confirmar') {
+    botoes.push(botao('É vendedor(a)', { tipo: 'primario', pequeno: true, onClick: () => confirmarVendedor(p, true) }));
+    botoes.push(botao('Não vende', { pequeno: true, onClick: () => confirmarVendedor(p, false) }));
   } else if (p.tipo === 'frete_sem_valor') {
     botoes.push(botao('Não teve custo', { tipo: 'primario', pequeno: true, onClick: () => custoDaEntrega(p, 0) }));
     botoes.push(botao('Informar valor', { pequeno: true, onClick: () => custoDaEntrega(p) }));
   } else if (p.tipo === 'nf_vendedor_nao_vende') {
     botoes.push(botao('De quem era a venda', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
+    // a volta atrás mora aqui: marcar "não vende" por engano não pode ser sem saída
+    botoes.push(botao('Na verdade vende', { pequeno: true, onClick: () => voltarAVender(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
   } else if (p.tipo === 'pedido_sem_vendedor') {
     botoes.push(botao('Mandar comissão por venda', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/comissoes') }));
@@ -196,6 +220,7 @@ const MOTIVO_RAPIDO = {
   nf_sem_pedido: 'A nota está correta',
   nf_vendedor_nao_vende: 'Pode deixar como está',
   frete_sem_valor: 'Depois eu vejo',
+  vendedor_a_confirmar: 'Depois eu digo',
   devolucao_sem_origem: 'A devolução está correta',
   pedido_sem_vendedor: 'O pedido está correto',
   receber_sem_nf: 'O título está correto',
@@ -244,6 +269,54 @@ async function resolverVendedor(p, { vendedores, nfs }) {
   await definirVendedorDaNf(nf.id, r.vendedorId, r.motivo);
   await atualizarAlertas();
   ok('Vendedor definido — comissão e faturamento atualizados.');
+  refresh();
+}
+
+/**
+ * É VENDEDOR OU SÓ EMITE NOTA? Um toque, aqui mesmo.
+ *
+ * "Não precisa ir em ajustes, vendedores, editar o papel. A gente já pode ir
+ *  para a segunda etapa: toda nota que sair no nome da Maria Vitória vira
+ *  pendência. Aí eu vou lá e ajusto."
+ *
+ * Dizer "não vende" não mexe em nota nenhuma: ele só liga a pendência, e cada
+ * nota continua sendo resolvida uma a uma, por ela.
+ */
+async function confirmarVendedor(p, vende) {
+  const v = await store.vendedores.obter(p.alvo?.id);
+  if (!v) { erro('Vendedor não encontrado.'); return; }
+  await store.vendedores.salvar({ ...v, confirmado: true, naoVende: !vende });
+  await recalcular();
+  await atualizarAlertas();
+  ok(vende ? `${v.nome}: vendedor(a) confirmado(a).`
+    : `${v.nome}: as notas no nome dessa pessoa vão aparecer aqui para você vincular.`);
+  refresh();
+}
+
+/** Desfaz o "não vende": a pessoa volta a ser vendedora e as pendências somem. */
+async function voltarAVender(p, { nfs }) {
+  const nf = nfs.find((n) => n.id === p.alvo?.id);
+  const v = nf?.vendedorId ? await store.vendedores.obter(nf.vendedorId) : null;
+  if (!v) { erro('Vendedor não encontrado.'); return; }
+  await store.vendedores.salvar({ ...v, confirmado: true, naoVende: false });
+  await recalcular();
+  await atualizarAlertas();
+  ok(`${v.nome} voltou a ser vendedor(a).`);
+  refresh();
+}
+
+/**
+ * Confirmar vários de uma vez, porque a primeira importação pergunta por todo
+ * mundo e responder seis vezes a mesma coisa é trabalho à toa.
+ */
+async function confirmarTodosVendedores(pendentes) {
+  for (const p of pendentes) {
+    const v = await store.vendedores.obter(p.alvo?.id);
+    if (v) await store.vendedores.salvar({ ...v, confirmado: true, naoVende: false });
+  }
+  await recalcular();
+  await atualizarAlertas();
+  ok(`${pendentes.length} vendedor(es) confirmado(s).`);
   refresh();
 }
 
