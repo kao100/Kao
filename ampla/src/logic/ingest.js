@@ -265,6 +265,16 @@ export async function prepararNfe({ leitura }) {
         chave: nota.chave || null,
         numero: String(nota.numero),
         serie: nota.serie || null,
+        /**
+         * O MODELO DO DOCUMENTO, que estava sendo lido e jogado fora.
+         *
+         *   55 = NF-e      venda com nota, normalmente para empresa
+         *   65 = NFC-e     cupom fiscal eletrônico, a venda no balcão
+         *
+         * Guardar isso é o que permite a tela dizer "faltam as vendas de balcão"
+         * em vez de deixar um buraco inexplicado entre o relatório e as notas.
+         */
+        modelo: nota.modelo || null,
         dataEmissao: nota.dataEmissao,
         mes: monthKey(nota.dataEmissao),
         clienteId: cliente?.id || null,

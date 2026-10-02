@@ -55,11 +55,11 @@ export const FONTES = {
      */
     destaque: {
       titulo: 'Tem o XML das notas? Mande ele.',
-      texto: 'Um arquivo .xml, ou um .zip com o mês inteiro. O XML traz três coisas que nenhum '
-        + 'relatório traz juntas: o FRETE cobrado em cada nota, a NATUREZA DA OPERAÇÃO (que separa '
-        + 'venda de devolução sem depender de coluna nenhuma) e os ITENS de cada nota, com produto, '
-        + 'quantidade e valor. Com ele, frete por vendedor, devolução e curva ABC param de depender '
-        + 'de qualquer relatório — e nada precisa ser ligado à mão.',
+      texto: 'Um arquivo .xml, vários de uma vez, ou um .zip com o mês inteiro. O XML traz quatro '
+        + 'coisas que nenhum relatório traz juntas: o NÚMERO DO PEDIDO dentro da própria nota, o '
+        + 'FRETE cobrado, a NATUREZA DA OPERAÇÃO (que separa venda de devolução) e os ITENS, com '
+        + 'produto, quantidade e valor. MANDE TAMBÉM AS NFC-e (modelo 65, o cupom da venda de '
+        + 'balcão): só com NF-e, a venda de balcão fica fora de tudo.',
     },
     formatos: ['xlsx', 'csv', 'pdf', 'xml', 'zip'],
     colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação',

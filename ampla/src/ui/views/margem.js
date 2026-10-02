@@ -128,8 +128,13 @@ export async function telaMargem({ query }) {
       + 'CUSTO, que vem do relatório. O motivo mais provável é o relatório ser de outro período '
       + 'que não o desta tela — ele soma '
       + `${money(r.totalRelatorio.venda)} e as notas do período somam ${money(r.total.venda)}. `
-      + 'Mande o relatório de produtos vendidos DO MESMO PERÍODO, ou o relatório de produtos (o do '
-      + 'cadastro, com código interno e valor de custo), que casa produto a produto com o XML.',
+      + (r.conferencia.faltandoNasNotas > 0 && r.conferencia.soTemNfe
+        ? `Faltam ${money(r.conferencia.faltandoNasNotas)} de venda que o relatório conta e as notas `
+          + 'não: todas as notas da base são modelo 55 (NF-e). A venda de BALCÃO sai em NFC-e '
+          + '(modelo 65), que é outro arquivo. Mande os XMLs das NFC-e do mês junto com os das '
+          + 'NF-e e a conta fecha.'
+        : 'Mande o relatório de produtos vendidos DO MESMO PERÍODO, ou o relatório de produtos (o '
+          + 'do cadastro, com código interno e valor de custo), que casa produto a produto com o XML.'),
       'ruim'),
 
     r.fonte === 'itens-da-nota' && aviso('Estes números vêm dos ITENS DAS NOTAS (o XML das NF-e): '

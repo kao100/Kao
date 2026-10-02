@@ -439,6 +439,19 @@ export async function margem({ de, ate }) {
    * Dois pontos percentuais de folga: mix de produtos muda a média, mas não a
    * dobra.
    */
+  /**
+   * QUANDO A VENDA DO RELATÓRIO É MAIOR QUE A DAS NOTAS, a pergunta é: que
+   * vendas são essas que o relatório conta e as notas não?
+   *
+   * A resposta mais comum numa loja de material de construção é a venda de
+   * BALCÃO, que sai em NFC-e (cupom fiscal eletrônico, modelo 65) e não em NF-e
+   * (modelo 55). Se a base só tem modelo 55, é quase certamente isso — e a tela
+   * diz, em vez de deixar um buraco sem explicação.
+   */
+  const modelos = new Map();
+  for (const nf of doPeriodo) modelos.set(nf.modelo || '?', (modelos.get(nf.modelo || '?') || 0) + 1);
+  const soTemNfe = modelos.size > 0 && [...modelos.keys()].every((m) => m === '55');
+
   const margemCalculada = venda ? ((venda - custo) / venda) * 100 : null;
   const margemDeclarada = totalRelatorio.margem;
   conferencia.margemCalculada = margemCalculada;
@@ -446,6 +459,12 @@ export async function margem({ de, ate }) {
   conferencia.margemConfere = margemCalculada == null || margemDeclarada == null
     ? null
     : Math.abs(margemCalculada - margemDeclarada) <= 2;
+  conferencia.modelos = [...modelos.entries()].map(([modelo, quantas]) => ({ modelo, quantas }));
+  conferencia.soTemNfe = soTemNfe;
+  conferencia.vendaDoRelatorio = totalRelatorio.venda;
+  conferencia.vendaDasNotas = temItensDeNota ? alvo.venda : null;
+  conferencia.faltandoNasNotas = temItensDeNota && totalRelatorio.venda
+    ? cents(totalRelatorio.venda - alvo.venda) : null;
 
   return {
     periodo: { de, ate },
