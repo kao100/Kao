@@ -102,6 +102,24 @@ export async function telaConciliacao({ query }) {
           ...aConfirmar.map((p) => h('p.mini', p.titulo))));
     })(),
 
+    /**
+     * O MESMO ATALHO DOS VENDEDORES, para as entregas com o custo em branco.
+     * Ela disse que em branco quase sempre quer dizer que não houve custo — o
+     * cliente retirou. Então a resposta mais comum vira um toque só.
+     */
+    (() => {
+      const semValor = abertas.filter((p) => p.tipo === 'frete_sem_valor');
+      if (semValor.length < 2) return null;
+      return card(`${semValor.length} entregas sem custo informado`,
+        botao('Nenhuma teve custo', {
+          tipo: 'primario', pequeno: true, onClick: () => nenhumaTeveCusto(semValor),
+        }),
+        h('p.mini.muted', 'A planilha veio com o campo em branco nessas entregas. Em branco não é '
+          + 'zero — mas quando não houve custo mesmo (o cliente retirou, foi carro nosso sem '
+          + 'extra), isto resolve todas de uma vez. Se alguma teve custo, informe ela antes, uma '
+          + 'a uma.'));
+    })(),
+
     chips([
       { id: 'todas', label: 'Todas', contador: abertas.length },
       ...[...porTipo.entries()].map(([tipo, n]) => ({
@@ -372,8 +390,37 @@ async function custoDaEntrega(p, valorPronto) {
     valor = Number(r.valor);
   }
   await store.fretes.salvar({ ...frete, valor, valorOrigem: 'manual' });
+  /**
+   * SEM ESTE recalcular() O BOTÃO NÃO FAZIA NADA VISÍVEL.
+   *
+   * "A gente clicava em 'não teve custo' e não acontecia nenhuma ação de fato."
+   *
+   * E não acontecia mesmo: o valor era gravado, mas quem apaga a pendência é o
+   * recalcular — ela fica no banco até alguém refazer a conta. Salvar sem
+   * recalcular é meio trabalho, e meio trabalho aqui parece trabalho nenhum.
+   */
+  await recalcular();
   await atualizarAlertas();
   ok(valor ? 'Custo informado.' : 'Entrega sem custo — registrado.');
+  refresh();
+}
+
+/**
+ * As 22 de uma vez. Vinte e dois toques dizendo a mesma coisa é trabalho à toa —
+ * e cada um deles refazendo a conta inteira é espera à toa. Aqui é um toque e um
+ * recálculo só.
+ */
+async function nenhumaTeveCusto(pendentes) {
+  const linhas = [];
+  for (const p of pendentes) {
+    const frete = await store.fretes.obter(p.alvo?.id);
+    if (frete) linhas.push({ ...frete, valor: 0, valorOrigem: 'manual' });
+  }
+  if (!linhas.length) { erro('Nenhuma entrega encontrada.'); return; }
+  await store.fretes.salvarMuitos(linhas);
+  await recalcular();
+  await atualizarAlertas();
+  ok(`${linhas.length} entregas marcadas sem custo.`);
   refresh();
 }
 
