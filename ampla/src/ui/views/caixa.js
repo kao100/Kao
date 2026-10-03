@@ -14,21 +14,46 @@ import { grafLinha } from '../components/chart.js';
 import { detalhe, linhas as linhasDetalhe, formulario, confirmar } from '../components/sheet.js';
 import { exportadores } from '../components/table.js';
 import { ok, erro } from '../components/toast.js';
-import { money, formatDate, today, addDays, DAY_SHORT, parseDate } from '../../core/format.js';
+import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
+import { money, formatDate, today, addDays, daysBetween, DAY_SHORT, parseDate } from '../../core/format.js';
 
 /** Ajustes da simulação vivem na sessão: some ao recarregar, nunca toca no banco. */
 let ajustesAtivos = [];
 
 export async function telaCaixa({ query }) {
-  const dias = Number(query.d || 30);
+  /**
+   * OS ATALHOS DE HORIZONTE CONTINUAM, e o filtro de período entra por cima.
+   *
+   * "Preciso de filtro de período na aba de caixa, para ter diferentes visões."
+   *
+   * O fluxo de caixa é uma projeção: ela começa numa data e vai até outra. Os
+   * chips de 7/15/30/60 dias são o caminho rápido para "a partir de hoje"; o
+   * filtro é para quando ela quer um recorte com começo e fim escolhidos — o
+   * próximo mês inteiro, a quinzena que vem.
+   */
+  const temPeriodo = !!(query.de || query.ate || query.p);
+  const filtro = temPeriodo ? lerFiltro(query) : null;
+  const inicio = filtro ? filtro.de : today();
+  const dias = filtro ? Math.max(1, daysBetween(filtro.de, filtro.ate) + 1) : Number(query.d || 30);
+
   const [projecao, selo] = await Promise.all([
-    cashflow.projetar({ dias }),
+    cashflow.projetar({ dias, de: inicio }),
     seloRotina(),
   ]);
-  definirTitulo('Fluxo de caixa', `${dias} dias · a partir de ${formatDate(today(), 'short')}`);
+  definirTitulo('Fluxo de caixa', filtro
+    ? `${formatDate(inicio)} a ${formatDate(filtro.ate)}`
+    : `${dias} dias · a partir de ${formatDate(today(), 'short')}`);
+
+  const painel = filtroAvancado({
+    rota: '/caixa',
+    filtro: filtro || lerFiltro({ de: inicio, ate: addDays(inicio, dias - 1) }),
+    rotuloData: 'Período da projeção',
+  });
 
   if (projecao.contas.length === 0) {
     return h('div.empilha', { style: { gap: '14px' } },
+      painel,
       seloDados(selo),
       vazio('🏦', 'Cadastre os bancos',
         'O fluxo de caixa começa do saldo real. Cadastre as contas e importe os extratos.',
@@ -36,10 +61,13 @@ export async function telaCaixa({ query }) {
   }
 
   return h('div.empilha', { style: { gap: '14px' } },
+    painel,
     seloDados(selo, { compacto: true }),
 
-    chips(cashflow.HORIZONTES.map((x) => ({ id: String(x.dias), label: x.label })), String(dias),
-      (id) => navigate(href('/caixa', { ...query, d: id }))),
+    /* os atalhos limpam o recorte: são "a partir de hoje", por N dias */
+    chips(cashflow.HORIZONTES.map((x) => ({ id: String(x.dias), label: x.label })),
+      filtro ? '' : String(dias),
+      (id) => navigate(href('/caixa', { d: id }))),
 
     h('div.grade.grade--4',
       kpi({ label: 'Saldo hoje', valor: money(projecao.saldoInicial), icone: '🏦', cor: 'info' }),

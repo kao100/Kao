@@ -123,6 +123,20 @@ Simulação de cenários fica dentro do Fluxo de caixa.
   porque nota cancelada que o app não conhece conta como faturamento e gera
   comissão. Quem corrige isso em definitivo é o **relatório de notas fiscais com
   a coluna Situação**.
+- **O percentual de comissão de uma nota é a comissão dividida pela base.** A
+  conta por item sempre esteve certa — cimento 0,5%, resto 2% —, mas o relatório
+  mostrava ao lado da nota o percentual de UMA regra, e numa nota misturada não
+  existe "a regra". Agora cada nota traz o percentual que de fato saiu: 0,5% se
+  só tem cimento, 2% se não tem nenhum, e o que der no meio quando tem os dois.
+  Medido em setembro com essas duas regras: 85 das 341 notas são misturadas, com
+  percentuais de 1,25% a 1,38%.
+- **O frete não entra na base da comissão, e agora aparece em coluna própria.**
+  *"A gente não paga o valor do frete"* — então ele vem ao lado, por nota e por
+  vendedor, para ser conferido e abatido, nunca somado.
+- **Relatório de RT é de uma pessoa só.** *"Não é legal mandar um relatório para
+  o cliente com as comissões de outras pessoas."* Cada pessoa tem o seu PDF e o
+  seu Excel, com as notas fiscais do período uma a uma e o RT de cada nota ao
+  lado — o controle que o cliente refaz sozinho.
 - **O título do financeiro chega à nota por dois caminhos.** Pelo número da NF
   que ele cita, e — quando esse falha ou nem veio — pelo **número do pedido**,
   que os dois lados carregam: o título se chama *"Venda de nº 871"* e o XML traz

@@ -196,6 +196,70 @@ export async function calcular(mes = monthKey()) {
     v.linhas.push(linha);
   }
 
+  /**
+   * A COMISSÃO POR NOTA, COM O PERCENTUAL QUE DE FATO SAIU.
+   *
+   * "Notas que são apenas cimento aparecem com 0,5%. Notas que têm cimento e
+   *  outros produtos aparecem como 2%. Eu queria que mostrasse a comissão em
+   *  frente àquela nota: se ela tem cimento e outro produto, ela é 1,8%."
+   *
+   * A conta por item sempre esteve certa — cada produto com a sua regra. Errado
+   * era o relatório: ele mostrava o PERCENTUAL DE UMA REGRA ao lado da nota, e
+   * numa nota misturada não existe "a regra", existem duas. O percentual da nota
+   * é o que sobra da divisão: comissão ÷ base. Numa nota só de cimento dá 0,5%,
+   * numa só de outros dá 2%, e numa misturada dá o que der — 1,8%, 1,37%, o que
+   * for verdade.
+   *
+   * O FRETE fica em coluna própria, e fora da base. "A gente não paga o valor do
+   * frete" — então ele aparece para ser abatido na conferência, não somado.
+   */
+  const nfPorId = new Map(doMes.map((nf) => [nf.id, nf]));
+  const porNota = new Map();
+  for (const linha of linhas) {
+    if (!porNota.has(linha.nfId)) {
+      const nf = nfPorId.get(linha.nfId);
+      porNota.set(linha.nfId, {
+        nfId: linha.nfId,
+        nfNumero: linha.nfNumero,
+        data: linha.data,
+        clienteNome: linha.clienteNome,
+        vendedorId: linha.vendedorId,
+        vendedorNome: nomeVendedor.get(linha.vendedorId) || 'Vendedor',
+        devolucao: !!nf?.devolucao,
+        // o frete cobrado na nota, que NÃO entra na base da comissão
+        frete: nf?.valorFrete == null ? null : cents((nf.devolucao ? -1 : 1) * nf.valorFrete),
+        valorVenda: 0, base: 0, comissao: 0, itens: 0, produtos: [], impedimentos: 0,
+      });
+    }
+    const n = porNota.get(linha.nfId);
+    n.valorVenda = cents(n.valorVenda + (linha.valorVenda || 0));
+    n.base = cents(n.base + (linha.base || 0));
+    n.comissao = cents(n.comissao + (linha.comissao || 0));
+    n.itens += 1;
+    if (linha.impedimento) n.impedimentos += 1;
+    if (linha.produtoDescricao && n.produtos.length < 4) n.produtos.push(linha.produtoDescricao);
+  }
+  const notas = [...porNota.values()].map((n) => ({
+    ...n,
+    /* o percentual EFETIVO da nota: o que a comissão representa da base */
+    percentual: n.base ? (n.comissao / n.base) * 100 : null,
+    /* e sobre a venda, que é como ela conversa com o vendedor */
+    percentualSobreVenda: n.valorVenda ? (n.comissao / n.valorVenda) * 100 : null,
+    /* uma nota com duas alíquotas dentro: é onde o número único mentia */
+    misturada: new Set(linhas.filter((l) => l.nfId === n.nfId && l.percentual != null)
+      .map((l) => l.percentual)).size > 1,
+    produtoResumo: n.produtos.slice(0, 2).join(' · ')
+      + (n.itens > 2 ? ` · +${n.itens - 2}` : ''),
+  })).sort((x, y) => String(x.data).localeCompare(String(y.data))
+    || String(x.nfNumero).localeCompare(String(y.nfNumero)));
+
+  for (const v of porVendedor.values()) {
+    v.notas = notas.filter((n) => n.vendedorId === v.vendedorId);
+    v.frete = cents(sum(v.notas, (n) => n.frete || 0));
+    v.notasComFrete = v.notas.filter((n) => n.frete != null).length;
+    v.percentualEfetivo = v.base ? (v.comissao / v.base) * 100 : null;
+  }
+
   const fiscal = cents(sum(nfs.filter((nf) => nf.mes === mes && valeParaFaturamento(nf)), valorFaturado));
   const atribuido = cents(sum(doMes.filter((nf) => nf.vendedorId), valorFaturado));
   const semVendedor = doMes.filter((nf) => !nf.vendedorId);
@@ -309,6 +373,10 @@ export async function calcular(mes = monthKey()) {
     bloqueios,
     podeFechar: bloqueios.length === 0,
     linhas,
+    /* a mesma comissão agrupada por NOTA, com o percentual que de fato saiu */
+    notas,
+    freteTotal: cents(sum(notas, (n) => n.frete || 0)),
+    notasSemFrete: notas.filter((n) => n.frete == null).length,
   };
 }
 

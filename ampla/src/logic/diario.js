@@ -29,15 +29,30 @@ export function diasDeVenda(de, ate, diasDaSemana) {
   return n;
 }
 
-export async function relatorio(referencia = today()) {
+/**
+ * @param {string} referencia  fim do recorte — e o dia de referência do mês
+ * @param {string} [de]        início do recorte; sem ele, é o próprio dia
+ *
+ * O RECORTE E O MÊS SÃO COISAS DIFERENTES, e os dois convivem nesta tela.
+ *
+ * "Preciso de filtro de período na aba de relatório, para ter a possibilidade de
+ *  diferentes visões."
+ *
+ * O bloco de cima passa a ser o PERÍODO escolhido — um dia, uma semana, o mês
+ * fechado, o que ela marcar. A meta, o ritmo e o gráfico continuam sendo do MÊS
+ * que contém o fim do recorte, porque meta de mês não se divide por recorte sem
+ * virar outro número.
+ */
+export async function relatorio(referencia = today(), de = null) {
   const cfg = await store.config();
   const semana = cfg.diasDeVenda;
   const mes = monthKey(referencia);
   const inicio = monthStart(referencia);
   const fim = monthEnd(referencia);
+  const recorteDe = de && de <= referencia ? de : referencia;
 
   const [doDia, doMes, metaMes, serie, vendedores, semDono] = await Promise.all([
-    revenue.resumo({ de: referencia, ate: referencia }),
+    revenue.resumo({ de: recorteDe, ate: referencia }),
     revenue.resumo({ de: inicio, ate: referencia }),
     store.meta(mes),
     revenue.porDia({ de: inicio, ate: referencia }),
@@ -60,6 +75,8 @@ export async function relatorio(referencia = today()) {
 
   return {
     data: referencia,
+    de: recorteDe,
+    umDiaSo: recorteDe === referencia,
     mes,
     dia: {
       total: doDia.total,

@@ -13,7 +13,7 @@ import { detalhe, fechar as fecharFolha } from './components/sheet.js';
  * o lado, e rolar para achar uma aba é o contrário de ver o negócio rápido.
  */
 export const MODULOS = [
-  { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório do dia' },
+  { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório' },
   { path: '/caixa', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
   { path: '/cobranca', icone: '🔴', label: 'Vencidos', titulo: 'Inadimplência' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },

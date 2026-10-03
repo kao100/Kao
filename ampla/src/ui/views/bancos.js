@@ -10,7 +10,7 @@ import * as cashflow from '../../logic/cashflow.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, vazio, aviso } from '../components/ui.js';
 import { tabela, exportadores } from '../components/table.js';
-import { formulario, detalhe, linhas as linhasDetalhe } from '../components/sheet.js';
+import { formulario, detalhe, confirmar, abrirFolha, fechar as fecharFolha, linhas as linhasDetalhe } from '../components/sheet.js';
 import { ok } from '../components/toast.js';
 import { money, formatDate, today } from '../../core/format.js';
 import { cents, sum, sortBy } from '../../core/util.js';
@@ -60,7 +60,8 @@ export async function telaBancos({ query }) {
 
     h('div.btn-linha',
       botao('📥 Importar extrato', { tipo: 'primario', onClick: () => navigate('/arquivos/extrato') }),
-      botao('+ Conta', { onClick: () => novaConta() })),
+      botao('+ Conta', { onClick: () => novaConta() }),
+      botao('Gerenciar contas', { onClick: () => gerenciarContas(contas, movimentos) })),
 
     chips([{ id: 'todas', label: 'Todas as contas' }, ...contas.map((c) => ({ id: c.id, label: c.nome }))], contaFiltro,
       (id) => navigate(href('/bancos', { c: id }))),
@@ -93,6 +94,64 @@ export async function telaBancos({ query }) {
           })),
           aoClicar: (linha) => abrirMovimento(linha, nomeConta),
         }))));
+}
+
+/**
+ * EXCLUIR CONTA — porque criar duas iguais sem querer acontece.
+ *
+ * "Sem querer eu criei dois bancos iguais, idênticos. Aí eu preciso conseguir
+ *  excluir também."
+ *
+ * A conta vazia sai com uma confirmação. A conta COM MOVIMENTO não sai calada:
+ * o app diz quantos lançamentos e quanto dinheiro vão junto, porque apagar
+ * extrato é apagar conciliação — e isso mexe no caixa.
+ */
+function gerenciarContas(contas, movimentos) {
+  const quantos = new Map();
+  for (const m of movimentos) quantos.set(m.contaId, (quantos.get(m.contaId) || 0) + 1);
+
+  abrirFolha({
+    titulo: 'Contas bancárias',
+    corpo: h('div.empilha', { style: { gap: '8px' } },
+      h('p.pequeno.muted', 'Apagar uma conta leva junto os lançamentos de extrato dela. '
+        + 'Se você criou a mesma conta duas vezes, apague a que está sem movimento.'),
+      ...contas.map((c) => h('div.item',
+        h('div.item__corpo',
+          h('div.item__titulo', c.nome),
+          h('div.item__sub',
+            c.banco && c.banco !== c.nome ? h('span', c.banco) : null,
+            c.agencia ? h('span', `ag. ${c.agencia}`) : null,
+            c.numero ? h('span', `c/c ${c.numero}`) : null,
+            h('span', quantos.get(c.id)
+              ? `${quantos.get(c.id)} lançamento(s)` : 'sem movimento'))),
+        botao('Excluir', { pequeno: true, onClick: () => excluirConta(c, quantos.get(c.id) || 0) })))),
+    acoes: [botao('Fechar', { tipo: 'primario', bloco: true, onClick: () => fecharFolha() })],
+  });
+}
+
+async function excluirConta(conta, lancamentos) {
+  const sim = await confirmar({
+    titulo: `Excluir ${conta.nome}?`,
+    texto: lancamentos
+      ? `Esta conta tem ${lancamentos} lançamento(s) de extrato. Eles vão embora junto, e a `
+        + 'conciliação deles se perde. O saldo total e o fluxo de caixa mudam. Não dá para desfazer.'
+      : 'A conta não tem lançamento nenhum. O saldo informado dela também sai. Não dá para desfazer.',
+    confirmar: 'Excluir conta',
+    perigo: true,
+  });
+  if (!sim) return;
+
+  const movimentos = (await store.extrato.listar()).filter((m) => m.contaId === conta.id);
+  if (movimentos.length) await store.extrato.removerMuitos(movimentos.map((m) => m.id));
+  const saldos = (await store.saldos.listar()).filter((x) => x.contaId === conta.id);
+  if (saldos.length) await store.saldos.removerMuitos(saldos.map((x) => x.id));
+  await store.contas.remover(conta.id);
+  await store.registrar('conta_excluida', {
+    alvoId: conta.id, alvo: conta.nome, motivo: `${movimentos.length} lançamento(s) removidos`,
+  });
+  fecharFolha();
+  ok(`${conta.nome} excluída.`);
+  refresh();
 }
 
 async function novaConta() {

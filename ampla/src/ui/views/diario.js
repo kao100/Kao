@@ -11,6 +11,9 @@ import { h } from '../../core/dom.js';
 import { navigate, href } from '../../core/router.js';
 import * as diario from '../../logic/diario.js';
 import * as quotes from '../../logic/quotes.js';
+import * as store from '../../core/store.js';
+import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { filtroAvancado } from '../components/filtro.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, botao, aviso, vazio, progresso, chips } from '../components/ui.js';
 import { grafLinha } from '../components/chart.js';
@@ -19,16 +22,38 @@ import { exportarExcel, imprimir, colunasExcel } from '../../logic/reports.js';
 import { money, pct, formatDate, today, addDays, monthLabel } from '../../core/format.js';
 
 export async function telaDiario({ query }) {
-  const data = query.d || today();
-  const r = await diario.relatorio(data);
+  /**
+   * O ATALHO DE DIA CONTINUA, e o filtro de período entra por cima.
+   *
+   * Quem só quer ver hoje toca no chip do dia e nada mudou. Quem quer ver o mês
+   * fechado, ou de 01 a 15, abre o filtro e digita — o mesmo filtro de Vencidos,
+   * Orçados e Comercial, para não ter dois jeitos de fazer a mesma coisa.
+   */
+  const temPeriodo = !!(query.de || query.ate || query.p);
+  const filtro = temPeriodo ? lerFiltro(query) : null;
+  const data = filtro ? filtro.ate : (query.d || today());
+  const de = filtro ? filtro.de : data;
+
+  const [r, vendedores] = await Promise.all([
+    diario.relatorio(data, de),
+    store.vendedores.listar(),
+  ]);
   const recados = diario.recados(r);
   const orc = await quotes.resumo({ de: `${r.mes}-01`, ate: data }).catch(() => null);
-  definirTitulo('Relatório do dia', formatDate(data));
+  const rotulo = r.umDiaSo ? formatDate(data) : `${formatDate(de)} a ${formatDate(data)}`;
+  definirTitulo('Relatório', filtro ? descrever(filtro, { vendedores }) : rotulo);
+
+  const painel = filtroAvancado({
+    rota: '/diario',
+    filtro: filtro || lerFiltro({ de: data, ate: data }),
+    rotuloData: 'Período do faturamento',
+  });
 
   if (!r.mesAteHoje.notas && !r.dia.notas) {
     return h('div.empilha', { style: { gap: '14px' } },
+      painel,
       seletorDia(data),
-      vazio('📊', 'Sem faturamento neste mês',
+      vazio('📊', 'Sem faturamento neste período',
         'Mande o relatório fiscal do dia e o relatório de vendas — o resto o app monta.',
         botao('Importar', { tipo: 'primario', onClick: () => navigate('/arquivos') })));
   }
@@ -37,11 +62,13 @@ export async function telaDiario({ query }) {
   const ritmo = r.ritmo;
 
   return h('div.empilha', { style: { gap: '14px' } },
+    painel,
     seletorDia(data),
 
     h('div.grade.grade--2',
       kpi({
-        label: `Vendas de ${formatDate(data, 'short')}`,
+        label: r.umDiaSo ? `Vendas de ${formatDate(data, 'short')}`
+          : `Vendas de ${formatDate(de, 'short')} a ${formatDate(data, 'short')}`,
         valor: money(r.dia.total),
         icone: '🧾',
         nota: `${r.dia.notas} NF(s)`,
@@ -170,6 +197,7 @@ function seletorDia(data) {
   return chips(
     dias.reverse().map((d) => ({ id: d, label: formatDate(d, 'short') })),
     data,
+    // tocar num dia limpa o recorte: é o atalho de "só hoje"
     (id) => navigate(href('/diario', { d: id })),
   );
 }

@@ -32,8 +32,8 @@ import { telaClientes, telaCliente } from './ui/views/clientes.js';
 import { telaMargem } from './ui/views/margem.js';
 
 const ROTAS = [
-  { path: '/', view: telaDiario, titulo: 'Relatório do dia' },
-  { path: '/diario', view: telaDiario, titulo: 'Relatório do dia' },
+  { path: '/', view: telaDiario, titulo: 'Relatório' },
+  { path: '/diario', view: telaDiario, titulo: 'Relatório' },
   { path: '/empresa', view: telaEmpresa, titulo: 'Visão da empresa' },
   { path: '/caixa', view: telaCaixa, titulo: 'Fluxo de caixa' },
   { path: '/caixa/simulacao', view: telaSimulacao, titulo: 'Simulação de cenários' },

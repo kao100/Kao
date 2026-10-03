@@ -19,6 +19,7 @@ import { filtroAvancado } from '../components/filtro.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, secao, botao, vazio, aviso, selo, card } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
+import { imprimir, exportarExcel } from '../../logic/reports.js';
 import { formulario, confirmar } from '../components/sheet.js';
 import { ok } from '../components/toast.js';
 import { money, pct, num, formatDate } from '../../core/format.js';
@@ -31,6 +32,71 @@ const COLUNAS = [
   { header: 'CNPJs', key: 'documentos', tipo: 'numero', alinhar: 'direita' },
   { header: 'NFs', key: 'notas', tipo: 'numero', alinhar: 'direita' },
 ];
+
+const COLUNAS_NOTAS = [
+  { header: 'NF', key: 'numero' },
+  { header: 'Data', key: 'data', tipo: 'data' },
+  { header: 'Cliente', key: 'clienteNome' },
+  { header: 'CNPJ / CPF', key: 'documento' },
+  { header: 'Faturamento', key: 'faturamento', tipo: 'dinheiro', alinhar: 'direita' },
+  { header: 'RT', key: 'valorRt', tipo: 'dinheiro', alinhar: 'direita' },
+];
+
+/**
+ * O PDF DE UMA PESSOA SÓ. Nada de outra pessoa entra aqui — nem no cabeçalho,
+ * nem no rodapé, nem num total que entregue quanto os outros ganharam.
+ */
+function pdfDoRt(l, filtro) {
+  imprimir({
+    titulo: `RT — ${l.nome}`,
+    subtitulo: `${formatDate(filtro.de)} a ${formatDate(filtro.ate)}`,
+    blocos: [
+      {
+        tipo: 'kpis',
+        itens: [
+          { label: 'Faturamento indicado', valor: money(l.faturamento) },
+          { label: 'Percentual', valor: pct(l.percentual, 2) },
+          { label: 'RT a receber', valor: money(l.valor) },
+          { label: 'Notas', valor: String(l.listaDeNotas.length) },
+        ],
+      },
+      {
+        tipo: 'tabela',
+        titulo: 'Notas fiscais do período',
+        colunas: [
+          { header: 'NF', key: 'numero' },
+          { header: 'Data', key: 'data', tipo: 'date' },
+          { header: 'Cliente', key: 'clienteNome' },
+          { header: 'Faturamento', key: 'faturamento', tipo: 'money', alinhar: 'direita' },
+          { header: 'RT', key: 'valorRt', tipo: 'money', alinhar: 'direita' },
+        ],
+        linhas: l.listaDeNotas,
+        total: { numero: `${l.listaDeNotas.length} nota(s)`, faturamento: l.faturamento, valorRt: l.valor },
+      },
+    ],
+    rodape: 'O RT é calculado sobre o valor total da nota, com frete. Cada nota aqui tem o valor '
+      + 'dela ao lado — a soma das partes é o total.',
+  });
+}
+
+function excelDoRt(l, filtro) {
+  exportarExcel(`rt_${l.nome.replace(/[^\w]+/g, '_').toLowerCase()}_${filtro.de}`, [
+    {
+      name: 'Notas',
+      title: `RT ${l.nome} — ${formatDate(filtro.de)} a ${formatDate(filtro.ate)}`,
+      columns: [
+        { header: 'NF', key: 'numero', type: 'text', width: 12 },
+        { header: 'Data', key: 'data', type: 'date' },
+        { header: 'Cliente', key: 'clienteNome', type: 'text', width: 32 },
+        { header: 'CNPJ / CPF', key: 'documento', type: 'text', width: 20 },
+        { header: 'Faturamento', key: 'faturamento', type: 'money' },
+        { header: 'RT', key: 'valorRt', type: 'money' },
+      ],
+      rows: l.listaDeNotas,
+      total: { numero: 'TOTAL', faturamento: l.faturamento, valorRt: l.valor },
+    },
+  ]);
+}
 
 export async function telaRt({ query }) {
   const filtro = lerFiltro(query);
@@ -118,6 +184,18 @@ export async function telaRt({ query }) {
               ? h('span', `${num(l.documentos, 0)} CNPJ(s)`)
               : selo('sem CNPJ', 'atencao'),
             l.semMovimento > 0 && h('span.muted', `${l.semMovimento} sem venda no período`))),
+        /**
+         * UM RELATÓRIO POR PESSOA.
+         *
+         * "Não é legal mandar um relatório para o cliente com as comissões de
+         *  outras pessoas. Eu preciso conseguir exportar relatórios separados
+         *  para cada pessoa."
+         *
+         * Então o botão fica na linha dela e leva só o que é dela — nome, as
+         * notas do período e o RT de cada uma.
+         */
+        l.documentos > 0 && botao('PDF', { pequeno: true, onClick: () => pdfDoRt(l, filtro) }),
+        l.documentos > 0 && botao('Excel', { pequeno: true, onClick: () => excelDoRt(l, filtro) }),
         botao('Editar', { pequeno: true, onClick: () => editar(l.id) }),
         botao('Excluir', { pequeno: true, onClick: () => excluir(l.id) })))),
       h('p.mini.muted',
@@ -125,9 +203,12 @@ export async function telaRt({ query }) {
         + 'cadastro de vendedores. Misturar os dois faria a soma dos vendedores passar do '
         + 'faturamento.')),
 
-    /* o detalhe por CNPJ, que é onde ela confere */
-    ...r.linhas.filter((l) => l.documentos > 0).map((l) => secao(`${l.nome} — por faturamento`, null,
-      card(null, null, tabela({
+    /* o detalhe de cada pessoa: os faturamentos e, abaixo, NOTA POR NOTA */
+    ...r.linhas.filter((l) => l.documentos > 0).map((l) => secao(l.nome,
+      h('div.linha',
+        botao('PDF', { pequeno: true, onClick: () => pdfDoRt(l, filtro) }),
+        botao('Excel', { pequeno: true, onClick: () => excelDoRt(l, filtro) })),
+      card('Por faturamento', null, tabela({
         colunas: [
           { header: 'CNPJ / CPF', key: 'documento' },
           { header: 'Cliente', key: 'nome' },
@@ -136,7 +217,16 @@ export async function telaRt({ query }) {
         ],
         linhas: l.faturamentos,
         total: { documento: 'TOTAL', faturamento: l.faturamento, notas: l.notas },
-      })))));
+      })),
+      /**
+       * NOTA POR NOTA — o controle que o cliente confere.
+       *
+       * "Para ele chegar e falar 'não recebi dessa nota', e você estar ali, um
+       *  relatório onde mostra quais são as notas pagas naquele mês."
+       */
+      l.listaDeNotas.length > 0 && card(`${l.listaDeNotas.length} nota(s) no período`, null,
+        tabela({ colunas: COLUNAS_NOTAS, linhas: l.listaDeNotas,
+          total: { numero: 'TOTAL', faturamento: l.faturamento, valorRt: l.valor } })))));
 }
 
 async function editar(id) {

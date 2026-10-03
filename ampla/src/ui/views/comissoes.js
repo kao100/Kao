@@ -212,6 +212,8 @@ function cardVendedor(v, mes, fechada, calculo) {
       v.ajustes > 0 && selo(`${v.ajustes} ajuste(s)`, 'roxo'),
       v.pendentes > 0 && selo(`${v.pendentes} sem base`, 'atencao'),
       selo(`${pct(v.faturamento ? (v.comissao / v.faturamento) * 100 : 0, 2)} do faturamento`),
+      /* o frete cobrado nas notas dele — fora da base, só para conferir e abater */
+      v.frete ? selo(`${money(v.frete)} de frete (fora da base)`, 'info') : null,
       h('div.crescer'),
       botao('Ver linhas', { pequeno: true, onClick: () => abrirLinhas(v, mes, fechada) }),
       botao('PDF', { pequeno: true, onClick: () => pdfVendedor(v, mes, calculo) })));
@@ -227,7 +229,28 @@ function abrirLinhas(v, mes, fechada) {
         ['Comissão calculada', money(v.comissaoOriginal)],
         ['Comissão final', money(v.comissao)],
       ]),
-      h('h3', { style: { margin: '12px 0 0' } }, `${v.linhas.length} linha(s)`),
+      /**
+       * A LISTA POR NOTA vem antes da lista por produto, porque é por nota que
+       * ela confere com o vendedor — e é aqui que o percentual real aparece.
+       */
+      h('h3', { style: { margin: '12px 0 0' } }, `${v.notas.length} nota(s)`),
+      ...v.notas.map((n) => h('div.comissao-linha',
+        h('span.forte', `NF ${n.nfNumero}`),
+        h('span.num.forte', money(n.comissao)),
+        h('span.comissao-linha__sub',
+          h('span', formatDate(n.data, 'short')),
+          h('span', n.clienteNome || ''),
+          h('span', `produtos ${money(n.valorVenda)}`),
+          n.frete ? h('span', `frete ${money(n.frete)}`) : null,
+          n.percentual != null && h('span.forte', pct(n.percentual, 2)),
+          n.misturada && h('span', { style: { color: 'var(--roxo)' } }, 'alíquotas diferentes'),
+          n.impedimentos > 0 && h('span.atencao', `⚠️ ${n.impedimentos} sem base`)))),
+      h('p.mini.muted', { style: { marginTop: '8px' } },
+        'O percentual de cada nota é a comissão dividida pela base. Numa nota com cimento e '
+        + 'outros produtos ele fica entre as duas alíquotas — e é esse o número que vale. '
+        + 'O frete não entra na base.'),
+
+      h('h3', { style: { margin: '12px 0 0' } }, `${v.linhas.length} linha(s) por produto`),
       ...v.linhas.map((linha) => h(
         `button.comissao-linha${linha.ajustada ? '.comissao-linha--ajustada' : ''}${linha.impedimento ? '.comissao-linha--pendente' : ''}`,
         { onClick: () => (fechada ? mostrarLinha(linha) : ajustarLinha(linha, mes)) },
@@ -539,13 +562,45 @@ function pdfVendedor(v, mes) {
           { label: '% sobre faturamento', valor: pct(v.faturamento ? (v.comissao / v.faturamento) * 100 : 0, 2) },
         ],
       },
+      /**
+       * UMA LINHA POR NOTA, com o percentual que de fato saiu.
+       *
+       * Era uma linha por ITEM, e ao lado de cada uma o percentual da REGRA
+       * daquele item. Numa nota de cimento com outros produtos isso lia como
+       * "2%" quando a nota inteira pagou 1,8% — o número existia, mas não era o
+       * da nota. Agora o percentual é comissão ÷ base, que é verdade em qualquer
+       * mistura.
+       *
+       * E o FRETE em coluna própria, fora da base: "a gente não paga o valor do
+       * frete", então ele aparece para ser conferido e abatido, não somado.
+       */
       {
         tipo: 'tabela',
-        titulo: 'Detalhe',
+        titulo: 'Por nota fiscal',
         colunas: [
           { header: 'NF', key: 'nfNumero' },
           { header: 'Data', key: 'data', tipo: 'date' },
           { header: 'Cliente', key: 'clienteNome' },
+          { header: 'Produtos', key: 'valorVenda', tipo: 'money', alinhar: 'direita' },
+          { header: 'Frete', key: 'frete', tipo: 'money', alinhar: 'direita' },
+          { header: 'Base', key: 'base', tipo: 'money', alinhar: 'direita' },
+          { header: '%', key: 'percentual', tipo: 'pct', alinhar: 'direita' },
+          { header: 'Comissão', key: 'comissao', tipo: 'money', alinhar: 'direita' },
+        ],
+        linhas: v.notas,
+        total: {
+          nfNumero: `${v.notas.length} nota(s)`,
+          valorVenda: v.faturamento,
+          frete: v.frete,
+          base: v.base,
+          comissao: v.comissao,
+        },
+      },
+      {
+        tipo: 'tabela',
+        titulo: 'Detalhe por produto',
+        colunas: [
+          { header: 'NF', key: 'nfNumero' },
           { header: 'Produto', key: 'produtoDescricao' },
           { header: 'Venda', key: 'valorVenda', tipo: 'money', alinhar: 'direita' },
           { header: '%', key: 'percentual', tipo: 'pct', alinhar: 'direita' },
@@ -555,6 +610,9 @@ function pdfVendedor(v, mes) {
         total: { nfNumero: `${v.linhas.length} linhas`, valorVenda: v.faturamento, comissao: v.comissao },
       },
     ],
+    rodape: 'O FRETE não entra na base da comissão — a coluna está aqui só para conferência. '
+      + 'O percentual de cada nota é a comissão dividida pela base: numa nota com produtos de '
+      + 'alíquotas diferentes ele fica entre as duas, e é esse o número que vale.',
   });
 }
 
@@ -573,6 +631,30 @@ function excelDetalhado(calculo) {
       ],
       rows: calculo.vendedores,
       total: { nome: 'TOTAL', faturamento: calculo.faturamentoAtribuido, comissao: calculo.total },
+    },
+    {
+      name: 'Por nota',
+      title: `Comissão por nota fiscal — ${monthLabel(calculo.mes)}`,
+      columns: [
+        { header: 'Vendedor', key: 'vendedorNome', type: 'text', width: 24 },
+        { header: 'NF', key: 'nfNumero', type: 'text', width: 12 },
+        { header: 'Data', key: 'data', type: 'date' },
+        { header: 'Cliente', key: 'clienteNome', type: 'text', width: 30 },
+        { header: 'Produtos', key: 'valorVenda', type: 'money' },
+        { header: 'Frete', key: 'frete', type: 'money' },
+        { header: 'Base', key: 'base', type: 'money' },
+        { header: '% efetivo', key: 'percentual', type: 'pct' },
+        { header: 'Comissão', key: 'comissao', type: 'money' },
+        { header: 'Alíquotas diferentes', key: 'misturadaTexto', type: 'text' },
+        { header: 'Itens', key: 'itens', type: 'int' },
+      ],
+      rows: calculo.notas.map((n) => ({ ...n, misturadaTexto: n.misturada ? 'sim' : '' })),
+      total: {
+        vendedorNome: 'TOTAL',
+        valorVenda: calculo.faturamentoAtribuido,
+        frete: calculo.freteTotal,
+        comissao: calculo.total,
+      },
     },
     {
       name: 'Detalhado',

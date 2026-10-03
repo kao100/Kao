@@ -134,6 +134,7 @@ function formatarValor(v) {
 function rotuloAcao(acao) {
   return {
     vendedor_da_nf: 'Vendedor definido na NF',
+    conta_excluida: 'Conta bancária excluída',
     ajuste_comissao: 'Ajuste de comissão',
     ajuste_comissao_removido: 'Ajuste removido',
     status_comissao: 'Status das comissões',

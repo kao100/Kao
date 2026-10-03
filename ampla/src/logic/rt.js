@@ -79,9 +79,10 @@ export async function rt({ de, ate }) {
   for (const nf of doPeriodo) {
     const doc = digits(nf.clienteDoc);
     if (!doc) continue;
-    const atual = porDocumento.get(doc) || { valor: 0, notas: 0, nome: nf.clienteNome || null };
+    const atual = porDocumento.get(doc) || { valor: 0, notas: 0, nome: nf.clienteNome || null, lista: [] };
     atual.valor += valorFaturado(nf);
     atual.notas += 1;
+    atual.lista.push(nf);
     if (!atual.nome && nf.clienteNome) atual.nome = nf.clienteNome;
     porDocumento.set(doc, atual);
   }
@@ -100,6 +101,30 @@ export async function rt({ de, ate }) {
 
     const faturamento = cents(sum(faturamentos, (f) => f.faturamento));
     const percentual = x.percentual == null ? PERCENTUAL_PADRAO : x.percentual;
+
+    /**
+     * AS NOTAS QUE ESTÃO SENDO PAGAS, uma a uma.
+     *
+     * "Eu queria que tivesse um relatório com as notas fiscais que a gente está
+     *  pagando, para ser um controle tanto nosso quanto do cliente — para ele
+     *  chegar e falar 'não recebi dessa nota' e você estar ali."
+     *
+     * Então o RT de cada nota aparece ao lado dela, e a soma das partes é o
+     * total. Sem isso, o número é uma afirmação; com isso, é uma conta que o
+     * cliente refaz sozinho.
+     */
+    const notas = docs.flatMap((doc) => (porDocumento.get(doc)?.lista || []).map((nf) => ({
+      nfId: nf.id,
+      numero: nf.numero,
+      data: nf.dataEmissao,
+      clienteNome: nf.clienteNome || null,
+      documento: doc,
+      devolucao: !!nf.devolucao,
+      faturamento: cents(valorFaturado(nf)),
+      valorRt: cents(valorFaturado(nf) * (percentual / 100)),
+    }))).sort((a, b) => String(a.data).localeCompare(String(b.data))
+      || String(a.numero).localeCompare(String(b.numero)));
+
     return {
       id: x.id,
       nome: x.nome,
@@ -111,6 +136,8 @@ export async function rt({ de, ate }) {
       notas: sum(faturamentos, (f) => f.notas),
       /* os faturamentos que não apareceram no período ficam à vista, com zero */
       faturamentos,
+      /* e as notas, uma a uma, com o RT de cada uma */
+      listaDeNotas: docs.length ? notas : [],
       semMovimento: faturamentos.filter((f) => f.notas === 0).length,
     };
   }).sort((a, b) => (b.valor || 0) - (a.valor || 0));
