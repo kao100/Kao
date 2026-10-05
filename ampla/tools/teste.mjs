@@ -24,6 +24,7 @@ instalarDom();
 Object.defineProperty(globalThis, 'navigator', { value: { storage: {} }, configurable: true });
 
 const store = await import('../src/core/store.js');
+const dbMod = await import('../src/core/db.js');
 const ingest = await import('../src/logic/ingest.js');
 const link = await import('../src/logic/link.js');
 const revenue = await import('../src/logic/revenue.js');
@@ -40,6 +41,8 @@ const carteiraMod = await import('../src/logic/carteira.js');
 const abcMod = await import('../src/logic/abc.js');
 const margemMod = await import('../src/logic/margem.js');
 const rtMod = await import('../src/logic/rt.js');
+const backupMod = await import('../src/logic/backup.js');
+const nuvemMod = await import('../src/logic/nuvem.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -2323,6 +2326,179 @@ Venda de nº 8710;CLIENTE DE TESTE LTDA;11111111000191;25/09/2027;1.590,00;Em ab
     await store.nfItens.remover(i.id);
   }
   await link.recalcular();
+}
+
+console.log('\n▶ O app abre offline inteiro, sem arquivo faltando');
+{
+  /**
+   * O service worker guarda uma LISTA de arquivos. Toda tela nova que entrou no
+   * app e não entrou na lista funciona com internet e quebra sem ela — e o lugar
+   * onde isso aparece é justamente o celular, que é onde a internet falha.
+   *
+   * Catorze arquivos estavam de fora quando este teste foi escrito, vários de
+   * telas feitas nesta mesma semana. Agora a lista se cobra sozinha.
+   */
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const sw = readFileSync(join(raiz, 'sw.js'), 'utf8');
+
+  const varrer = (pasta, prefixo) => readdirSync(join(raiz, pasta)).flatMap((nome) => {
+    const caminho = `${pasta}/${nome}`;
+    if (statSync(join(raiz, caminho)).isDirectory()) return varrer(caminho, prefixo);
+    return nome.endsWith('.js') || nome.endsWith('.css') ? [caminho] : [];
+  });
+
+  const arquivos = varrer('src', 'src');
+  const fora = arquivos.filter((c) => !sw.includes(`'${c}'`));
+  igual('todo arquivo do app está na lista do offline', fora.join(', '), '');
+  ok('e a lista não está vazia', arquivos.length > 40, String(arquivos.length));
+}
+
+console.log('\n▶ Sincronização: o mesmo app, a mesma base, em dois aparelhos');
+{
+  /**
+   * "Quero a sincronização de verdade. É exatamente isso que precisamos."
+   *
+   * O transporte aqui é de mentira — uma gaveta na memória — e é esse o ponto:
+   * toda a decisão de QUANDO enviar, QUANDO buscar e O QUE FAZER quando os dois
+   * mexeram pode ser conferida sem rede, sem Google e sem conta nenhuma.
+   */
+  const nuvemFalsa = { blob: null, props: null };
+  let chamadas = { enviou: 0, baixou: 0 };
+  nuvemMod.definirTransporte({
+    nome: 'Gaveta de teste',
+    async conectado() { return true; },
+    async conectar() { return true; },
+    async desconectar() { nuvemFalsa.blob = null; },
+    async metadados() {
+      if (!nuvemFalsa.blob) return null;
+      return { atualizadoEm: nuvemFalsa.props.atualizadoEm, dispositivo: nuvemFalsa.props.dispositivo,
+        registros: nuvemFalsa.props.registros, tamanho: nuvemFalsa.blob.size };
+    },
+    async enviar(blob, props) {
+      chamadas.enviou += 1;
+      nuvemFalsa.blob = blob; nuvemFalsa.props = props;
+      return { arquivoId: 'falso-1', atualizadoEm: props.atualizadoEm };
+    },
+    async baixar() {
+      chamadas.baixou += 1;
+      if (!nuvemFalsa.blob) throw new Error('nada na nuvem');
+      return { blob: nuvemFalsa.blob, arquivoId: 'falso-1', atualizadoEm: nuvemFalsa.props.atualizadoEm };
+    },
+  });
+
+  /* ---- o aparelho que importa: tem dados e manda para a nuvem */
+  const FISC = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
+  await importar('nfs', 'sync.csv', `${FISC}
+9870;10/09/2027;CLIENTE SINCRONIA LTDA;50505050000150;3.000,00;Autorizada;Venda de mercadoria
+9871;11/09/2027;CLIENTE SINCRONIA LTDA;50505050000150;1.500,00;Autorizada;Venda de mercadoria`);
+  await link.recalcular();
+
+  const antesDeEnviar = await nuvemMod.estado();
+  ok('o aparelho sabe que tem coisa para enviar', antesDeEnviar.enviarPendente === true, '');
+  igual('e que a nuvem ainda não tem nada', antesDeEnviar.remoto, null);
+
+  const envio = await nuvemMod.enviar();
+  ok('o envio leva a base inteira', envio.registros > 0, String(envio.registros));
+  ok('e ela cabe num arquivo pequeno', envio.tamanho < 400 * 1024, `${envio.tamanho} bytes`);
+
+  const depoisDeEnviar = await nuvemMod.estado();
+  ok('depois de enviar não há mais nada pendente', depoisDeEnviar.enviarPendente === false,
+    JSON.stringify([depoisDeEnviar.mudanca, depoisDeEnviar.carimbo]));
+  ok('e o passo automático não fica enviando de novo',
+    (await nuvemMod.sincronizar()).acao === 'nada', '');
+
+  /**
+   * ---- o OUTRO aparelho: base vazia, busca da nuvem.
+   * Apagar tudo aqui é o que simula abrir o app no celular pela primeira vez.
+   */
+  const guardado = envio.registros;
+  for (const nome of Object.keys(dbMod.STORES)) await dbMod.clearStore(nome);
+  store.limparCache();
+  // aparelho novo não tem memória de mudança nenhuma: é o que o celular dela vê
+  store.marcarMudanca(0);
+  await store.salvarEstadoNuvem({ carimbo: 0, em: 0, arquivoId: null, conta: null });
+  igual('o segundo aparelho começa sem nota nenhuma', (await store.nfs.listar()).length, 0);
+
+  const doOutroLado = await nuvemMod.estado();
+  ok('ele vê que a nuvem tem algo mais novo', doOutroLado.buscarPendente === true, '');
+
+  /* o recálculo entra DENTRO da busca, senão o celular devolveria o que recebeu */
+  let recalculou = 0;
+  const r = await nuvemMod.sincronizar({ aoRestaurar: async () => { recalculou += 1; await link.recalcular(); } });
+  igual('o passo automático decide buscar', r.acao, 'buscou');
+  igual('refazendo os vínculos antes de carimbar', recalculou, 1);
+  ok('e depois disso ele NÃO acha que tem novidade para devolver',
+    (await nuvemMod.estado()).enviarPendente === false, '');
+  igual('e a base volta inteira', r.registros, guardado);
+  igual('com as notas que o outro aparelho importou',
+    (await store.nfs.listar()).filter((n) => ['9870', '9871'].includes(n.numero)).length, 2);
+  const nota = (await store.nfs.listar()).find((n) => n.numero === '9870');
+  igual('ao centavo', nota.valorTotal, 3000);
+
+  ok('e agora os dois estão em dia', (await nuvemMod.sincronizar()).acao === 'nada', '');
+
+  /**
+   * ---- OS DOIS MEXERAM: o app não escolhe sozinho.
+   *
+   * Jogar fora o trabalho de alguém sem perguntar é o erro que só aparece um mês
+   * depois, quando o número não fecha. Aqui ele para e devolve 'conflito'.
+   */
+  await importar('nfs', 'sync2.csv', `${FISC}
+9872;12/09/2027;CLIENTE SINCRONIA LTDA;50505050000150;900,00;Autorizada;Venda de mercadoria`);
+  // e a nuvem recebeu uma versão mais nova vinda de outro lugar
+  nuvemFalsa.props = { ...nuvemFalsa.props, atualizadoEm: Date.now() + 60000, dispositivo: 'computador' };
+
+  const brigando = await nuvemMod.estado();
+  ok('o app enxerga os dois lados mexidos',
+    brigando.enviarPendente === true && brigando.buscarPendente === true, '');
+  const decisao = await nuvemMod.sincronizar();
+  igual('e não decide por conta própria', decisao.acao, 'conflito');
+  igual('nem buscou escondido', chamadas.baixou, 1);
+  igual('nem enviou escondido', chamadas.enviou, 1);
+  igual('a nota local continua lá, intacta',
+    (await store.nfs.listar()).filter((n) => n.numero === '9872').length, 1);
+
+  /* ---- e quando ela decide, o que ela mandar é o que vale */
+  await nuvemMod.enviar();
+  ok('mandando enviar, o lado dela vence e o conflito acaba',
+    (await nuvemMod.sincronizar()).acao === 'nada', '');
+
+  /* ---- arquivo que não é nosso não entra */
+  nuvemFalsa.blob = new Blob([JSON.stringify({ app: 'outra-coisa', dados: {} })]);
+  nuvemFalsa.props = { atualizadoEm: Date.now() + 120000, dispositivo: 'x', registros: 0 };
+  let recusou = false;
+  try { await nuvemMod.buscar(); } catch { recusou = true; }
+  ok('arquivo de outro app é recusado antes de apagar qualquer coisa', recusou, '');
+  ok('e a base local continua de pé', (await store.nfs.listar()).length >= 3, '');
+
+  nuvemMod.definirTransporte(null);
+  for (const n of ['9870', '9871', '9872']) {
+    const x = (await store.nfs.listar()).find((y) => y.numero === n);
+    if (x) await store.nfs.remover(x.id);
+  }
+  await store.salvarEstadoNuvem({ carimbo: 0, em: 0, arquivoId: null, conta: null });
+  await link.recalcular();
+}
+
+console.log('\n▶ O retrato da base: comprime, volta igual, e não mistura');
+{
+  const snap = await backupMod.montarSnapshot({ dispositivo: 'computador' });
+  igual('o retrato se identifica', snap.app, 'ampla');
+  ok('e traz um carimbo de quando foi tirado', snap.em > 0, String(snap.em));
+
+  const { blob, comprimido } = await backupMod.comprimir(snap);
+  ok('o arquivo sai comprimido', comprimido === true, '');
+  const texto = await backupMod.descomprimir(blob);
+  igual('e volta exatamente igual', texto, JSON.stringify(snap));
+
+  /* o mesmo leitor abre JSON puro, para backup antigo continuar entrando */
+  const puro = new Blob([JSON.stringify(snap)]);
+  igual('JSON sem compressão também é lido', await backupMod.descomprimir(puro), JSON.stringify(snap));
+
+  let barrou = false;
+  try { backupMod.validarSnapshot({ app: 'outro' }); } catch { barrou = true; }
+  ok('e arquivo de outro app não passa', barrou, '');
 }
 
 console.log(`\n${falhou ? '❌' : '✅'} ${passou} verificações passaram, ${falhou} falharam\n`);

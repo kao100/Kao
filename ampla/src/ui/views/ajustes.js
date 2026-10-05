@@ -10,14 +10,19 @@ import * as db from '../../core/db.js';
 import { recalcular } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, secao, botao, aviso, selo } from '../components/ui.js';
-import { formulario, confirmar } from '../components/sheet.js';
+import { formulario, confirmar, detalhe } from '../components/sheet.js';
 import { ok, erro } from '../components/toast.js';
 import { money, monthKey, monthLabel, today, addMonths, timestampLabel } from '../../core/format.js';
+import * as backup from '../../logic/backup.js';
+import * as nuvem from '../../logic/nuvem.js';
+import { ligarNuvem, desligarNuvem, descreverEstadoNuvem, corDoEstado } from '../nuvem-ui.js';
 import { download } from '../../core/util.js';
 
 export async function telaAjustes() {
-  const [cfg, vendedores, contas, auditoria] = await Promise.all([
+  await ligarNuvem();
+  const [cfg, vendedores, contas, auditoria, nuvemEstado] = await Promise.all([
     store.config(), store.vendedores.listar(), store.contas.listar(), store.auditoria.listar(),
+    nuvem.estado().catch((e) => ({ ligado: false, erro: e.message })),
   ]);
   definirTitulo('Ajustes');
 
@@ -101,6 +106,53 @@ export async function telaAjustes() {
           botao('Editar', { pequeno: true, onClick: () => editarUsuario(cfg) }))))),
 
     /**
+     * SINCRONIZAÇÃO DE VERDADE.
+     *
+     * "Quero a sincronização de verdade. É exatamente isso que precisamos."
+     *
+     * A base vira um arquivo na conta Google DELA. Nenhum serviço no meio,
+     * nenhuma fatura, e no dia em que ela quiser parar é apagar um arquivo do
+     * próprio Drive. O app enxerga só esse arquivo — o escopo que o Google
+     * concede aqui (drive.file) não dá acesso a mais nada do Drive dela.
+     */
+    secao('Sincronizar com o Google Drive',
+      selo(nuvemEstado.ligado ? 'ligada' : 'desligada', corDoEstado(nuvemEstado)),
+      card(null, null,
+        h('p.pequeno', descreverEstadoNuvem(nuvemEstado)),
+        nuvemEstado.remoto && h('p.mini.muted',
+          `Na nuvem: ${Math.max(1, Math.round((nuvemEstado.remoto.tamanho || 0) / 1024))} KB`
+          + (nuvemEstado.remoto.registros ? ` · ${nuvemEstado.remoto.registros} registros` : '')
+          + (nuvemEstado.remoto.dispositivo ? ` · do ${nuvemEstado.remoto.dispositivo}` : '')),
+
+        !nuvemEstado.ligado
+          ? h('div.empilha', { style: { gap: '8px', marginTop: '10px' } },
+            h('p.pequeno.muted',
+              'Para ligar, você precisa criar uma chave gratuita no Google — é o que autoriza '
+              + 'este app a guardar um arquivo no SEU Drive, e só esse arquivo. Leva uns dez '
+              + 'minutos, uma vez só.'),
+            h('div.btn-linha',
+              botao('Ligar sincronização', { tipo: 'primario', onClick: () => configurarNuvem() }),
+              botao('Como consigo a chave?', { onClick: () => comoConseguirChave() })))
+          : h('div.empilha', { style: { gap: '8px', marginTop: '10px' } },
+            h('div.btn-linha',
+              botao('⬆️ Enviar deste aparelho', {
+                tipo: nuvemEstado.enviarPendente ? 'primario' : undefined,
+                onClick: () => enviarParaNuvem(),
+              }),
+              botao('⬇️ Buscar da nuvem', {
+                tipo: nuvemEstado.buscarPendente && !nuvemEstado.conflito ? 'primario' : undefined,
+                onClick: () => buscarDaNuvem(),
+              })),
+            h('div.btn-linha',
+              botao('Trocar a chave', { pequeno: true, onClick: () => configurarNuvem() }),
+              botao('Desligar', { pequeno: true, onClick: () => desligar() }))),
+
+        h('p.mini.muted', { style: { marginTop: '10px' } },
+          'Ao abrir o app, ele busca sozinho quando a nuvem está mais nova — mas nunca envia '
+          + 'sozinho. Enviar é sempre no botão, para abrir o app no celular jamais sobrescrever '
+          + 'o que você fez no computador.'))),
+
+    /**
      * O MESMO APP EM DOIS APARELHOS.
      *
      * "Enviamos os documentos pelo PC, mas não conseguimos ter a mesma visão
@@ -149,8 +201,11 @@ export async function telaAjustes() {
             e.motivo && h('div.mini', `"${e.motivo}"`)))))
         : h('p.pequeno.muted', 'Nenhuma alteração manual registrada ainda.'))),
 
+    /* o rodapé não pode mentir: com a nuvem ligada, os dados não são só locais */
     h('p.mini.muted.centro', { style: { padding: '10px 0 20px' } },
-      'AMPLA — gestão administrativa · dados locais no aparelho'));
+      nuvemEstado.ligado
+        ? 'AMPLA — gestão administrativa · dados no aparelho e no seu Google Drive'
+        : 'AMPLA — gestão administrativa · dados locais no aparelho'));
 }
 
 function formatarValor(v) {
@@ -280,37 +335,110 @@ async function editarVendedor(vendedor) {
  * e WhatsApp; comprimida dá 590 KB, que vai por qualquer lugar. Num navegador
  * sem CompressionStream, sai o JSON mesmo — grande, mas funcionando.
  */
-async function exportarBackup() {
-  const dados = {};
-  for (const nome of Object.keys(db.STORES)) dados[nome] = await db.getAll(nome);
-  const texto = JSON.stringify({ app: 'ampla', versao: 1, em: Date.now(), dados });
-
-  if (typeof CompressionStream !== 'function') {
-    download(`ampla_backup_${today()}.json`, new Blob([texto], { type: 'application/json' }));
-    ok('Backup exportado.');
+async function configurarNuvem() {
+  const cfg = await store.config();
+  const r = await formulario({
+    titulo: 'Chave do Google',
+    descricao: 'Cole aqui o "ID do cliente OAuth" que você criou no Google Cloud. '
+      + 'Ele fica guardado só neste aparelho.',
+    campos: [{
+      chave: 'clientId',
+      label: 'ID do cliente OAuth',
+      tipo: 'texto',
+      obrigatorio: true,
+      valor: cfg.nuvem?.clientId || '',
+      placeholder: '000000-xxxxx.apps.googleusercontent.com',
+    }],
+    confirmar: 'Ligar',
+  });
+  if (!r) return;
+  const limpo = String(r.clientId).trim();
+  if (!/\.apps\.googleusercontent\.com$/.test(limpo)) {
+    erro('Essa chave não parece um ID do cliente OAuth — ele termina em .apps.googleusercontent.com');
     return;
   }
-  const comprimido = new Blob([texto]).stream().pipeThrough(new CompressionStream('gzip'));
-  const blob = await new Response(comprimido).blob();
-  download(`ampla_backup_${today()}.json.gz`, new Blob([blob], { type: 'application/gzip' }));
-  ok(`Backup exportado — ${Math.max(1, Math.round(blob.size / 1024))} KB.`);
+  await store.salvarConfig({ nuvem: { clientId: limpo } });
+  await ligarNuvem();
+  try {
+    await nuvem.transporteAtual().conectar();
+    ok('Conectado ao Google Drive.');
+  } catch (e) {
+    erro(e.message);
+  }
+  refresh();
 }
 
-/**
- * Lê o backup comprimido ou o JSON puro — e decide pelos BYTES, não pelo nome.
- * Arquivo que passeia por WhatsApp e Downloads troca de nome no caminho; os dois
- * primeiros bytes de um .gz, não.
- */
-async function lerBackup(arquivo) {
-  const buffer = await arquivo.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const ehGzip = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  if (!ehGzip) return new TextDecoder().decode(buffer);
-  if (typeof DecompressionStream !== 'function') {
-    throw new Error('Este navegador não abre backup comprimido. Abra pelo Chrome ou Safari recente.');
-  }
-  const fluxo = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Response(fluxo).text();
+async function enviarParaNuvem() {
+  try {
+    if (!(await nuvem.transporteAtual().conectado())) await nuvem.transporteAtual().conectar();
+    const r = await nuvem.enviar();
+    ok(`Enviado — ${r.registros} registros, ${Math.max(1, Math.round(r.tamanho / 1024))} KB.`);
+    refresh();
+  } catch (e) { erro(e.message); }
+}
+
+async function buscarDaNuvem() {
+  try {
+    if (!(await nuvem.transporteAtual().conectado())) await nuvem.transporteAtual().conectar();
+    const atual = await backup.montarSnapshot({});
+    const confirmado = await confirmar({
+      titulo: 'Trazer a base da nuvem?',
+      texto: `O que está neste aparelho (${backup.contarRegistros(atual)} registros) será `
+        + 'substituído pela versão que está na nuvem. O que você fez só aqui e ainda não enviou '
+        + 'se perde.',
+      confirmar: 'Trazer',
+      perigo: true,
+    });
+    if (!confirmado) return;
+    const r = await nuvem.buscar({ aoRestaurar: () => recalcular() });
+    await atualizarAlertas();
+    ok(`Base atualizada — ${r.registros} registros${r.de ? ` (do ${r.de})` : ''}.`);
+    navigate('/');
+  } catch (e) { erro(e.message); }
+}
+
+async function desligar() {
+  const sim = await confirmar({
+    titulo: 'Desligar a sincronização?',
+    texto: 'Este aparelho para de conversar com o Drive. A base daqui e o arquivo que já está no '
+      + 'seu Drive continuam intactos.',
+    confirmar: 'Desligar',
+  });
+  if (!sim) return;
+  await desligarNuvem();
+  ok('Sincronização desligada.');
+  refresh();
+}
+
+function comoConseguirChave() {
+  detalhe('Como criar a chave do Google',
+    h('div.empilha', { style: { gap: '8px' } },
+      h('p.pequeno.muted', 'Uma vez só, no computador. O que você vai criar é gratuito e fica na '
+        + 'sua conta Google.'),
+      h('p.pequeno', h('strong', '1.'), ' Abra ', h('strong', 'console.cloud.google.com'),
+        ' e crie um projeto (o nome não importa — "AMPLA" serve).'),
+      h('p.pequeno', h('strong', '2.'), ' Em "APIs e serviços" → "Biblioteca", procure ',
+        h('strong', 'Google Drive API'), ' e clique em Ativar.'),
+      h('p.pequeno', h('strong', '3.'), ' Em "Tela de permissão OAuth", escolha ', h('strong', 'Externo'),
+        ', preencha nome e seu e-mail e salve.'),
+      h('p.pequeno', h('strong', '4.'), ' ', h('strong', 'IMPORTANTE:'), ' nessa mesma tela, clique em ',
+        h('strong', 'PUBLICAR'), ' o app. Se ficar em "Teste", o Google corta o acesso a cada 7 dias '
+        + 'e você teria que refazer o login toda semana.'),
+      h('p.pequeno', h('strong', '5.'), ' Em "Credenciais" → "Criar credenciais" → ',
+        h('strong', 'ID do cliente OAuth'), ' → tipo ', h('strong', 'Aplicativo da Web'), '.'),
+      h('p.pequeno', h('strong', '6.'), ' Em "Origens JavaScript autorizadas", acrescente ',
+        h('strong', 'https://kao100.github.io'), ' e salve.'),
+      h('p.pequeno', h('strong', '7.'), ' Copie o ID que aparece (termina em '
+        + '.apps.googleusercontent.com) e cole aqui no app, em "Ligar sincronização".'),
+      aviso('O escopo que o app pede é o mais estreito que existe (drive.file): ele só enxerga o '
+        + 'arquivo que ele mesmo criar. O resto do seu Drive continua invisível para ele.', 'info')));
+}
+
+async function exportarBackup() {
+  const snapshot = await backup.montarSnapshot({ dispositivo: await nuvem.nomeDoAparelho() });
+  const { blob, comprimido } = await backup.comprimir(snapshot);
+  download(`ampla_backup_${today()}.json${comprimido ? '.gz' : ''}`, blob);
+  ok(`Backup exportado — ${Math.max(1, Math.round(blob.size / 1024))} KB.`);
 }
 
 function importarBackup() {
@@ -330,21 +458,16 @@ function importarBackup() {
     const arquivo = input.files[0];
     if (!arquivo) { limpar(); return; }
     try {
-      const conteudo = JSON.parse(await lerBackup(arquivo));
-      if (conteudo.app !== 'ampla') throw new Error('Este arquivo não é um backup do aplicativo.');
+      const conteudo = backup.validarSnapshot(JSON.parse(await backup.descomprimir(arquivo)));
       const confirmado = await confirmar({
         titulo: 'Substituir os dados atuais?',
-        texto: 'Tudo que está no aparelho será substituído pelo conteúdo do backup.',
+        texto: `Tudo que está no aparelho será substituído pelo conteúdo do backup `
+          + `(${backup.contarRegistros(conteudo)} registros).`,
         confirmar: 'Substituir',
         perigo: true,
       });
       if (!confirmado) return;
-      for (const [nome, registros] of Object.entries(conteudo.dados)) {
-        if (!db.STORES[nome]) continue;
-        await db.clearStore(nome);
-        await db.putMany(nome, registros);
-      }
-      store.limparCache();
+      await backup.restaurarSnapshot(conteudo);
       await recalcular();
       await atualizarAlertas();
       ok('Backup restaurado.');

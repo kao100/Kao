@@ -10,9 +10,39 @@ import { today, monthKey } from './format.js';
 
 const cache = new Map();
 
+/**
+ * QUANDO A BASE MUDOU PELA ÚLTIMA VEZ.
+ *
+ * A sincronização precisa saber se este aparelho tem alguma coisa que a nuvem
+ * ainda não tem. Perguntar isso varrendo o banco seria caro e inexato; marcar na
+ * hora da gravação é barato e não erra — toda escrita passa por aqui.
+ */
+let mudouEm = 0;
+let gravandoMarca = null;
+
+export function marcarMudanca(quando = Date.now()) {
+  mudouEm = quando;
+  // a marca também vai para o disco, senão fechar o app apagaria a memória de
+  // que havia coisa para enviar — mas sem travar a gravação que acabou de ocorrer
+  if (!gravandoMarca) {
+    gravandoMarca = setTimeout(() => {
+      gravandoMarca = null;
+      db.put('kv', { key: 'mudancaLocal', valor: mudouEm }).catch(() => {});
+    }, 400);
+  }
+}
+
+export async function mudancaLocal() {
+  if (mudouEm) return mudouEm;
+  const salvo = await db.get('kv', 'mudancaLocal');
+  mudouEm = salvo?.valor || 0;
+  return mudouEm;
+}
+
 function invalidate(...stores) {
   if (!stores.length) cache.clear();
   for (const s of stores) cache.delete(s);
+  marcarMudanca();
 }
 
 async function all(store) {
@@ -70,6 +100,27 @@ export async function salvarConfig(parcial) {
   const atual = await config();
   const novo = mergeDeep(atual, parcial);
   await db.put('kv', { key: 'config', valor: novo, atualizadoEm: Date.now() });
+  marcarMudanca();
+  return novo;
+}
+
+/* ------------------------------------------------------------ sincronização */
+
+/** O que este aparelho sabe sobre a última conversa com a nuvem. */
+export async function estadoNuvem() {
+  const salvo = await db.get('kv', 'nuvem');
+  return { carimbo: 0, em: 0, arquivoId: null, conta: null, ...(salvo?.valor || {}) };
+}
+
+/**
+ * Registra o que acabou de ser sincronizado. NÃO passa por marcarMudanca: anotar
+ * que a nuvem está em dia não é uma mudança a enviar — se fosse, o app ficaria
+ * enviando para sempre, cada envio criando o próximo.
+ */
+export async function salvarEstadoNuvem(parcial) {
+  const atual = await estadoNuvem();
+  const novo = { ...atual, ...parcial };
+  await db.put('kv', { key: 'nuvem', valor: novo });
   return novo;
 }
 

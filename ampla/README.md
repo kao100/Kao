@@ -34,7 +34,35 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 > Escolha a URL definitiva antes de começar a usar de verdade; para migrar,
 > use Ajustes → Exportar backup.
 
-### Ver o mesmo no computador e no celular
+### Sincronização (Google Drive)
+
+**Ajustes → Sincronizar com o Google Drive.** A base inteira vira um arquivo
+comprimido que mora na conta Google **dela** — sem serviço intermediário, sem
+fatura, e para parar basta apagar o arquivo do próprio Drive.
+
+- **Escopo `drive.file`**, o mais estreito que existe: o app enxerga só o arquivo
+  que ele mesmo criou. É também um escopo *não sensível*, então não precisa de
+  revisão do Google. A tela de consentimento precisa ser **publicada**: em
+  "Testing" o Google expira o acesso a cada 7 dias.
+- **O Client ID não entra no repositório.** Ele é público por natureza, mas este
+  repositório também é — então ela cola o dela em Ajustes e fica no aparelho.
+- **Busca sozinho ao abrir, nunca envia sozinho.** Abrir o app no celular jamais
+  pode sobrescrever o que foi feito no computador.
+- **Retrato inteiro, não mescla registro a registro.** Com um escritor só ("só eu
+  importo, os outros olham"), mesclar não resolveria nada que o retrato não
+  resolva, e abriria a porta para o pior erro possível: uma nota sumindo ou
+  duplicando sem ninguém saber qual lado está certo.
+- **Os dois lados mudaram → o app para e pergunta.** Jogar fora o trabalho de
+  alguém sem avisar é o erro que só aparece quando o número não fecha.
+- **O carimbo só vem depois de refazer os vínculos.** Senão o aparelho terminaria
+  a busca achando que tem novidade para devolver, e dois aparelhos ficariam se
+  empurrando para sempre.
+
+O transporte é trocável: `logic/nuvem.js` não sabe o que é Google Drive, só pede
+"guarde este arquivo". É o que permite testar toda a decisão de sincronia sem
+rede — e trocar de serviço um dia sem mexer na lógica.
+
+### Levar num arquivo, sem sincronização
 
 Não há servidor, então cada aparelho tem a sua base: o celular não enxerga o
 que foi importado no computador. A ponte é o backup, em **Ajustes → Levar para
@@ -51,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 460 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 491 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →

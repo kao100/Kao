@@ -74,6 +74,7 @@ async function iniciar() {
     atualizarAlertas();
     requestPersistence();
     registrarServiceWorker();
+    buscarDaNuvemSePreciso();
     if (recomeco.reiniciou) {
       const { ok } = await import('./ui/components/toast.js');
       ok('Aplicativo recomeçado do zero — pode mandar os relatórios.');
@@ -86,6 +87,31 @@ async function iniciar() {
     raiz.innerHTML = `<div class="boot"><div class="boot__logo">AMPLA</div>
       <p class="boot__msg">Não foi possível abrir o aplicativo.<br><span class="mini">${String(err.message || err)}</span></p></div>`;
   }
+}
+
+/**
+ * A BUSCA AUTOMÁTICA DA ABERTURA.
+ *
+ * Roda SOLTA, depois da tela já estar de pé: a sincronização é um extra, e app
+ * que não abre porque a internet caiu não serve para nada. E ela só BUSCA —
+ * enviar é sempre no botão, para abrir o app no celular nunca sobrescrever o
+ * que foi feito no computador.
+ */
+async function buscarDaNuvemSePreciso() {
+  try {
+    const { sincronizarAoAbrir } = await import('./ui/nuvem-ui.js');
+    const r = await sincronizarAoAbrir();
+    if (r.acao === 'buscou') {
+      const { ok } = await import('./ui/components/toast.js');
+      const { refresh } = await import('./core/router.js');
+      await atualizarAlertas();
+      ok(`Base atualizada da nuvem${r.de ? ` (do ${r.de})` : ''} — ${r.registros} registros.`);
+      refresh();
+    } else if (r.acao === 'conflito') {
+      const { erro } = await import('./ui/components/toast.js');
+      erro('A nuvem e este aparelho mudaram os dois. Veja em Ajustes qual versão vale.');
+    }
+  } catch { /* sem rede, sem login, sem nuvem: o app continua inteiro */ }
 }
 
 function registrarServiceWorker() {
