@@ -100,12 +100,40 @@ export async function telaAjustes() {
           h('span.forte', cfg.usuario || 'administração'),
           botao('Editar', { pequeno: true, onClick: () => editarUsuario(cfg) }))))),
 
+    /**
+     * O MESMO APP EM DOIS APARELHOS.
+     *
+     * "Enviamos os documentos pelo PC, mas não conseguimos ter a mesma visão
+     *  quando entramos pelo celular."
+     *
+     * O app não tem servidor, e é isso que faz nenhum número desta empresa sair
+     * do aparelho. O preço é que cada aparelho tem a sua base: o celular não
+     * sabe o que o PC importou. A ponte é um arquivo, e o passo a passo fica
+     * escrito aqui, porque é a pergunta que volta sempre.
+     */
+    secao('Levar para outro aparelho', null, card(null, null,
+      h('p.pequeno.muted',
+        'Os dados moram no aparelho — nenhum número da empresa sai daqui, e por isso o celular '
+        + 'não enxerga o que você importou no computador. Para ver o mesmo no celular:'),
+      h('div.empilha', { style: { gap: '6px', marginTop: '10px' } },
+        h('p.pequeno', h('strong', '1.'), ' No computador, toque em ', h('strong', 'Exportar backup'),
+          ' — sai um arquivo de menos de 1 MB.'),
+        h('p.pequeno', h('strong', '2.'), ' Mande esse arquivo para você mesma: WhatsApp, e-mail, '
+          + 'Google Drive, o que for mais rápido.'),
+        h('p.pequeno', h('strong', '3.'), ' No celular, abra o app, venha em Ajustes e toque em ',
+          h('strong', 'Importar backup'), '. Escolha o arquivo que você mandou.'),
+        h('p.pequeno.muted', 'O celular passa a mostrar exatamente o que o computador mostra. '
+          + 'Importou coisa nova no computador? Repita os três passos — o backup novo substitui o '
+          + 'anterior inteiro, não mistura.')),
+      h('div.btn-linha', { style: { marginTop: '12px' } },
+        botao('⬇️ Exportar backup', { tipo: 'primario', onClick: () => exportarBackup() }),
+        botao('⬆️ Importar backup', { onClick: () => importarBackup() }))),
+    aviso('Vale para os dois lados: dá para importar no computador um backup feito no celular. '
+      + 'Quem importa manda — o que estava no aparelho é substituído pelo backup inteiro.', 'info')),
+
     secao('Meus dados', null, card(null, null,
-      h('p.pequeno.muted', 'Tudo fica no seu aparelho: nenhum número da empresa sai daqui. '
-        + 'Exporte o backup antes de trocar de aparelho ou de endereço do app.'),
+      h('p.pequeno.muted', 'Exporte o backup antes de trocar de aparelho ou de endereço do app.'),
       h('div.btn-linha', { style: { marginTop: '10px' } },
-        botao('⬇️ Exportar backup (JSON)', { onClick: () => exportarBackup() }),
-        botao('⬆️ Importar backup', { onClick: () => importarBackup() }),
         botao('🔄 Refazer vínculos', { onClick: () => refazerVinculos() })),
       h('div.btn-linha', { style: { marginTop: '8px' } },
         botao('🗑️ Apagar tudo que veio de arquivo', { tipo: 'perigo', onClick: () => limparMovimentos() })))),
@@ -238,23 +266,71 @@ async function editarVendedor(vendedor) {
 
 /* ------------------------------------------------------------------- dados */
 
+/**
+ * O BACKUP É O QUE LEVA OS DADOS DE UM APARELHO PARA O OUTRO.
+ *
+ * "Enviamos os documentos pelo PC, mas os relatórios não estamos conseguindo
+ *  ter a mesma visão quando entramos pelo celular."
+ *
+ * Não existe servidor: os dados moram no navegador de cada aparelho, e é isso
+ * que faz nenhum número desta empresa sair do aparelho. O preço disso é que o
+ * celular não sabe o que o PC importou — e a ponte é este arquivo.
+ *
+ * ELE SAI COMPRIMIDO. A base dela dá 7,2 MB em JSON puro, o que já trava e-mail
+ * e WhatsApp; comprimida dá 590 KB, que vai por qualquer lugar. Num navegador
+ * sem CompressionStream, sai o JSON mesmo — grande, mas funcionando.
+ */
 async function exportarBackup() {
   const dados = {};
   for (const nome of Object.keys(db.STORES)) dados[nome] = await db.getAll(nome);
-  const blob = new Blob([JSON.stringify({ app: 'ampla', versao: 1, em: Date.now(), dados }, null, 1)], { type: 'application/json' });
-  download(`ampla_backup_${today()}.json`, blob);
-  ok('Backup exportado.');
+  const texto = JSON.stringify({ app: 'ampla', versao: 1, em: Date.now(), dados });
+
+  if (typeof CompressionStream !== 'function') {
+    download(`ampla_backup_${today()}.json`, new Blob([texto], { type: 'application/json' }));
+    ok('Backup exportado.');
+    return;
+  }
+  const comprimido = new Blob([texto]).stream().pipeThrough(new CompressionStream('gzip'));
+  const blob = await new Response(comprimido).blob();
+  download(`ampla_backup_${today()}.json.gz`, new Blob([blob], { type: 'application/gzip' }));
+  ok(`Backup exportado — ${Math.max(1, Math.round(blob.size / 1024))} KB.`);
+}
+
+/**
+ * Lê o backup comprimido ou o JSON puro — e decide pelos BYTES, não pelo nome.
+ * Arquivo que passeia por WhatsApp e Downloads troca de nome no caminho; os dois
+ * primeiros bytes de um .gz, não.
+ */
+async function lerBackup(arquivo) {
+  const buffer = await arquivo.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const ehGzip = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  if (!ehGzip) return new TextDecoder().decode(buffer);
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('Este navegador não abre backup comprimido. Abra pelo Chrome ou Safari recente.');
+  }
+  const fluxo = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(fluxo).text();
 }
 
 function importarBackup() {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.json';
+  // sem accept estreito: no iPhone ele esconde o arquivo que veio do WhatsApp
+  /**
+   * O INPUT PRECISA ESTAR NA PÁGINA para o iPhone abrir o seletor de arquivos.
+   * Solto na memória, o clique não faz nada em algumas versões do Safari — o
+   * mesmo motivo pelo qual o download põe o link no documento antes de clicar.
+   */
+  input.style.position = 'fixed';
+  input.style.left = '-9999px';
+  document.body.appendChild(input);
+  const limpar = () => input.remove();
   input.onchange = async () => {
     const arquivo = input.files[0];
-    if (!arquivo) return;
+    if (!arquivo) { limpar(); return; }
     try {
-      const conteudo = JSON.parse(await arquivo.text());
+      const conteudo = JSON.parse(await lerBackup(arquivo));
       if (conteudo.app !== 'ampla') throw new Error('Este arquivo não é um backup do aplicativo.');
       const confirmado = await confirmar({
         titulo: 'Substituir os dados atuais?',
@@ -275,6 +351,8 @@ function importarBackup() {
       navigate('/');
     } catch (e) {
       erro(e.message);
+    } finally {
+      limpar();
     }
   };
   input.click();

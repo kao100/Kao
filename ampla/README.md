@@ -34,6 +34,20 @@ Abra no **Safari** → **Compartilhar (⬆️) → Adicionar à Tela de Início*
 > Escolha a URL definitiva antes de começar a usar de verdade; para migrar,
 > use Ajustes → Exportar backup.
 
+### Ver o mesmo no computador e no celular
+
+Não há servidor, então cada aparelho tem a sua base: o celular não enxerga o
+que foi importado no computador. A ponte é o backup, em **Ajustes → Levar para
+outro aparelho**: exporta no computador, manda o arquivo para você mesma
+(WhatsApp, e-mail, Drive), importa no celular.
+
+O backup sai **comprimido em gzip** justamente por isso: a base real de um mês
+dá 7,2 MB em JSON puro, que trava anexo de e-mail e de WhatsApp — comprimida dá
+**270 KB**. Na importação o app decide pelos dois primeiros bytes se o arquivo é
+`.gz` ou JSON puro, porque arquivo que passeia por aplicativo de mensagem troca
+de nome no caminho. Conferido ponta a ponta: 550 notas, 2.430 itens, 698
+entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
+
 ### Conferir se está tudo certo
 
 ```bash
