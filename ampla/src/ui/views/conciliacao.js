@@ -163,9 +163,15 @@ function cardPendencia(p, contexto) {
 function acoes(p, contexto) {
   const botoes = [];
 
-  if (p.tipo === 'nf_sem_pedido') {
-    // o que resolve isto é um relatório, não marcação à mão
-    botoes.push(botao('Mandar contas a receber', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/receber') }));
+  if (p.tipo === 'nf_sem_vendedor') {
+    /**
+     * UM BOTÃO. "Eu clico no vendedor correto e acabou."
+     *
+     * Nada de "mandar relatório", nada de "ver NF", nada de conferir. A única
+     * coisa que ela quer fazer aqui é dizer de quem foi a venda.
+     */
+    botoes.push(botao('Escolher vendedor', { tipo: 'primario', pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
+  } else if (p.tipo === 'nf_sem_pedido') {
     botoes.push(botao('Definir vendedor', { pequeno: true, onClick: () => resolverVendedor(p, contexto) }));
     botoes.push(botao('Ver NF', { pequeno: true, onClick: () => verNf(p, contexto) }));
   } else if (p.tipo === 'vendedor_duplicado') {
@@ -248,11 +254,12 @@ function acoes(p, contexto) {
  */
 /** Motivos de um toque que valem só para alguns tipos, ao lado do principal. */
 const MOTIVOS_EXTRA = {
-  receber_sem_nf: ['A NF foi cancelada'],
+  nf_sem_vendedor: ['A NF foi cancelada'],
   nf_sem_pedido: ['A NF foi cancelada'],
 };
 
 const MOTIVO_RAPIDO = {
+  nf_sem_vendedor: 'Deixar sem vendedor',
   nf_sem_pedido: 'A nota está correta',
   nf_vendedor_nao_vende: 'Pode deixar como está',
   frete_sem_valor: 'Depois eu vejo',

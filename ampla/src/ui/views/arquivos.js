@@ -24,6 +24,8 @@ import { cents, sum } from '../../core/util.js';
 
 /* ------------------------------------------------------- central de arquivos */
 
+const FOTOGRAFIA = new Set(['receber', 'pagar']);
+
 export async function telaArquivos() {
   const [r, selo, quantasNotas] = await Promise.all([
     rotina(), seloRotina(), store.nfs.listar().then((l) => l.length),
@@ -113,6 +115,7 @@ export async function telaImportar({ params }) {
     contaId: contas[0]?.id || null,
     // relatório de total por período não traz data em toda linha: o mês é dela
     mesReferencia: `${monthKey(today())}-01`,
+    fotografiaCompleta: true,
     preparo: null,
     ocupado: false,
     aviso: null,
@@ -221,6 +224,31 @@ function passoArquivo(estado, ctx) {
       }),
       h('p.mini.muted', 'Se o arquivo tiver coluna de data, ela manda — isto é só para quando não tiver.')),
 
+    /**
+     * A PERGUNTA QUE PROTEGE AS BAIXAS.
+     *
+     * "Só considerar um título desaparecido como baixado quando o novo relatório
+     *  representar a mesma base. Não quero que dê baixa em uma conta simplesmente
+     *  porque importei um relatório com outro filtro."
+     *
+     * Marcado (o normal), o arquivo é a lista completa do que está em aberto, e
+     * quem sumiu foi pago. Desmarcado, o app só atualiza o que veio e não fecha
+     * nada — é a saída para um export filtrado, sem estrago.
+     */
+    FOTOGRAFIA.has(fonte.id) && h('div.campo',
+      h('label.linha', { style: { gap: '8px', alignItems: 'flex-start', cursor: 'pointer' } },
+        h('input', {
+          type: 'checkbox',
+          checked: estado.fotografiaCompleta !== false,
+          onChange: (e) => { estado.fotografiaCompleta = e.target.checked; },
+        }),
+        h('span.crescer',
+          h('span.forte', 'Este relatório tem TODOS os títulos em aberto'),
+          h('span.mini.muted', { style: { display: 'block' } },
+            'Marcado, o título que sumir do arquivo é dado como baixado — é assim que o app '
+            + 'acompanha as baixas que você faz no seu sistema. Desmarque se este export está '
+            + 'filtrado por período, cliente ou situação.')))),
+
     zona,
 
     estado.outraFonte && h('div.card.card--alerta',
@@ -303,8 +331,8 @@ async function carregar(arquivos, estado, ctx) {
           headerRow: conhecido.headerRow,
           mapeamento: estado.mapeamento,
           contaId: estado.contaId,
-      mesReferencia: estado.mesReferencia,
           mesReferencia: estado.mesReferencia,
+          fotografiaCompleta: estado.fotografiaCompleta !== false,
         });
         estado.passo = 'conferir';
         return;

@@ -43,6 +43,7 @@ const margemMod = await import('../src/logic/margem.js');
 const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
+const foto = await import('../src/logic/fotografia.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -535,8 +536,13 @@ console.log('\n▶ Um problema é contado uma vez só');
   const abertas = (await store.pendencias.listar()).filter((x) => x.status === 'aberta');
   const doVendedor = abertas.filter((x) => ['pedido_sem_vendedor', 'nf_sem_vendedor', 'divergencia_faturamento'].includes(x.tipo));
 
-  igual('um pedido sem vendedor é uma pendência, não três', doVendedor.length, 1);
-  igual('e ela aponta a causa: o pedido', doVendedor[0].tipo, 'pedido_sem_vendedor');
+  igual('uma venda sem vendedor é uma pendência, não três', doVendedor.length, 1);
+  /**
+   * E ELA PERGUNTA PELA NOTA, não pelo pedido. "O XML já representa aquilo que
+   * efetivamente foi faturado" — então é a nota que precisa de dono, e é ela que
+   * aparece na tela, com cliente, valor e data.
+   */
+  igual('e ela pergunta pela NOTA, que é o que vale', doVendedor[0].tipo, 'nf_sem_vendedor');
 
   const notaDoPedido = (await store.nfs.listar()).find((n) => n.numero === '3003');
   igual('a nota realmente ficou sem vendedor', notaDoPedido.vendedorId, null);
@@ -800,19 +806,22 @@ Cliente Um Ltda;11111111000111;5001;Boleto;Itaú;10/10/2026;Em aberto;10.000,00;
   await link.recalcular();
 
   const abertas = () => store.pendencias.listar()
-    .then((l) => l.filter((x) => x.status === 'aberta' && ['nf_sem_pedido', 'pedido_sem_vendedor'].includes(x.tipo)
+    .then((l) => l.filter((x) => x.status === 'aberta' && ['nf_sem_vendedor', 'pedido_sem_vendedor'].includes(x.tipo)
       && ['7001', '7002', '5001', '5002'].some((n) => (x.titulo || '').includes(n))));
 
   const antes = await abertas();
   const tipos = {};
   for (const x of antes) tipos[x.tipo] = (tipos[x.tipo] || 0) + 1;
-  igual('a nota com pedido não vira pendência própria: quem responde é o pedido',
-    antes.filter((x) => x.titulo.includes('7001')).length, 0);
-  // a 7002 não tem título nenhum, mas o pedido 5002 é do mesmo cliente com o
-  // mesmo valor: a segunda ponte fecha, e quem responde por ela é o pedido
-  igual('a nota sem título achou o pedido pela segunda ponte',
-    antes.filter((x) => x.tipo === 'nf_sem_pedido' && x.titulo.includes('7002')).length, 0);
-  igual('e os dois pedidos pedem vendedor', tipos.pedido_sem_vendedor, 2);
+  /**
+   * AGORA QUEM PERGUNTA É A NOTA, e uma vez por nota.
+   *
+   * Antes, uma venda sem vendedor podia gerar três itens: a nota, o pedido dela
+   * e a divergência do mês. Com o pedido fora da rotina, sobrou a pergunta que
+   * ela quer responder: de quem foi esta nota.
+   */
+  igual('cada nota sem dono pergunta uma vez', antes.length, 2);
+  igual('e a pergunta é sobre a nota', tipos.nf_sem_vendedor, 2);
+  ok('o pedido não pergunta mais nada', !tipos.pedido_sem_vendedor, JSON.stringify(tipos));
   igual('duas pendências para duas vendas — não seis', antes.length, 2);
 
   // agora o relatório de comissão, que é de onde vem o vendedor
@@ -832,9 +841,17 @@ Cliente Um Ltda;11111111000111;5001;Boleto;Itaú;10/10/2026;Em aberto;10.000,00;
   const nfs7002 = (await store.nfs.listar()).find((n) => n.numero === '7002');
   const rita = (await store.vendedores.listar()).find((v) => v.nome === 'Rita');
   igual('a nota com pedido herdou a vendedora', nfs7001.vendedorId, rita.id);
-  igual('e a origem diz de onde veio', nfs7001.vendedorOrigem, 'pedido-titulo');
   igual('a nota sem título também tem dono', nfs7002.vendedorId, rita.id);
-  igual('e a origem diz que foi pela segunda ponte', nfs7002.vendedorOrigem, 'pedido-valor');
+  /**
+   * A ORIGEM MUDOU DE PROPÓSITO.
+   *
+   * Antes o vendedor chegava à nota passando pelo registro do PEDIDO. Agora ele
+   * vem direto do relatório de comissão, pelo número do pedido que o próprio XML
+   * carrega — "não quero mais depender do relatório geral de vendas". O caminho
+   * ficou mais curto e o resultado é o mesmo: a Rita.
+   */
+  igual('e veio direto do relatório de comissão', nfs7001.vendedorOrigem, 'comissao-pedido');
+  igual('sem precisar do registro de pedido no meio', nfs7002.vendedorOrigem, 'comissao-pedido');
   igual('com o pedido certo', nfs7002.pedidoNumero, '5002');
 
   // as duas vendas fecharam: não sobra nada
@@ -2324,6 +2341,99 @@ Venda de nº 8710;CLIENTE DE TESTE LTDA;11111111000191;25/09/2027;1.590,00;Em ab
   for (const n of notas9820) await store.nfs.remover(n.id);
   for (const i of (await store.nfItens.listar()).filter((x) => x.nfNumero === '9820')) {
     await store.nfItens.remover(i.id);
+  }
+  await link.recalcular();
+}
+
+console.log('\n▶ O relatório financeiro é uma FOTOGRAFIA, não um lançamento');
+{
+  /**
+   * "Chegou a aparecer algo próximo de R$ 600 mil em aberto, o que não
+   *  corresponde à realidade."
+   *
+   * A causa: o app nunca fechava um título que sumia do relatório. Quem dá baixa
+   * dá baixa no GestãoClick, o título some do próximo export — e aqui ficava
+   * aberto para sempre. Semana após semana, virou o número que não existe.
+   */
+  const REC = 'Descrição;Cliente;CPF/CNPJ;Vencimento;Valor;Situação;Nota fiscal';
+
+  /* segunda-feira: três títulos em aberto */
+  await importar('receber', 'foto1.csv', `${REC}
+Venda de nº 7001;CLIENTE FOTO LTDA;60606060000160;10/11/2027;5.000,00;Em aberto;7101
+Venda de nº 7002;CLIENTE FOTO LTDA;60606060000160;15/11/2027;3.000,00;Em aberto;7102
+Venda de nº 7003;CLIENTE FOTO LTDA;60606060000160;20/11/2027;2.000,00;Em aberto;7103`);
+  const emAberto = async () => (await store.receber.listar())
+    .filter((t) => t.clienteNome === 'CLIENTE FOTO LTDA' && t.status !== 'pago');
+  igual('segunda: três títulos em aberto', (await emAberto()).length, 3);
+  igual('somando o que realmente existe', Math.round((await emAberto())
+    .reduce((a, t) => a + (t.saldo || 0), 0)), 10000);
+
+  /* terça: o MESMO relatório de novo. Não pode virar R$ 20.000 */
+  await importar('receber', 'foto2.csv', `${REC}
+Venda de nº 7001;CLIENTE FOTO LTDA;60606060000160;10/11/2027;5.000,00;Em aberto;7101
+Venda de nº 7002;CLIENTE FOTO LTDA;60606060000160;15/11/2027;3.000,00;Em aberto;7102
+Venda de nº 7003;CLIENTE FOTO LTDA;60606060000160;20/11/2027;2.000,00;Em aberto;7103`);
+  igual('terça: reimportar não cria título novo', (await emAberto()).length, 3);
+  igual('nem dobra o valor', Math.round((await emAberto())
+    .reduce((a, t) => a + (t.saldo || 0), 0)), 10000);
+
+  /* quarta: ela deu baixa na 7001, que some do relatório */
+  await importar('receber', 'foto3.csv', `${REC}
+Venda de nº 7002;CLIENTE FOTO LTDA;60606060000160;15/11/2027;3.000,00;Em aberto;7102
+Venda de nº 7003;CLIENTE FOTO LTDA;60606060000160;20/11/2027;2.000,00;Em aberto;7103`);
+  igual('quarta: o título que sumiu foi dado como baixado', (await emAberto()).length, 2);
+  igual('e o em aberto cai para o que é verdade', Math.round((await emAberto())
+    .reduce((a, t) => a + (t.saldo || 0), 0)), 5000);
+  const baixado = (await store.receber.listar()).find((t) => t.nfNumero === '7101');
+  ok('a baixa fica registrada, com o motivo', baixado.baixadoPorAusencia === true, '');
+  igual('e o saldo dele zera', baixado.saldo, 0);
+
+  /**
+   * E A PARTE DELICADA: "não quero que o sistema dê baixa em uma conta
+   * simplesmente porque importei um relatório com outro filtro".
+   *
+   * Este export cobre só novembro. O título de dezembro não está nele — e não
+   * pode ser fechado por isso.
+   */
+  await importar('receber', 'foto4.csv', `${REC}
+Venda de nº 7004;CLIENTE FOTO LTDA;60606060000160;10/12/2027;9.000,00;Em aberto;7104`);
+  igual('título de dezembro entrou', (await emAberto()).filter((t) => t.nfNumero === '7104').length, 1);
+
+  await importar('receber', 'foto5.csv', `${REC}
+Venda de nº 7002;CLIENTE FOTO LTDA;60606060000160;15/11/2027;3.000,00;Em aberto;7102
+Venda de nº 7003;CLIENTE FOTO LTDA;60606060000160;20/11/2027;2.000,00;Em aberto;7103`);
+  ok('export só de novembro NÃO encosta no título de dezembro',
+    (await emAberto()).some((t) => t.nfNumero === '7104'),
+    JSON.stringify((await emAberto()).map((t) => t.nfNumero)));
+
+  /**
+   * A JANELA DESCE ATÉ ONDE A FOTOGRAFIA ANTERIOR COMEÇAVA.
+   *
+   * Era aqui que estava o furo: o caso mais comum é o título MAIS ANTIGO ser
+   * pago e sumir. Se a janela começasse no primeiro vencimento do arquivo novo,
+   * justamente o que acabou de ser pago cairia fora dela e nunca fecharia.
+   */
+  igual('a janela desce até o começo da fotografia anterior',
+    foto.janelaParaFechar({ de: '2027-11-15', ate: '2027-11-20' }, { de: '2027-11-10', ate: '2027-11-20' }).de,
+    '2027-11-10');
+  igual('mas o teto é sempre o do arquivo novo',
+    foto.janelaParaFechar({ de: '2027-11-15', ate: '2027-11-20' }, { de: '2027-11-10', ate: '2027-12-31' }).ate,
+    '2027-11-20');
+
+  /* e a cobertura é medida pelos vencimentos que vieram no arquivo */
+  const cob = foto.coberturaDe([{ vencimento: '2027-11-10' }, { vencimento: '2027-11-20' }, { vencimento: null }]);
+  igual('a janela do arquivo começa no menor vencimento', cob.de, '2027-11-10');
+  igual('e termina no maior', cob.ate, '2027-11-20');
+  igual('arquivo sem vencimento nenhum não fecha nada',
+    foto.ausentesNaFotografia([{ id: 'x', status: 'aberto', vencimento: '2027-11-15' }], new Set(), null).length, 0);
+
+  /* baixa feita à mão por ela não é desfeita por silêncio de arquivo */
+  const manual = { id: 'y', status: 'aberto', vencimento: '2027-11-12', baixaManual: true };
+  igual('decisão dela não é apagada por ausência',
+    foto.ausentesNaFotografia([manual], new Set(), { de: '2027-11-01', ate: '2027-11-30' }).length, 0);
+
+  for (const t of (await store.receber.listar()).filter((x) => x.clienteNome === 'CLIENTE FOTO LTDA')) {
+    await store.receber.remover(t.id);
   }
   await link.recalcular();
 }

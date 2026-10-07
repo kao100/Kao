@@ -13,11 +13,12 @@
  *  4. o que foi ajustado à mão no app é preservado numa reimportação.
  */
 
-import { parseNumber, parseAnyDate, monthKey, today } from '../core/format.js';
+import { parseNumber, parseAnyDate, monthKey, today, money } from '../core/format.js';
 import { normalize, key as chaveTexto, digits, docNumber, uid, hashString, cents } from '../core/util.js';
 import { FONTES } from '../data/sources.js';
 import { rowsToObjects } from '../core/files/read.js';
 import * as store from '../core/store.js';
+import { FONTES_FOTOGRAFIA, aplicarFotografia } from './fotografia.js';
 import * as db from '../core/db.js';
 
 /** Campos que o app calcula ou o usuário edita — uma reimportação não pode apagar. */
@@ -178,7 +179,7 @@ export function lerParaTeste(fonteId, registro, mapeamento) {
  * Dry-run: monta os registros e diz o que vai acontecer, sem gravar nada.
  * A gravação só acontece em confirmar().
  */
-export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, headerRow = 0, mapeamento, contaId = null, mesReferencia = null }) {
+export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, headerRow = 0, mapeamento, contaId = null, mesReferencia = null, fotografiaCompleta = true }) {
   const fonte = FONTES[fonteId];
   if (!fonte) throw new Error(`Fonte desconhecida: ${fonteId}`);
 
@@ -188,6 +189,8 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
 
   const contexto = await montarContexto();
   const saida = novoPreparo(fonteId, leitura);
+  // o relatório financeiro é fotografia; ela pode dizer que este é parcial
+  saida.fotografiaCompleta = fotografiaCompleta;
   const usados = new Map();
 
   for (const registro of registros) {
@@ -1306,6 +1309,32 @@ export async function confirmar(preparo, { observacao = null } = {}) {
 
   await store.salvarLote(lote);
 
+  /**
+   * A FOTOGRAFIA: o que sumiu do relatório foi baixado.
+   *
+   * Vem DEPOIS de gravar, porque precisa saber exatamente o que o arquivo
+   * trouxe. Só vale para contas a receber e a pagar, e só quando ela confirma
+   * que o export é a lista completa de títulos em aberto — um relatório
+   * filtrado não pode dar baixa em nada.
+   */
+  let fotografia = null;
+  if (FONTES_FOTOGRAFIA[preparo.fonteId] && preparo.fotografiaCompleta !== false) {
+    const registros = lote[FONTES_FOTOGRAFIA[preparo.fonteId]] || [];
+    fotografia = await aplicarFotografia(
+      preparo.fonteId,
+      registros.map((r) => r.id),
+      registros,
+      { arquivo: preparo.arquivo },
+    );
+    if (fotografia.fechados) {
+      preparo.avisos.push(
+        `${fotografia.fechados} título(s) sumiram deste relatório e foram dados como baixados — `
+        + `${money(fotografia.valor)} que saíram do "em aberto". `
+        + 'É assim que o app acompanha as baixas que você faz no seu sistema.',
+      );
+    }
+  }
+
   const registro = {
     id: preparo.id,
     fonte: preparo.fonteId,
@@ -1315,7 +1344,7 @@ export async function confirmar(preparo, { observacao = null } = {}) {
     data: today(),
     momento,
     periodo: preparo.periodo,
-    resumo: { ...preparo.resumo, canceladas: canceladas.length },
+    resumo: { ...preparo.resumo, canceladas: canceladas.length, fotografia },
     erros: preparo.erros.slice(0, 200),
     totalErros: preparo.erros.length,
     avisos: preparo.avisos,

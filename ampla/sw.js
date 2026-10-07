@@ -19,7 +19,7 @@ const APP_SHELL = [
   'src/logic/dre.js', 'src/logic/dossie.js', 'src/logic/quotes.js', 'src/logic/diario.js',
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/collection.js', 'src/logic/cashflow.js', 'src/logic/abc.js', 'src/logic/routine.js',
-  'src/logic/reports.js', 'src/logic/suggest.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
+  'src/logic/reports.js', 'src/logic/suggest.js', 'src/logic/fotografia.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
   'src/logic/margem.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
   'src/ui/shell.js', 'src/ui/nuvem-ui.js',
   'src/ui/components/ui.js', 'src/ui/components/sheet.js', 'src/ui/components/toast.js',

@@ -58,13 +58,23 @@
 
 import * as store from '../core/store.js';
 import { today, monthKey, money, formatDate } from '../core/format.js';
-import { normalize, docNumber, sameMoney, cents, sum } from '../core/util.js';
+import { normalize, docNumber, sameMoney, cents, sum, key as chaveTexto } from '../core/util.js';
 
 export const TIPOS_PENDENCIA = {
+  nf_sem_vendedor: {
+    titulo: 'Nota sem vendedor',
+    icone: '🙋',
+    gravidade: 'alta',
+    explicacao: 'O app liga a nota ao vendedor sozinho, pelo número do pedido que vem dentro do '
+      + 'XML e aparece no relatório de comissão por venda. Quando esses dois não se encontram — '
+      + 'ou quando o mesmo cliente tem duas vendas do mesmo valor com vendedores diferentes — ele '
+      + 'não escolhe por conta própria. Escolha aqui e pronto: a nota, a comissão e os produtos '
+      + 'dela passam a ter dono.',
+  },
   nf_sem_pedido: {
     titulo: 'Nota sem pedido',
     icone: '🔗',
-    gravidade: 'alta',
+    gravidade: 'baixa',
     explicacao: 'Toda nota vem de um pedido, mas o app ainda não sabe de qual. Ele tenta três '
       + 'pontes: o número do pedido dentro do próprio XML, o contas a receber (que traz nota e '
       + 'pedido na mesma linha) e o pedido com mesmo cliente e mesmo valor. Quando nenhuma fecha '
@@ -192,6 +202,47 @@ export async function recalcular() {
     else if (!atual) vendedorPorNumero.set(k, c.vendedorNome);
   }
 
+  /**
+   * O VENDEDOR SAI DO RELATÓRIO DE COMISSÃO, DIRETO PARA A NOTA.
+   *
+   * "Não quero mais depender do relatório geral de vendas para definir
+   *  faturamento. O XML já representa aquilo que efetivamente foi faturado.
+   *  Para identificar o vendedor, usar o Relatório de Comissão de Vendas."
+   *
+   * O relatório de comissão traz o número do PEDIDO, e o XML da nota traz esse
+   * mesmo número dentro dela (xPed). É igualdade de identificador entre dois
+   * arquivos do mesmo sistema — nada de semelhança, nada de palpite. Nos XMLs
+   * dela, 541 das 550 notas de setembro carregam o pedido.
+   *
+   * O segundo caminho é para as que não carregam: mesmo cliente e mesmo valor, e
+   * SÓ quando o par é único. Duas vendas iguais do mesmo cliente com vendedores
+   * diferentes não escolhem ninguém — viram a pendência de vendedor, que é a
+   * única conciliação manual que sobrou.
+   */
+  const comissaoPorClienteValor = new Map();
+  for (const c of comissoes) {
+    if (!c.vendedorNome || c.valor == null) continue;
+    const nome = c.clienteNome ? chaveTexto(c.clienteNome) : '';
+    if (!nome) continue;
+    const k = `${nome}|${cents(c.valor)}`;
+    if (!comissaoPorClienteValor.has(k)) comissaoPorClienteValor.set(k, []);
+    comissaoPorClienteValor.get(k).push(c);
+  }
+  const comissaoPeloValor = (nf) => {
+    const nome = nf.clienteNome ? chaveTexto(nf.clienteNome) : '';
+    if (!nome) return null;
+    /* o total da nota e, havendo frete, também só os produtos: o relatório de
+       comissão pode estar em qualquer um dos dois */
+    const alvos = [nf.valorTotal, nf.valorProdutos]
+      .filter((v) => v != null).map((v) => cents(Math.abs(v)));
+    for (const valor of alvos) {
+      const candidatas = comissaoPorClienteValor.get(`${nome}|${valor}`) || [];
+      const nomes = new Set(candidatas.map((c) => normalize(c.vendedorNome)));
+      if (candidatas.length && nomes.size === 1) return candidatas[0].vendedorNome;
+    }
+    return null;
+  };
+
   const porNome = indiceVendedores(vendedores);
   const novosVendedores = [];
 
@@ -296,6 +347,7 @@ export async function recalcular() {
     const resolvido = resolverVendedorDaNf(nf, {
       porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor,
       notaOriginalPorClienteValor, vendedorJaResolvido, novosVendedores, doRelatorioDeComissao,
+      comissaoPeloValor,
     });
     vendedorJaResolvido.set(nf.id, resolvido.vendedorId || null);
     const mes = nf.dataEmissao ? monthKey(nf.dataEmissao) : null;
@@ -624,7 +676,7 @@ export function origemVendedor(valor) {
 /** Origens que vieram de uma decisão sua: o recálculo não mexe nelas. */
 const DECIDIDO_POR_VOCE = new Set(['manual', 'pedido-confirmado']);
 
-function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor, notaOriginalPorClienteValor, vendedorJaResolvido, novosVendedores, doRelatorioDeComissao }) {
+function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedidoDaNfPeloTitulo, pedidoPorClienteValor, notaOriginalPorClienteValor, vendedorJaResolvido, novosVendedores, doRelatorioDeComissao, comissaoPeloValor }) {
   if (DECIDIDO_POR_VOCE.has(nf.vendedorOrigem) && nf.vendedorId) {
     return {
       vendedorId: nf.vendedorId,
@@ -670,6 +722,23 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
     };
   }
 
+  /**
+   * O CAMINHO PRINCIPAL: o pedido que veio DENTRO do XML.
+   *
+   * O relatório de comissão é indexado pelo número do pedido, e o XML traz esse
+   * número no campo xPed. Dois arquivos do mesmo sistema citando o mesmo
+   * identificador — é o vínculo mais forte desta base, e resolve a esmagadora
+   * maioria das notas sem ela tocar em nada.
+   */
+  const peloPedidoDoXml = nf.pedidoNumero
+    ? doRelatorioDeComissao?.(docNumber(nf.pedidoNumero) || nf.pedidoNumero) : null;
+  if (peloPedidoDoXml) {
+    const v = resolverVendedor(peloPedidoDoXml, porNome, novosVendedores);
+    if (v) {
+      return { vendedorId: v.id, vendedorOrigem: 'comissao-pedido', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
+    }
+  }
+
   // o relatório de comissão pode citar a própria nota: bate identificador com
   // identificador, então vale mesmo antes da ponte do contas a receber existir
   const pelaComissao = doRelatorioDeComissao?.(docNumber(nf.numero) || nf.numero);
@@ -677,6 +746,20 @@ function resolverVendedorDaNf(nf, { porNome, pedidoPorNumero, pedidoPorNf, pedid
     const v = resolverVendedor(pelaComissao, porNome, novosVendedores);
     if (v) {
       return { vendedorId: v.id, vendedorOrigem: 'comissao', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
+    }
+  }
+
+  /**
+   * O ÚLTIMO CAMINHO AUTOMÁTICO: mesmo cliente, mesmo valor, par único.
+   *
+   * Vale só quando não sobra dúvida. Duas vendas iguais do mesmo cliente com
+   * vendedores diferentes não escolhem ninguém — viram a pendência de vendedor.
+   */
+  const peloValor = comissaoPeloValor?.(nf);
+  if (peloValor) {
+    const v = resolverVendedor(peloValor, porNome, novosVendedores);
+    if (v) {
+      return { vendedorId: v.id, vendedorOrigem: 'comissao-valor', ...vinculoDeUmaNota(nf, pedidoPorNumero, pedidoDaNfPeloTitulo, pedidoPorClienteValor) };
     }
   }
 
@@ -1130,37 +1213,58 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
       continue;
     }
 
-    if (pedidoDaNota(nf)) continue;    // o pedido dela responde
-
-    const { motivo, explicacao } = porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor);
-    nova('nf_sem_pedido', nf.id, {
+    /**
+     * A ÚNICA CONCILIAÇÃO QUE SOBROU: de quem foi esta venda.
+     *
+     * "Quero uma tela muito simples: NF | Cliente | Valor | Data | Vendedor. E
+     *  eu escolho o vendedor. Só isso."
+     *
+     * Então a nota sem dono não pergunta de qual pedido ela veio nem pede
+     * conferência de nada. Pergunta uma coisa só.
+     */
+    nova('nf_sem_vendedor', nf.id, {
       titulo: `NF ${nf.numero}`,
-      detalhe: `${nf.clienteNome || 'cliente não identificado'} · emissão ${formatDate(nf.dataEmissao)} · ${explicacao}`,
+      detalhe: [
+        nf.clienteNome || 'cliente não identificado',
+        formatDate(nf.dataEmissao),
+        nf.pedidoNumero ? `pedido ${nf.pedidoNumero}` : 'a nota não traz o número do pedido',
+      ].join(' · '),
       valor: nf.valorTotal,
       mes: nf.mes,
-      motivo,
+      motivo: nf.pedidoNumero ? 'pedido_fora_do_relatorio' : 'nota_sem_pedido',
       pedidoNumero: nf.pedidoNumero || null,
       alvo: { store: 'nfs', id: nf.id },
     });
   }
 
   /* venda sem vendedor: é aqui que o relatório de comissão entra */
-  for (const pedido of pedidos || []) {
-    if (pedido.vendedorId) continue;
-    const notas = nfs.filter((n) => (pedido.id && n.pedidoId === pedido.id)
-      || (pedido.numero && n.pedidoNumero && String(n.pedidoNumero) === String(pedido.numero)));
-    // só cobra vendedor de pedido que virou venda ou já tem nota
-    if (!notas.length && pedido.concretizado !== true) continue;
-    nova('pedido_sem_vendedor', pedido.id, {
-      titulo: `Pedido ${pedido.numero || '(sem número)'}`,
-      detalhe: [
-        pedido.clienteNome || 'cliente não identificado',
-        notas.length ? `${notas.length} NF(s): ${notas.map((n) => n.numero).filter(Boolean).slice(0, 4).join(', ')}` : 'ainda sem NF',
-      ].join(' · '),
-      valor: notas.length ? cents(sum(notas, (n) => n.valorTotal || 0)) : pedido.valorTotal,
-      alvo: { store: 'pedidos', id: pedido.id },
-    });
-  }
+  /**
+   * O QUE SAIU DAS PENDÊNCIAS, e por quê.
+   *
+   * "Não quero pendências do tipo: confirmar se esta nota está correta,
+   *  confirmar correspondência, pedido não conciliado, valor divergente,
+   *  confirmar lançamento. A principal pendência que quero resolver manualmente
+   *  é: vendedor não identificado."
+   *
+   *  • PEDIDO SEM VENDEDOR — o pedido saiu da rotina diária. Quem pergunta de
+   *    quem foi a venda agora é a NOTA, uma vez só; eram duas perguntas para o
+   *    mesmo problema.
+   *  • TÍTULO SEM NF — o título entra no fluxo de caixa pela data e pelo valor,
+   *    que é o que o caixa precisa. O vínculo com a nota é um extra, não uma
+   *    decisão dela.
+   *  • EXTRATO SEM VÍNCULO e PAGO SEM BANCO — o extrato saiu inteiro da rotina.
+   *    "Tem taxas, transferências, movimentações internas que tornam a
+   *    conciliação muito complexa e geram números incorretos."
+   *  • ITEM SEM NF, PAGAR SEM CATEGORIA, PRODUTO SEM CUSTO — são falta de
+   *    arquivo, não decisão. Cada tela já diz o que falta nela, no lugar onde a
+   *    falta importa.
+   *  • DIVERGÊNCIA DE FATURAMENTO — continua medida e mostrada na tela de
+   *    comissões, que é onde ela significa alguma coisa. Como pendência diária,
+   *    virava tarefa sem dono.
+   *
+   * O que ficou são as perguntas de VENDEDOR — e todas se respondem num toque.
+   */
+
 
   /**
    * ENTREGA COM O CUSTO EM BRANCO.
@@ -1185,14 +1289,6 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
 
   const nfIds = new Set(nfs.map((n) => n.id));
   const itensOrfaos = itens.filter((i) => !nfIds.has(i.nfId));
-  if (itensOrfaos.length) {
-    nova('item_sem_nf', 'geral', {
-      titulo: `${itensOrfaos.length} item(ns) sem a NF correspondente`,
-      detalhe: 'Importe o XML ou o relatório de notas do mesmo período.',
-      valor: sum(itensOrfaos, (i) => i.valorTotal),
-      quantidade: itensOrfaos.length,
-    });
-  }
 
   /**
    * Título que cita uma nota que não está na base só é divergência quando a
@@ -1205,50 +1301,10 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   const menorNota = numerosDeNota.length ? Math.min(...numerosDeNota) : null;
   const maiorNota = numerosDeNota.length ? Math.max(...numerosDeNota) : null;
 
-  for (const t of titulos) {
-    if (!t.nfNumero || t.nfId) continue;
-    const n = Number(docNumber(t.nfNumero));
-    const dentroDaFaixa = Number.isFinite(n) && menorNota != null && n >= menorNota && n <= maiorNota;
-    if (!dentroDaFaixa) continue;
-    /**
-     * POR QUE ESTE TÍTULO NÃO ACHOU A NOTA. Dizer "não identificada" e parar aí
-     * deixava ela procurando às cegas — e as duas causas pedem coisas opostas:
-     * nota ausente se resolve mandando o XML, nota repetida se resolve
-     * escolhendo qual é.
-     */
-    const quantas = (nfs.filter((x) => Number(docNumber(x.numero)) === n)).length;
-    const porque = quantas > 1
-      ? `existe mais de uma NF ${t.nfNumero} na base — escolha qual é`
-      : 'essa nota não está na base';
-    nova('receber_sem_nf', t.id, {
-      titulo: `Título ${t.documento} cita a NF ${t.nfNumero}`,
-      detalhe: `${t.clienteNome} · vence ${formatDate(t.vencimento)} · ${porque}`,
-      valor: t.valor,
-      alvo: { store: 'receber', id: t.id },
-    });
-  }
 
   const semVinculo = movimentos.filter((m) => m.conciliacaoStatus === 'pendente');
-  for (const mov of semVinculo) {
-    nova('extrato_sem_vinculo', mov.id, {
-      titulo: `${mov.valor >= 0 ? 'Entrada' : 'Saída'} de ${money(Math.abs(mov.valor))}`,
-      detalhe: `${mov.descricao || 'sem descrição'} · ${formatDate(mov.data)}`,
-      valor: Math.abs(mov.valor),
-      alvo: { store: 'extrato', id: mov.id },
-    });
-  }
 
   const conciliadosIds = new Set(movimentos.filter((m) => m.conciliadoCom).map((m) => `${m.conciliadoCom.tipo}:${m.conciliadoCom.id}`));
-  for (const t of titulos) {
-    if (statusTitulo(t) === 'pago' && t.dataRecebimento && !conciliadosIds.has(`receber:${t.id}`)) {
-      nova('pago_sem_banco', t.id, {
-        titulo: `${t.clienteNome} — título ${t.documento}`,
-        detalhe: `baixado em ${formatDate(t.dataRecebimento)}, sem lançamento igual no extrato`,
-        valor: t.valorRecebido ?? t.valor,
-        alvo: { store: 'receber', id: t.id },
-      });
-    }
-  }
 
   /**
    * DOIS CADASTROS PARA A MESMA PESSOA.
@@ -1278,14 +1334,6 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   }
 
   const semCategoria = pagamentos.filter((p) => p.status !== 'pago' && !p.categoria);
-  if (semCategoria.length) {
-    nova('pagar_sem_categoria', 'geral', {
-      titulo: `${semCategoria.length} pagamento(s) em aberto sem categoria`,
-      detalhe: 'Atrapalha a visão de para onde o dinheiro está indo.',
-      valor: sum(semCategoria, (p) => p.valor),
-      quantidade: semCategoria.length,
-    });
-  }
 
   const produtoPorId = new Map(produtos.map((p) => [p.id, p]));
   const vendidosSemCusto = new Set();
@@ -1294,13 +1342,6 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     const prod = produtoPorId.get(item.produtoId);
     if (prod && prod.custo != null) continue;
     vendidosSemCusto.add(item.produtoId);
-  }
-  if (vendidosSemCusto.size) {
-    nova('produto_sem_custo', 'geral', {
-      titulo: `${vendidosSemCusto.size} produto(s) vendidos sem custo cadastrado`,
-      detalhe: 'A margem fica em branco para eles — o app não estima custo.',
-      quantidade: vendidosSemCusto.size,
-    });
   }
 
   // divergência faturamento fiscal x atribuído, mês a mês
@@ -1312,22 +1353,6 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     meses.get(nf.mes).fiscal += valor;
     if (nf.vendedorId) meses.get(nf.mes).atribuido += valor;
     else meses.get(nf.mes).semVendedor += valor;
-  }
-  for (const [mes, v] of meses) {
-    if (sameMoney(v.fiscal, v.atribuido, 1)) continue;
-    const diferenca = cents(v.fiscal - v.atribuido);
-    // A diferença que as notas sem vendedor já explicam não é uma pendência
-    // nova: é o mesmo dinheiro, dito de outro jeito. Só vira pendência o que
-    // sobra DEPOIS de descontá-las — aí sim é algo que ninguém está vendo.
-    const inexplicada = cents(diferenca - (v.semVendedor || 0));
-    if (sameMoney(inexplicada, 0, 1)) continue;
-    nova('divergencia_faturamento', mes, {
-      titulo: `${mes}: diferença de ${money(inexplicada)} sem explicação`,
-      detalhe: `fiscal ${money(v.fiscal)} × vendedores ${money(v.atribuido)}`
-        + (v.semVendedor ? ` · ${money(v.semVendedor)} são notas sem vendedor` : ''),
-      valor: inexplicada,
-      mes,
-    });
   }
 
   // grava: pendências que sumiram são apagadas (resolvidas de fato)
