@@ -143,11 +143,12 @@ export const FONTES = {
     id: 'orcamentos',
     nome: 'Orçamentos',
     icone: '📝',
-    periodicidade: 'semanal',
+    periodicidade: 'diaria',
     store: 'orcamentos',
     verdadeDe: 'Quanto foi orçado e quanto virou venda.',
-    descricao: 'Relatório de orçamentos. Permite ver taxa de conversão: quanto saiu de orçamento '
-      + 'e quanto virou pedido.',
+    descricao: 'Relatório de orçamentos, todo dia junto com os outros. É a única fonte de '
+      + 'orçamento do app — ele não inventa orçamento a partir de nota nem de venda. Daqui saem a '
+      + 'taxa de conversão, quem orça muito e fecha pouco, e quanto de proposta está parado.',
     formatos: ['xlsx', 'csv', 'pdf'],
     colunasReais: ['número do orçamento', 'cliente', 'data', 'situação', 'valor'],
     campos: [
@@ -158,6 +159,19 @@ export const FONTES = {
       campo('valorTotal', 'Valor', 'dinheiro', { sinonimos: VALOR_TOTAL }),
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
     ],
+    /**
+     * EXPORTE COM TODAS AS SITUAÇÕES.
+     *
+     * O orçamento não é fotografia como o contas a receber: ele não some quando
+     * é resolvido, ele MUDA DE SITUAÇÃO. Então é a coluna Situação que diz se
+     * virou venda ou se foi perdido — e um export filtrado por "em aberto"
+     * deixaria cada orçamento convertido congelado como aberto para sempre,
+     * inflando o orçado e destruindo a taxa de conversão. É o mesmo erro que
+     * inchou o contas a receber, por outro caminho.
+     */
+    ajuda: 'Exporte SEM filtrar a situação: o app precisa ver o orçamento aprovado e o perdido, '
+      + 'não só os em aberto. É a coluna Situação que diz o que virou venda — sem ela, todo '
+      + 'orçamento fica aberto para sempre e a taxa de conversão vira ficção.',
   },
 
   /**

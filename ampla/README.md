@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 534 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 538 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -123,14 +123,15 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 
 ## A rotina diária
 
-Cinco arquivos, nessa ordem ou em qualquer outra, e um número digitado:
+Seis arquivos, nessa ordem ou em qualquer outra, e um número digitado:
 
 1. **XML das notas fiscais** — a fonte oficial do faturamento
 2. **Comissão por venda** — é dela que sai o vendedor de cada nota
 3. **Comissão por produto** — alimenta os indicadores de produto
-4. **Contas a receber** — fotografia dos títulos em aberto
-5. **Contas a pagar** — idem
-6. **Saldo atual do dia**, no Fluxo de caixa
+4. **Orçamentos** — a única fonte de orçamento; exportar **sem filtrar a situação**
+5. **Contas a receber** — fotografia dos títulos em aberto
+6. **Contas a pagar** — idem
+7. **Saldo atual do dia**, no Fluxo de caixa
 
 Depois disso, a única conciliação manual é escolher o vendedor das notas que o
 app não conseguiu identificar sozinho.
@@ -147,6 +148,13 @@ app não conseguiu identificar sozinho.
   piso existe porque o caso mais comum é justamente o título mais antigo ser pago
   e sumir. Na importação ela confirma, numa caixa, se aquele export tem todos os
   títulos em aberto; desmarcada, nada é fechado.
+- **Orçamento muda de situação, não some.** Diferente do contas a receber, o
+  orçamento resolvido não desaparece do sistema: ele vira aprovado ou perdido. É
+  a coluna Situação que diz qual foi — então o export não pode ser filtrado por
+  "em aberto", ou todo orçamento convertido fica aberto para sempre, inflando o
+  orçado e destruindo a taxa de conversão. É o mesmo erro que inchou o contas a
+  receber, por outro caminho; quando o arquivo inteiro chega com uma situação só,
+  o app avisa.
 - **O vendedor vem do relatório de comissão, direto para a nota.** O relatório é
   indexado pelo número do PEDIDO, e o XML traz esse número dentro dela (`xPed`):
   dois arquivos do mesmo sistema citando o mesmo identificador. Nos arquivos

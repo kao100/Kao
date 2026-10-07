@@ -2532,6 +2532,43 @@ Compra 902;FORNECEDOR C LTDA;80808080000362;03/12/2027;3.000,00;Em aberto`);
   await link.recalcular();
 }
 
+console.log('\n▶ Orçamento muda de situação, não some');
+{
+  /**
+   * O orçamento entra na rotina diária — "todo dia irei mandar o relatório de
+   * orçamento". Mas ele NÃO é fotografia como o contas a receber: um orçamento
+   * resolvido não desaparece do sistema, ele muda de situação.
+   *
+   * O risco é o mesmo que inchou o contas a receber, por outro caminho: um
+   * export filtrado por "em aberto" congelaria como aberto, para sempre, todo
+   * orçamento que virou venda.
+   */
+  const ORC = 'Número;Cliente;Data;Situação;Valor';
+  await importar('orcamentos', 'orc1.csv', `${ORC}
+9001;CLIENTE ORC LTDA;05/01/2028;Em aberto;10.000,00
+9002;CLIENTE ORC LTDA;06/01/2028;Em aberto;4.000,00`);
+  const meus = async () => (await store.orcamentos.listar()).filter((o) => ['9001', '9002'].includes(o.numero));
+  igual('dois orçamentos entraram', (await meus()).length, 2);
+
+  /* no dia seguinte o 9001 virou venda: a SITUAÇÃO muda, o registro é o mesmo */
+  await importar('orcamentos', 'orc2.csv', `${ORC}
+9001;CLIENTE ORC LTDA;05/01/2028;Aprovado;10.000,00
+9002;CLIENTE ORC LTDA;06/01/2028;Em aberto;4.000,00`);
+  igual('reimportar não cria orçamento novo', (await meus()).length, 2);
+  igual('e a situação do que virou venda é atualizada',
+    (await meus()).find((o) => o.numero === '9001').situacao, 'convertido');
+
+  /* e o app avisa quando o export parece filtrado por situação */
+  const linhas = Array.from({ length: 12 }, (_, i) => `95${String(i).padStart(2, '0')};CLIENTE ORC LTDA;07/01/2028;Em aberto;1.000,00`);
+  const { preparo } = await importar('orcamentos', 'orc3.csv', `${ORC}\n${linhas.join('\n')}`);
+  ok('export com uma situação só vira aviso',
+    preparo.avisos.some((x) => /filtrado/.test(x)), JSON.stringify(preparo.avisos));
+
+  for (const o of (await store.orcamentos.listar()).filter((x) => x.clienteNome === 'CLIENTE ORC LTDA')) {
+    await store.orcamentos.remover(o.id);
+  }
+}
+
 console.log('\n▶ O app abre offline inteiro, sem arquivo faltando');
 {
   /**

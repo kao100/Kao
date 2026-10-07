@@ -1317,6 +1317,26 @@ export async function confirmar(preparo, { observacao = null } = {}) {
    * que o export é a lista completa de títulos em aberto — um relatório
    * filtrado não pode dar baixa em nada.
    */
+  /**
+   * O ORÇAMENTO FILTRADO É O MESMO ERRO POR OUTRO CAMINHO.
+   *
+   * Ele não some quando é resolvido — ele muda de situação. Um export só de "em
+   * aberto" congela todo orçamento que virou venda como aberto para sempre: o
+   * orçado incha e a taxa de conversão vira ficção. Se o arquivo inteiro veio
+   * com uma situação só, é quase certo que está filtrado, e o app diz.
+   */
+  if (preparo.fonteId === 'orcamentos') {
+    const linhas = lote.orcamentos || [];
+    const situacoes = new Set(linhas.map((o) => o.situacao).filter(Boolean));
+    if (linhas.length >= 10 && situacoes.size === 1) {
+      preparo.avisos.push(
+        `Todos os ${linhas.length} orçamentos vieram com a mesma situação ("${[...situacoes][0]}"). `
+        + 'Se o export estiver filtrado, o orçamento que virou venda nunca chega aqui e fica aberto '
+        + 'para sempre — exporte sem filtrar a situação para a taxa de conversão valer.',
+      );
+    }
+  }
+
   let fotografia = null;
   if (FONTES_FOTOGRAFIA[preparo.fonteId] && preparo.fotografiaCompleta !== false) {
     const registros = lote[FONTES_FOTOGRAFIA[preparo.fonteId]] || [];
