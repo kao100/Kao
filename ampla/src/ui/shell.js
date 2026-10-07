@@ -14,7 +14,7 @@ import { detalhe, fechar as fecharFolha } from './components/sheet.js';
  */
 export const MODULOS = [
   { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório' },
-  { path: '/caixa', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
+  { path: '/fluxo', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
   { path: '/cobranca', icone: '🔴', label: 'Vencidos', titulo: 'Inadimplência' },
   { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
   { path: '/orcamentos', icone: '📝', label: 'Orçados', titulo: 'Orçamentos' },
@@ -26,9 +26,8 @@ export const MODULOS = [
 /** O resto do app, no menu — sem sumir e sem ocupar a barra. */
 export const OUTRAS = [
   { path: '/fechamento', icone: '📁', label: 'Pasta do mês', titulo: 'Pasta do mês' },
-  { path: '/pagar', icone: '💳', label: 'Contas a pagar', titulo: 'Contas a pagar' },
-  { path: '/receber', icone: '📥', label: 'Contas a receber', titulo: 'Contas a receber' },
-  { path: '/bancos', icone: '🏦', label: 'Bancos e extrato', titulo: 'Bancos e extrato' },
+  { path: '/receber', icone: '📥', label: 'Títulos a receber', titulo: 'Contas a receber' },
+  { path: '/pagar', icone: '💳', label: 'Títulos a pagar', titulo: 'Contas a pagar' },
   { path: '/margem', icone: '📐', label: 'Margem e frete', titulo: 'Margem e frete' },
   { path: '/produtos', icone: '📦', label: 'Produtos e curva ABC', titulo: 'Produtos e curva ABC' },
   { path: '/conciliacao', icone: '⚠️', label: 'O que ficou sem vendedor', titulo: 'Conciliação' },

@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 491 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 534 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -121,8 +121,52 @@ Simulação de cenários fica dentro do Fluxo de caixa.
 
 ---
 
+## A rotina diária
+
+Cinco arquivos, nessa ordem ou em qualquer outra, e um número digitado:
+
+1. **XML das notas fiscais** — a fonte oficial do faturamento
+2. **Comissão por venda** — é dela que sai o vendedor de cada nota
+3. **Comissão por produto** — alimenta os indicadores de produto
+4. **Contas a receber** — fotografia dos títulos em aberto
+5. **Contas a pagar** — idem
+6. **Saldo atual do dia**, no Fluxo de caixa
+
+Depois disso, a única conciliação manual é escolher o vendedor das notas que o
+app não conseguiu identificar sozinho.
+
 ## Regras que o app aplica
 
+- **O relatório financeiro é uma FOTOGRAFIA, não um lançamento.** O arquivo de
+  hoje é a verdade sobre o que está em aberto hoje: título que estava aberto,
+  cabia na janela do arquivo e não veio nele, foi baixado. A regra antiga
+  empilhava títulos a cada importação e nunca fechava os que sumiam — foi assim
+  que a base chegou a mostrar ~R$ 600 mil em aberto que não existiam.
+  A janela que pode fechar vai **do começo da fotografia anterior até o último
+  vencimento do arquivo novo**: o teto protege um export de horizonte curto, e o
+  piso existe porque o caso mais comum é justamente o título mais antigo ser pago
+  e sumir. Na importação ela confirma, numa caixa, se aquele export tem todos os
+  títulos em aberto; desmarcada, nada é fechado.
+- **O vendedor vem do relatório de comissão, direto para a nota.** O relatório é
+  indexado pelo número do PEDIDO, e o XML traz esse número dentro dela (`xPed`):
+  dois arquivos do mesmo sistema citando o mesmo identificador. Nos arquivos
+  reais, 336 das 341 notas com dono fecharam por aí. Quando o pedido não vem,
+  vale cliente + valor exato, e só com par único.
+- **Uma pendência só: de quem foi esta venda.** Saíram "nota sem pedido",
+  "título sem NF", "movimento sem vínculo", "pago sem banco", "item sem NF",
+  "divergência de faturamento". O que ficou são as perguntas de vendedor, todas
+  de um toque.
+- **O extrato bancário saiu da rotina.** A projeção parte de um saldo que ela
+  digita uma vez por dia e soma o que os relatórios de títulos dizem. Um número
+  informado por quem olha a conta vale mais que um saldo montado de lançamentos
+  que ninguém conseguiu conciliar.
+- **O que está vencido não é projetado.** Entrada vencida não é entrada certa, e
+  obrigação vencida é necessidade de caixa hoje, não no vencimento. Os dois ficam
+  fora da linha do tempo e à vista, em lista própria.
+- **Saldo real e saldo operacional, lado a lado.** O recurso extraordinário
+  (empréstimo, aporte) não vira título nenhum: é um ajuste gerencial que mostra
+  como estaria o caixa da operação sem ele, e em que dia ela volta a se sustentar
+  sozinha.
 - **A base de tudo é a NOTA FISCAL.** É a regra da casa, nas palavras dela:
   *"Dentro do meu sistema, o que vale de faturamento é a nota fiscal. O relatório
   de nota fiscal vai ser a base do faturamento mensal e do faturamento total de

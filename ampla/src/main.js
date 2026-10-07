@@ -15,6 +15,7 @@ import { semear } from './data/seed.js';
 import { telaEmpresa } from './ui/views/empresa.js';
 import { telaDiario } from './ui/views/diario.js';
 import { telaCaixa, telaSimulacao } from './ui/views/caixa.js';
+import { telaFluxo } from './ui/views/fluxo.js';
 import { telaCobranca } from './ui/views/cobranca.js';
 import { telaComercial, telaVendedor } from './ui/views/comercial.js';
 import { telaProdutos, telaProduto } from './ui/views/produtos.js';
@@ -35,7 +36,9 @@ const ROTAS = [
   { path: '/', view: telaDiario, titulo: 'Relatório' },
   { path: '/diario', view: telaDiario, titulo: 'Relatório' },
   { path: '/empresa', view: telaEmpresa, titulo: 'Visão da empresa' },
-  { path: '/caixa', view: telaCaixa, titulo: 'Fluxo de caixa' },
+  { path: '/fluxo', view: telaFluxo, titulo: 'Fluxo de caixa' },
+  { path: '/caixa', view: telaFluxo, titulo: 'Fluxo de caixa' },
+  { path: '/caixa/antigo', view: telaCaixa, titulo: 'Projeção antiga' },
   { path: '/caixa/simulacao', view: telaSimulacao, titulo: 'Simulação de cenários' },
   { path: '/cobranca', view: telaCobranca, titulo: 'Inadimplência' },
   { path: '/comercial', view: telaComercial, titulo: 'Comercial' },

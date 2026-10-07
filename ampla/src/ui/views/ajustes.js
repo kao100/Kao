@@ -183,6 +183,35 @@ export async function telaAjustes() {
     aviso('Vale para os dois lados: dá para importar no computador um backup feito no celular. '
       + 'Quem importa manda — o que estava no aparelho é substituído pelo backup inteiro.', 'info')),
 
+    /**
+     * RECOMEÇAR O FINANCEIRO SEM PERDER O COMERCIAL.
+     *
+     * "Como os números atuais de Contas a Pagar, Contas a Receber e caixa já
+     *  estão incorretos, quero corrigir a base existente. Preferencialmente: não
+     *  apagar o histórico comercial correto; limpar especificamente a base
+     *  financeira; usar os relatórios mais recentes como nova fotografia."
+     *
+     * Os R$ 600 mil vieram da regra antiga, que empilhava título a cada
+     * importação e nunca fechava o que sumia. Nenhuma conta conserta isso: o que
+     * está na base é soma de coisa que não existe. Apagar só o financeiro e
+     * reimportar é o caminho honesto — e o comercial, que está certo, não se
+     * mexe.
+     */
+    secao('Recomeçar o financeiro', selo('corrige os R$ em aberto', 'atencao'), card(null, null,
+      h('p.pequeno.muted',
+        'Apaga TODOS os títulos a receber e a pagar, e só eles. Notas fiscais, faturamento, '
+        + 'comissões, produtos, clientes e vendedores ficam como estão — o histórico comercial '
+        + 'não é tocado.'),
+      h('p.pequeno.muted', { style: { marginTop: '6px' } },
+        'Faça isto uma vez, e logo depois importe os relatórios de Contas a Receber e a Pagar mais '
+        + 'recentes. Eles passam a ser a fotografia inicial, e daí para a frente o app acompanha '
+        + 'as baixas sozinho.'),
+      h('div.btn-linha', { style: { marginTop: '10px' } },
+        botao('🧹 Apagar títulos e recomeçar', { tipo: 'perigo', onClick: () => recomecarFinanceiro() }))),
+      aviso('O extrato bancário saiu da rotina. A projeção agora parte do saldo que você informa no '
+        + 'Fluxo de caixa, somando o que os relatórios de títulos dizem. Nada de conciliar '
+        + 'movimento de banco.', 'info')),
+
     secao('Meus dados', null, card(null, null,
       h('p.pequeno.muted', 'Exporte o backup antes de trocar de aparelho ou de endereço do app.'),
       h('div.btn-linha', { style: { marginTop: '10px' } },
@@ -218,6 +247,8 @@ function rotuloAcao(acao) {
   return {
     vendedor_da_nf: 'Vendedor definido na NF',
     conta_excluida: 'Conta bancária excluída',
+    financeiro_recomecado: 'Financeiro recomeçado',
+    saldo_informado: 'Saldo do caixa informado',
     ajuste_comissao: 'Ajuste de comissão',
     ajuste_comissao_removido: 'Ajuste removido',
     status_comissao: 'Status das comissões',
@@ -335,6 +366,38 @@ async function editarVendedor(vendedor) {
  * e WhatsApp; comprimida dá 590 KB, que vai por qualquer lugar. Num navegador
  * sem CompressionStream, sai o JSON mesmo — grande, mas funcionando.
  */
+async function recomecarFinanceiro() {
+  const [receber, pagar] = await Promise.all([store.receber.listar(), store.pagar.listar()]);
+  const emAberto = [...receber, ...pagar].filter((t) => t.status !== 'pago' && t.status !== 'cancelado');
+  const total = emAberto.reduce((a, t) => a + (t.saldo ?? t.valor ?? 0), 0);
+
+  const confirmado = await confirmar({
+    titulo: 'Apagar todos os títulos?',
+    texto: `Vão sair ${receber.length} título(s) a receber e ${pagar.length} a pagar — `
+      + `${money(total)} que hoje aparecem em aberto. Notas fiscais, faturamento, comissões e `
+      + 'cadastros NÃO são tocados. Depois disso, importe os relatórios mais recentes de Contas a '
+      + 'Receber e a Pagar: eles viram a fotografia inicial. Não dá para desfazer.',
+    confirmar: 'Apagar e recomeçar',
+    perigo: true,
+  });
+  if (!confirmado) return;
+
+  await db.clearStore('receber');
+  await db.clearStore('pagar');
+  await db.clearStore('cobrancas');
+  // a memória da última fotografia também vai: a próxima importação é a primeira
+  await db.remove('kv', 'fotografia:receber').catch(() => {});
+  await db.remove('kv', 'fotografia:pagar').catch(() => {});
+  store.limparCache();
+  await store.registrar('financeiro_recomecado', {
+    alvo: 'títulos', de: money(total), motivo: 'base acumulada pela regra antiga de importação',
+  });
+  await recalcular();
+  await atualizarAlertas();
+  ok('Títulos apagados. Agora importe o Contas a Receber e o Contas a Pagar mais recentes.');
+  navigate('/arquivos/receber');
+}
+
 async function configurarNuvem() {
   const cfg = await store.config();
   const r = await formulario({

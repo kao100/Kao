@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v38';
+const CACHE = 'ampla-v39';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -19,7 +19,7 @@ const APP_SHELL = [
   'src/logic/dre.js', 'src/logic/dossie.js', 'src/logic/quotes.js', 'src/logic/diario.js',
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/collection.js', 'src/logic/cashflow.js', 'src/logic/abc.js', 'src/logic/routine.js',
-  'src/logic/reports.js', 'src/logic/suggest.js', 'src/logic/fotografia.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
+  'src/logic/reports.js', 'src/logic/suggest.js', 'src/logic/fotografia.js', 'src/logic/fluxo.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
   'src/logic/margem.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
   'src/ui/shell.js', 'src/ui/nuvem-ui.js',
   'src/ui/components/ui.js', 'src/ui/components/sheet.js', 'src/ui/components/toast.js',
@@ -31,6 +31,7 @@ const APP_SHELL = [
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
   'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',
   'src/ui/views/clientes.js', 'src/ui/views/margem.js', 'src/ui/views/rt.js',
+  'src/ui/views/fluxo.js',
   'src/styles/theme.css', 'src/styles/base.css', 'src/styles/components.css',
   'src/styles/views.css', 'src/styles/print.css',
 ].map((caminho) => BASE + caminho);

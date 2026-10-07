@@ -44,6 +44,7 @@ const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
 const foto = await import('../src/logic/fotografia.js');
+const fluxo = await import('../src/logic/fluxo.js');
 const { readFile } = await import('../src/core/files/read.js');
 const { semear } = await import('../src/data/seed.js');
 const perfis = await import('../src/data/perfis.js');
@@ -2435,6 +2436,99 @@ Venda de nº 7003;CLIENTE FOTO LTDA;60606060000160;20/11/2027;2.000,00;Em aberto
   for (const t of (await store.receber.listar()).filter((x) => x.clienteNome === 'CLIENTE FOTO LTDA')) {
     await store.receber.remover(t.id);
   }
+  await link.recalcular();
+}
+
+console.log('\n▶ Fluxo de caixa: saldo informado, projeção diária, vencido à parte');
+{
+  /**
+   * "Saldo projetado do dia = saldo do dia anterior + contas a receber previstas
+   *  para o dia − contas a pagar previstas para o dia."
+   *
+   * A conta é essa, sem nada por cima. O que exige cuidado é o que NÃO entra
+   * nela: o que já venceu, e o dinheiro que não veio da operação.
+   */
+  for (const t of await store.receber.listar()) await store.receber.remover(t.id);
+  for (const t of await store.pagar.listar()) await store.pagar.remover(t.id);
+
+  const REC = 'Descrição;Cliente;CPF/CNPJ;Vencimento;Valor;Situação;Nota fiscal';
+  const PAG = 'Descrição;Fornecedor;CPF/CNPJ;Vencimento;Valor;Situação';
+  await importar('receber', 'fx-rec.csv', `${REC}
+Venda de nº 8001;CLIENTE FLUXO LTDA;70707070000170;10/01/2028;25.000,00;Em aberto;8001
+Venda de nº 8002;CLIENTE FLUXO LTDA;70707070000170;12/01/2028;10.000,00;Em aberto;8002
+Venda de nº 8003;OUTRO CLIENTE LTDA;70707070000261;05/12/2027;7.000,00;Em aberto;8003`);
+  await importar('pagar', 'fx-pag.csv', `${PAG}
+Compra 900;FORNECEDOR A LTDA;80808080000180;10/01/2028;15.000,00;Em aberto
+Compra 901;FORNECEDOR B LTDA;80808080000271;11/01/2028;40.000,00;Em aberto
+Compra 902;FORNECEDOR C LTDA;80808080000362;03/12/2027;3.000,00;Em aberto`);
+
+  await fluxo.informarSaldo(100000, '2028-01-10');
+  const p = await fluxo.projetar({ de: '2028-01-10', ate: '2028-01-12' });
+
+  igual('o saldo inicial é o que ela informou', p.saldoInicial, 100000);
+  igual('três dias no recorte', p.linhas.length, 3);
+
+  /* dia 10: entra 25.000, sai 15.000 → 110.000 */
+  igual('dia 10 recebe', p.linhas[0].recebimentos, 25000);
+  igual('dia 10 paga', p.linhas[0].pagamentos, 15000);
+  igual('e o saldo do dia 10 fecha em 110.000', p.linhas[0].saldoProjetado, 110000);
+  /* dia 11: sai 40.000 → 70.000 */
+  igual('dia 11 fecha em 70.000', p.linhas[1].saldoProjetado, 70000);
+  /* dia 12: entra 10.000 → 80.000 */
+  igual('dia 12 fecha em 80.000', p.linhas[2].saldoProjetado, 80000);
+  igual('o saldo do dia começa onde o anterior terminou', p.linhas[1].saldoInicial, 110000);
+
+  igual('o total a receber do período', p.totalReceber, 35000);
+  igual('o total a pagar do período', p.totalPagar, 55000);
+  igual('o menor saldo previsto', p.menorSaldo, 70000);
+  igual('e o dia dele', p.menorSaldoEm, '2028-01-11');
+
+  /**
+   * O VENCIDO FICA FORA DA PROJEÇÃO.
+   *
+   * "Não considerar automaticamente como dinheiro que vai entrar amanhã."
+   * Os dois títulos de dezembro venceram antes da data-base: nenhum deles mexe
+   * em nenhuma linha, e os dois aparecem em lista própria.
+   */
+  igual('o a receber vencido não entra na projeção', p.vencidos.receber.valor, 7000);
+  igual('o a pagar vencido também fica à parte', p.vencidos.pagar.valor, 3000);
+  ok('e nenhum dia foi contaminado por eles',
+    p.linhas.every((l) => l.recebimentos !== 7000 && l.pagamentos !== 3000), '');
+
+  /* e dá para abrir o dia e ver de quem é cada valor */
+  igual('o dia 11 abre com o fornecedor', p.linhas[1].saidas[0].nome, 'FORNECEDOR B LTDA');
+  igual('com o valor dele', p.linhas[1].saidas[0].valor, 40000);
+  igual('o dia 10 abre com o cliente', p.linhas[0].entradas[0].nome, 'CLIENTE FLUXO LTDA');
+
+  /**
+   * SALDO REAL × SALDO OPERACIONAL.
+   *
+   * "Saldo real R$ 180.000, menos recurso extraordinário R$ 250.000, saldo
+   *  operacional ajustado −R$ 70.000. Não quero substituir o saldo real."
+   */
+  await fluxo.salvarRecursos([{ descricao: 'Empréstimo', valor: 250000, data: '2027-06-01' }]);
+  const q = await fluxo.projetar({ de: '2028-01-10', ate: '2028-01-12' });
+  igual('o saldo real continua sendo o principal', q.saldoInicial, 100000);
+  igual('e o operacional desconta o recurso', q.saldoOperacionalHoje, -150000);
+  igual('a projeção carrega as duas linhas', q.linhas[0].saldoProjetado, 110000);
+  igual('a real e a ajustada', q.linhas[0].saldoOperacional, -140000);
+  /* recurso com data futura ainda não conta */
+  await fluxo.salvarRecursos([{ descricao: 'Aporte', valor: 50000, data: '2029-01-01' }]);
+  igual('recurso que ainda não entrou não desconta nada',
+    (await fluxo.projetar({ de: '2028-01-10', ate: '2028-01-10' })).extraordinario, 0);
+
+  /* os atalhos de período */
+  igual('próximos 7 dias', fluxo.periodoDoHorizonte('7', '2028-01-10').ate, '2028-01-16');
+  igual('mês atual termina no fim do mês', fluxo.periodoDoHorizonte('mes', '2028-01-10').ate, '2028-01-31');
+  igual('próximo mês começa no dia 1', fluxo.periodoDoHorizonte('proximo', '2028-01-10').de, '2028-02-01');
+
+  /* sem saldo informado, o app não inventa um */
+  await store.salvarConfig({ caixa: { saldoAtual: null, extraordinarios: [] } });
+  const sem = await fluxo.projetar({ de: '2028-01-10', ate: '2028-01-10' });
+  ok('sem saldo informado o app diz que falta', sem.temSaldo === false, '');
+
+  for (const t of await store.receber.listar()) await store.receber.remover(t.id);
+  for (const t of await store.pagar.listar()) await store.pagar.remover(t.id);
   await link.recalcular();
 }
 
