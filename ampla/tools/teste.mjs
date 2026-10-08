@@ -2532,6 +2532,142 @@ Compra 902;FORNECEDOR C LTDA;80808080000362;03/12/2027;3.000,00;Em aberto`);
   await link.recalcular();
 }
 
+console.log('\n▶ Três meses de margem são três meses, não um');
+{
+  /**
+   * "Importamos relatórios de 3 meses diferentes e o app considerou como se
+   *  fosse apenas de 1 mês."
+   *
+   * O relatório de produtos vendidos e o de comissão por produto são totais de
+   * um período: nenhuma linha tem data. O mês vem da tela, e é ele que separa um
+   * arquivo do outro — a chave de cada linha é mês + vendedor + produto.
+   *
+   * O caminho do mapeamento manual não passava o mês. Sem mês, as três
+   * importações viravam o MESMO registro e o último arquivo apagava os dois
+   * anteriores: três meses colapsavam num só.
+   */
+  const PV = 'Produto;Quantidade;Custo médio;Custo total;Valor total;Lucro';
+  const mandar = (mes, valor, extras = {}) => importar('produtosVendidos', `pv-${mes}.csv`,
+    `${PV}\nCIMENTO MARGEM;100;20,00;2.000,00;${valor};1.000,00`,
+    { ...(mes ? { mesReferencia: `${mes}-01` } : {}), ...extras });
+
+  const meus = async () => (await store.vendasProduto.listar())
+    .filter((l) => l.descricao === 'CIMENTO MARGEM');
+  for (const l of await meus()) await store.vendasProduto.remover(l.id);
+
+  await mandar('2026-07', '7.000,00');
+  await mandar('2026-08', '8.000,00');
+  await mandar('2026-09', '9.000,00');
+
+  const tres = await meus();
+  igual('três relatórios de três meses são três registros', tres.length, 3);
+  igual('julho guarda o valor de julho',
+    tres.find((l) => l.mes === '2026-07').valorTotal, 7000);
+  igual('agosto o de agosto', tres.find((l) => l.mes === '2026-08').valorTotal, 8000);
+  igual('setembro o de setembro', tres.find((l) => l.mes === '2026-09').valorTotal, 9000);
+
+  /* e a margem de cada mês enxerga só o mês dela */
+  const jul = await margemMod.margem({ de: '2026-07-01', ate: '2026-07-31' });
+  igual('a margem de julho vê só julho', jul.totalRelatorio.venda, 7000);
+  const set = await margemMod.margem({ de: '2026-09-01', ate: '2026-09-30' });
+  igual('a de setembro só setembro', set.totalRelatorio.venda, 9000);
+
+  /**
+   * E O MÊS NUNCA FICA VAZIO. Era isso que colapsava tudo: sem mês, a chave de
+   * todas as linhas ficava igual.
+   */
+  for (const l of await meus()) await store.vendasProduto.remover(l.id);
+  const { preparo } = await mandar(null, '5.000,00');
+  const semMes = await meus();
+  igual('sem mês escolhido ainda assim cai num mês', semMes.length, 1);
+  ok('e nenhum registro fica sem mês', semMes.every((l) => !!l.mes), JSON.stringify(semMes.map((l) => l.mes)));
+  ok('com o app avisando qual mês assumiu',
+    preparo.avisos.some((a) => /assumiu/.test(a)), JSON.stringify(preparo.avisos));
+
+  /**
+   * E QUANDO O MÊS ESCOLHIDO JÁ TEM OUTRO ARQUIVO, o app avisa que vai
+   * substituir — é o que teria mostrado o erro no dia em que aconteceu.
+   */
+  for (const l of await meus()) await store.vendasProduto.remover(l.id);
+  await mandar('2026-07', '7.000,00');
+  const { preparo: segundo } = await importar('produtosVendidos', 'pv-outro.csv',
+    `${PV}\nCIMENTO MARGEM;100;20,00;2.000,00;4.000,00;1.000,00`,
+    { mesReferencia: '2026-07-01' });
+  ok('reimportar no mesmo mês avisa que substitui',
+    segundo.avisos.some((a) => /SUBSTITUÍDAS/.test(a)), JSON.stringify(segundo.avisos));
+  igual('e substitui mesmo, sem somar', (await meus())[0].valorTotal, 4000);
+
+  for (const l of await meus()) await store.vendasProduto.remover(l.id);
+}
+
+console.log('\n▶ Três meses de frete também são três meses');
+{
+  /**
+   * A OUTRA METADE DO MESMO ERRO: "a parte do relatório de margem e frete".
+   *
+   * A planilha de entregas dela não tem coluna de data — "a de solicitação de
+   * entrega não tem". O mês vem da tela, e sem ele a linha ficava com data nula.
+   * O relatório de frete filtra o custo por data (`c.data >= de && <= ate`),
+   * então custo sem data não aparecia em período NENHUM: nem no mês certo, nem
+   * em outro. Sumia.
+   */
+  const PL = 'Motorista;Descrição;Valor;Vendedor';
+  const planilha = (mes, valor) => importar('fretes', `fre-${mes || 'sem'}.csv`,
+    `${PL}\nVUC TESTE;ENTREGA TESTE MES;${valor};MARCELO`,
+    mes ? { mesReferencia: `${mes}-01` } : {});
+
+  const meus = async () => (await store.fretes.listar())
+    .filter((f) => f.descricao === 'ENTREGA TESTE MES');
+  for (const f of await meus()) await store.fretes.remover(f.id);
+
+  await planilha('2026-07', '700,00');
+  await planilha('2026-08', '800,00');
+  await planilha('2026-09', '900,00');
+
+  const linhas = await meus();
+  igual('três planilhas de três meses são três linhas de custo', linhas.length, 3);
+  ok('e nenhuma fica sem data', linhas.every((f) => !!f.data), JSON.stringify(linhas.map((f) => f.data)));
+
+  const custoDe = async (de, ate) => {
+    const r = await margemMod.frete({ de, ate });
+    return r.custo.total;
+  };
+  const jul = await custoDe('2026-07-01', '2026-07-31');
+  const ago = await custoDe('2026-08-01', '2026-08-31');
+  const set = await custoDe('2026-09-01', '2026-09-30');
+  ok('o custo de julho aparece em julho', jul >= 700, String(jul));
+  ok('o de agosto em agosto', ago >= 800, String(ago));
+  ok('o de setembro em setembro', set >= 900, String(set));
+  ok('e nenhum mês carrega o custo do outro', jul !== ago && ago !== set, `${jul} ${ago} ${set}`);
+
+  for (const f of await meus()) await store.fretes.remover(f.id);
+}
+
+console.log('\n▶ Todo caminho de importação leva o mês escolhido adiante');
+{
+  /**
+   * O ERRO NÃO ESTAVA NA LÓGICA — ESTAVA NA CHAMADA.
+   *
+   * Há dois caminhos de importação na tela: o automático, quando o app reconhece
+   * o relatório, e o manual, quando ela mesma aponta as colunas. O manual não
+   * passava `mesReferencia`, e era só por ele que os três meses caíam num só.
+   *
+   * O teste de lógica não pega isso: ele chama prepararTabular direto, já com o
+   * mês. Quem pega é esta conferência do próprio arquivo da tela — a mesma ideia
+   * da lista de arquivos do modo offline, que também se confere sozinha.
+   */
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const tela = readFileSync(join(raiz, 'src/ui/views/arquivos.js'), 'utf8');
+
+  const chamadas = tela.split('ingest.prepararTabular(').slice(1);
+  igual('a tela tem as duas chamadas de importação', chamadas.length, 2);
+  const semMes = chamadas.filter((c) => !/mesReferencia/.test(c.slice(0, 600)));
+  ok('e as duas levam o mês escolhido', semMes.length === 0,
+    `${semMes.length} chamada(s) sem mesReferencia`);
+}
+
 console.log('\n▶ Orçamento muda de situação, não some');
 {
   /**

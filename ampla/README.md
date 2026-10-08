@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 538 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 557 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -155,6 +155,18 @@ app não conseguiu identificar sozinho.
   orçado e destruindo a taxa de conversão. É o mesmo erro que inchou o contas a
   receber, por outro caminho; quando o arquivo inteiro chega com uma situação só,
   o app avisa.
+- **Relatório sem data pertence ao mês que ela escolher.** Produtos vendidos,
+  comissão por produto e a planilha de entregas vêm totalizados, sem nenhuma
+  coluna de data: o mês só existe se for informado na importação. Antes, o
+  caminho de mapeamento manual não levava esse mês adiante, e o estrago era
+  diferente em cada um — na margem, três relatórios de três meses gravavam na
+  mesma chave e o terceiro apagava os dois primeiros; no frete, o custo ficava
+  sem data e o relatório, que filtra por data, não o mostrava em período nenhum.
+  Agora o mês nunca fica vazio (na falta de escolha, o app assume o mês atual e
+  diz qual assumiu), e reimportar sobre um mês que já tem linhas daquele mesmo
+  relatório avisa, antes, que elas serão substituídas — substituídas, nunca
+  somadas. Os dois caminhos de importação da tela se conferem no teste, porque o
+  erro não estava na lógica: estava na chamada.
 - **O vendedor vem do relatório de comissão, direto para a nota.** O relatório é
   indexado pelo número do PEDIDO, e o XML traz esse número dentro dela (`xPed`):
   dois arquivos do mesmo sistema citando o mesmo identificador. Nos arquivos

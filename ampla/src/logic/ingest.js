@@ -191,6 +191,26 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
   const saida = novoPreparo(fonteId, leitura);
   // o relatório financeiro é fotografia; ela pode dizer que este é parcial
   saida.fotografiaCompleta = fotografiaCompleta;
+
+  /**
+   * RELATÓRIO DE TOTAIS SEM MÊS NÃO PODE EXISTIR.
+   *
+   * O de produtos vendidos e o de comissão por produto são totais de um período:
+   * nenhuma linha tem data. O mês vem da tela, e é ele que separa um arquivo do
+   * outro — a chave de cada linha é mês + vendedor + produto.
+   *
+   * Sem mês, toda linha virava o MESMO registro, e três relatórios de três meses
+   * colapsavam num só, com os números do último. Então o app nunca deixa o mês
+   * vazio: na falta dele assume o mês corrente e DIZ que assumiu.
+   */
+  const mes = mesReferencia || (fonte.mesObrigatorio ? `${monthKey(today())}-01` : null);
+  if (fonte.mesObrigatorio && !mesReferencia) {
+    saida.avisos.push(
+      'Este relatório não traz data em nenhuma linha e nenhum mês foi escolhido — o app assumiu '
+      + `${monthKey(mes)}. Se for de outro mês, volte e escolha, senão os números entram no mês errado.`,
+    );
+  }
+
   const usados = new Map();
 
   for (const registro of registros) {
@@ -203,7 +223,7 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
     }
     try {
       const construidos = await construir(fonteId, dados, {
-        contexto, contaId, mesReferencia, usados, linha: registro.__linha, bruto: registro,
+        contexto, contaId, mesReferencia: mes, usados, linha: registro.__linha, bruto: registro,
       });
       for (const item of construidos) empilhar(saida, item);
     } catch (err) {
@@ -212,9 +232,38 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
     }
   }
 
+  /**
+   * O MÊS ESCOLHIDO JÁ TEM NÚMEROS DE OUTRO ARQUIVO?
+   *
+   * Dois relatórios de totais no mesmo mês não somam: o segundo substitui o
+   * primeiro, porque a chave é mês + vendedor + produto. Isso está certo quando
+   * é o MESMO relatório reenviado, e é um estrago silencioso quando é um mês
+   * diferente que foi marcado errado. O app não escolhe por ela — ele mostra.
+   */
+  await conferirMesOcupado(saida, fonte);
   await classificar(saida, contexto);
   conferirCoberturaDoReceber(saida);
   return saida;
+}
+
+async function conferirMesOcupado(preparo, fonte) {
+  if (!fonte.mesObrigatorio || !preparo.porStore.vendasProduto) return;
+  const novas = [...preparo.porStore.vendasProduto.values()];
+  const alvo = novas[0]?.mes;
+  if (!alvo) return;
+
+  const existentes = await db.getAll('vendasProduto');
+  const deOutroArquivo = existentes.filter((l) => l.mes === alvo
+    && l.origemRelatorio === preparo.fonteId
+    && l.importacaoId && l.importacaoId !== preparo.id);
+  if (!deOutroArquivo.length) return;
+
+  const total = cents(deOutroArquivo.reduce((a, l) => a + (l.valorTotal || 0), 0));
+  preparo.avisos.push(
+    `${alvo} já tem ${deOutroArquivo.length} linha(s) deste mesmo relatório, vindas de um arquivo `
+    + `anterior e somando ${money(total)}. Elas serão SUBSTITUÍDAS pelas deste arquivo. Se este `
+    + 'relatório for de outro mês, volte e escolha o mês certo — senão um mês some.',
+  );
 }
 
 /**

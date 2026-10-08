@@ -451,6 +451,15 @@ async function preparar(estado, ctx) {
   estado.aviso = null;
   desenhar();
   try {
+    /**
+     * O MÊS TEM DE VIR POR AQUI TAMBÉM.
+     *
+     * Este é o caminho do mapeamento manual — quando o app não reconhece o
+     * relatório sozinho, ou quando ela ajusta as colunas. Ele não passava o mês
+     * escolhido, e o relatório de totais (que não tem coluna de data) ficava sem
+     * mês nenhum. Três relatórios de três meses caíam todos no mesmo registro: o
+     * último sobrescrevia os dois anteriores, e a margem mostrava um mês só.
+     */
     estado.preparo = await ingest.prepararTabular({
       fonteId: fonte.id,
       leitura: estado.leitura,
@@ -458,6 +467,8 @@ async function preparar(estado, ctx) {
       headerRow: estado.headerRow,
       mapeamento: estado.mapeamento,
       contaId: estado.contaId,
+      mesReferencia: estado.mesReferencia,
+      fotografiaCompleta: estado.fotografiaCompleta !== false,
     });
     estado.passo = 'conferir';
   } catch (err) {
