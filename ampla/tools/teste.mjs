@@ -29,8 +29,6 @@ const ingest = await import('../src/logic/ingest.js');
 const link = await import('../src/logic/link.js');
 const revenue = await import('../src/logic/revenue.js');
 const commission = await import('../src/logic/commission.js');
-const cashflow = await import('../src/logic/cashflow.js');
-const collection = await import('../src/logic/collection.js');
 const routine = await import('../src/logic/routine.js');
 const dre = await import('../src/logic/dre.js');
 const dossie = await import('../src/logic/dossie.js');
@@ -275,17 +273,81 @@ igual('Maria: 2% de 13.400', calc.vendedores.find((v) => v.nome === 'Maria').com
 igual('nada bloqueia o fechamento', calc.podeFechar, true);
 
 console.log('\n▶ Financeiro e caixa');
-await store.saldos.salvar({ id: 'sal_conta_itau_2026-09-13', contaId: 'conta_itau', data: '2026-09-13', saldo: 30000, origem: 'manual' });
-const proj = await cashflow.projetar({ de: '2026-09-13', dias: 20 });
+/**
+ * A PROJEÇÃO ANTIGA SAIU E A NOVA FICOU — é a mesma pergunta, feita uma vez só.
+ *
+ * "Eu preciso de um fluxo de caixa. Simples. Entradas e saídas. (...) Não
+ *  preciso mais do inadimplência, de cobrança, nada disso."
+ *
+ * Eram duas projeções concorrentes (`cashflow` e `fluxo`) e uma tela de
+ * inadimplência. Ficou a do fluxo, que é a que parte do saldo informado e separa
+ * o vencido em vez de projetá-lo.
+ */
+await fluxo.informarSaldo(30000, '2026-09-13');
+const proj = await fluxo.projetar({ de: '2026-09-13', dias: 20 });
 igual('saldo inicial informado', proj.saldoInicial, 30000);
 const dia18 = proj.linhas.find((l) => l.data === '2026-09-18');
-igual('a compra de cimento cai no dia 18', dia18.saidas, 42000);
-ok('a projeção acusa dia negativo', !!proj.primeiroDiaNegativo, 'não acusou');
+igual('a compra de cimento cai no dia 18', dia18.pagamentos, 42000);
+ok('a projeção acusa dia negativo', proj.linhas.some((l) => l.negativo), 'não acusou');
 
-const carteira = await collection.carteira({ referencia: '2026-09-13' });
-const beta = carteira.find((l) => l.clienteNome === 'Depósito Beta ME');
-igual('título vencido em 05/09 aparece com atraso', beta.diasAtraso, 8);
-igual('e entra na fila do dia', beta.precisaCobrarHoje, true);
+/* o que já venceu não entra na linha do tempo: ele aparece à parte */
+const venc = fluxo.separarVencidos(await store.receber.listar(), '2026-09-13');
+const beta = venc.vencidos.find((t) => t.clienteNome === 'Depósito Beta ME');
+ok('título vencido em 05/09 fica fora da projeção', !!beta, 'não separou');
+ok('e nenhum vencido entra como entrada futura',
+  !proj.linhas.some((l) => l.entradas.some((e) => e.vencimento < '2026-09-13')), '');
+
+console.log('\n▶ O saldo são as contas, somadas, pela data mais velha');
+{
+  /**
+   * "Se todo dia eu tenho que alimentar o saldo bancário das contas, isso é
+   *  fato, para ele conseguir fazer as projeções futuras que eu quero."
+   *
+   * Contas, no plural — e o extrato saiu da rotina de propósito. Então o saldo
+   * de partida é a soma do último saldo de cada conta. A data que vale é a MAIS
+   * ANTIGA: se uma conta ficou sem atualizar, a projeção inteira é velha, e
+   * esconder isso atrás da data mais nova seria esconder o único erro que
+   * importa aqui.
+   */
+  await store.contas.salvar({ id: 'ct_a', nome: 'Banco A' });
+  await store.contas.salvar({ id: 'ct_b', nome: 'Banco B' });
+  await store.contas.salvar({ id: 'ct_c', nome: 'Banco C' });
+
+  await fluxo.informarSaldoDaConta('ct_a', 10000, '2026-09-10');
+  await fluxo.informarSaldoDaConta('ct_b', 25000, '2026-09-13');
+
+  const s1 = await fluxo.saldoInformado();
+  igual('o saldo é a soma das contas', s1.valor, 35000);
+  igual('e a data é a da conta mais atrasada', s1.data, '2026-09-10');
+  ok('conta sem saldo informado não soma',
+    s1.contas.filter((c) => c.valor != null).length === 2, JSON.stringify(s1.contas));
+  ok('mas aparece, para a tela poder pedir',
+    s1.contas.some((c) => c.contaId === 'ct_c' && c.valor == null), '');
+
+  /* o saldo mais novo da mesma conta substitui o anterior, não soma */
+  await fluxo.informarSaldoDaConta('ct_a', 12000, '2026-09-14');
+  const s2 = await fluxo.saldoInformado();
+  igual('informar de novo corrige, não acumula', s2.valor, 37000);
+  igual('e a data mais velha passa a ser a da outra conta', s2.data, '2026-09-13');
+
+  /* conta tirada do caixa para de somar, sem perder o histórico */
+  await store.contas.salvar({ id: 'ct_b', nome: 'Banco B', arquivada: true });
+  const s3 = await fluxo.saldoInformado();
+  igual('conta tirada do caixa sai da soma', s3.valor, 12000);
+  ok('e o saldo dela continua guardado',
+    (await store.saldos.listar()).some((x) => x.contaId === 'ct_b'), '');
+
+  /* e a projeção parte desse número */
+  const p = await fluxo.projetar({ de: '2026-09-14', dias: 5 });
+  igual('a projeção parte da soma das contas', p.saldoInicial, 12000);
+
+  for (const id of ['ct_a', 'ct_b', 'ct_c']) await store.contas.remover(id);
+  for (const x of await store.saldos.listar()) {
+    if (x.contaId?.startsWith('ct_')) await store.saldos.remover(x.id);
+  }
+  const s4 = await fluxo.saldoInformado();
+  igual('sem conta cadastrada, o número único de antes ainda vale', s4.valor, 30000);
+}
 
 console.log('\n▶ Reimportar não duplica');
 await importar('nfs', 'fiscal.csv', FISCAL);
@@ -380,8 +442,43 @@ console.log('\n▶ Pasta do mês');
   const p = await dossie.pasta('2026-09');
   igual('a pasta é do mês pedido', p.mes, '2026-09');
   const ids = p.documentos.map((d) => d.id);
+  /**
+   * A LISTA É A QUE ELA DITOU, NA ORDEM DA CONVERSA COM O PAI.
+   *
+   * "Relatório geral da empresa para passar para o meu pai: fluxo de caixa ali,
+   *  saldos, margem, quanto que você cobrou de frete, faturamento total,
+   *  faturamento por vendedor. Orçamentos não fechados, essa visibilidade, eu
+   *  preciso enviar para o meu pai todo mês. Sala de comissão, e é isso."
+   */
   igual('tem os documentos do fechamento', ids,
-    ['dre', 'faturamento', 'comissao', 'receber', 'pagar', 'clientes', 'pendencias']);
+    ['dre', 'faturamento', 'margem', 'frete', 'caixa', 'orcamentos', 'comissao',
+      'receber', 'pagar', 'clientes', 'pendencias']);
+
+  /**
+   * A pasta não recalcula nada: ela chama o mesmo módulo da tela. É isso que o
+   * teste confere — se os dois números divergissem, o pai e ela estariam lendo
+   * relatórios diferentes do mesmo mês.
+   */
+  const margemDoc = p.documentos.find((d) => d.id === 'margem');
+  const margemDireto = await margemMod.margem({ de: '2026-09-01', ate: '2026-09-30' });
+  igual('a margem da pasta é a mesma da tela', margemDoc.total.venda, margemDireto.total.venda);
+  igual('e tem uma linha por vendedor', margemDoc.linhas.length, margemDireto.vendedores.length);
+  ok('dizendo onde falta custo, em vez de calcular por cima',
+    margemDoc.linhas.every((l) => !!l.cobertura), '');
+
+  const freteDoc = p.documentos.find((d) => d.id === 'frete');
+  ok('o frete mostra cobrado e custo na mesma linha',
+    freteDoc.colunas.some((c) => c.key === 'cobrado') && freteDoc.colunas.some((c) => c.key === 'custo'), '');
+
+  const caixaDoc = p.documentos.find((d) => d.id === 'caixa');
+  ok('o caixa abre pelo saldo informado',
+    caixaDoc.linhas[0].conta === 'Saldo em banco informado', caixaDoc.linhas[0].conta);
+  ok('e fecha com a posição do mês liquidado',
+    caixaDoc.linhas.at(-1).conta === '= Posição com o mês liquidado', caixaDoc.linhas.at(-1).conta);
+
+  const orcDoc = p.documentos.find((d) => d.id === 'orcamentos');
+  ok('a aba de orçamentos é a dos NÃO fechados',
+    orcDoc.nome === 'Orçamentos não fechados', orcDoc.nome);
 
   const dreDoc = p.documentos.find((d) => d.id === 'dre');
   ok('o DRE abre pela receita bruta', dreDoc.linhas[0].conta === 'RECEITA BRUTA', dreDoc.linhas[0].conta);
@@ -2666,6 +2763,60 @@ console.log('\n▶ Todo caminho de importação leva o mês escolhido adiante');
   const semMes = chamadas.filter((c) => !/mesReferencia/.test(c.slice(0, 600)));
   ok('e as duas levam o mês escolhido', semMes.length === 0,
     `${semMes.length} chamada(s) sem mesReferencia`);
+}
+
+console.log('\n▶ Cinco lugares, e a meta pedida de onde ela é lida');
+{
+  /**
+   * "Ficou muito complexo, onde eu não conseguia mais entender e fazer nada."
+   *
+   * Eram oito abas na barra e mais oito num menu. Nada do que ela pediu depois
+   * era novo — o faturamento diário, a meta, a pasta do mês, tudo já existia e
+   * estava enterrado. Então o que este teste guarda não é uma conta: é a
+   * superfície. Ela cresce sozinha, uma tela de cada vez, e foi assim que o app
+   * ficou impossível de usar.
+   */
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const shell = readFileSync(join(raiz, 'src/ui/shell.js'), 'utf8');
+  const main = readFileSync(join(raiz, 'src/main.js'), 'utf8');
+
+  const trechoBarra = shell.slice(
+    shell.indexOf('export const MODULOS = ['),
+    shell.indexOf('export const OUTRAS = ['),
+  );
+  const naBarra = trechoBarra.match(/path: '[^']*'/g) || [];
+  igual('a barra tem cinco lugares', naBarra.length, 5);
+  igual('e são os que ela nomeou', naBarra.join(' '),
+    "path: '/arquivos' path: '/fluxo' path: '/' path: '/comissoes' path: '/fechamento'");
+
+  for (const morta of ['/cobranca', '/bancos', '/empresa', '/receber', '/pagar', '/caixa/antigo']) {
+    ok(`${morta} saiu de vez`, !main.includes(`path: '${morta}'`), 'ainda roteada');
+  }
+
+  /**
+   * E A META NÃO PEDE MAIS PARA ELA IR A OUTRA TELA.
+   *
+   * "As metas dos vendedores, quanto que tem que ser vendido por dia, esse
+   *  impulso comercial — isso não tem."
+   *
+   * Tinha: o cálculo inteiro, dormindo. Sem meta cadastrada, a tela só dizia
+   * "defina em Ajustes" — então ela nunca viu funcionar. O botão agora fica
+   * onde a frase estava.
+   */
+  const hoje = readFileSync(join(raiz, 'src/ui/views/diario.js'), 'utf8');
+  ok('o Hoje pede a meta nele mesmo', /Definir a meta do mês/.test(hoje), '');
+  ok('e a meta de cada vendedor também', /Definir meta por vendedor/.test(hoje), '');
+  ok('sem mandar ninguém para Ajustes',
+    !/Em Ajustes você define a meta/.test(hoje), 'ainda aponta para Ajustes');
+
+  /* o saldo é informado no Caixa, e o extrato saiu da lista de arquivos */
+  const fontes = await import('../src/data/sources.js');
+  const naLista = fontes.FONTES_LISTA.map((f) => f.id);
+  ok('o extrato saiu dos relatórios que ela manda', !naLista.includes('extrato'), naLista.join(','));
+  ok('e o saldo também: ele se digita', !naLista.includes('saldos'), naLista.join(','));
+  ok('mas o app ainda sabe ler um extrato antigo', !!fontes.fonte('extrato'), '');
 }
 
 console.log('\n▶ Orçamento muda de situação, não some');

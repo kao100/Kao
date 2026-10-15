@@ -13,7 +13,10 @@ import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, chips, aviso, vazio, selo } from '../components/ui.js';
 import { grafLinha } from '../components/chart.js';
 import { tabela, exportadores } from '../components/table.js';
-import { formulario, abrirFolha, fechar, linhas as linhasDetalhe } from '../components/sheet.js';
+import {
+  formulario, confirmar, abrirFolha, fechar, linhas as linhasDetalhe,
+} from '../components/sheet.js';
+import * as store from '../../core/store.js';
 import { ok } from '../components/toast.js';
 import { money, formatDate, today, monthLabel, monthKey } from '../../core/format.js';
 
@@ -42,7 +45,9 @@ export async function telaFluxo({ query }) {
       vazio('🏦', 'Informe o saldo de hoje',
         'O fluxo de caixa parte do dinheiro que existe agora. Você digita esse número uma vez por '
         + 'dia — é a única coisa do financeiro que o app não consegue tirar dos relatórios.',
-        botao('Informar saldo', { tipo: 'primario', onClick: () => pedirSaldo(r) })));
+        h('div.linha', { style: { gap: '8px', justifyContent: 'center', flexWrap: 'wrap' } },
+          botao('Informar saldo', { tipo: 'primario', onClick: () => pedirSaldo(r) }),
+          botao('Cadastrar conta', { onClick: novaConta }))));
   }
 
   const serie = r.linhas.map((l) => ({ x: l.data, y: l.saldoProjetado }));
@@ -78,7 +83,8 @@ export async function telaFluxo({ query }) {
         `O saldo é de ${formatDate(r.saldo.data)} e hoje é ${formatDate(today())}. A projeção parte `
         + 'dele mesmo assim, mas o que entrou e saiu nesse meio-tempo não está contado — atualize '
         + 'para o número ficar exato.', 'atencao',
-        botao('Atualizar', { pequeno: true, onClick: () => pedirSaldo(r) }))),
+        botao('Atualizar', { pequeno: true, onClick: () => pedirSaldo(r) })),
+      contasDoSaldo(r)),
 
     /* -------------------------------------------------------- o que vem */
     secao(`Próximos dias (${formatDate(periodo.de, 'short')} a ${formatDate(periodo.ate, 'short')})`, null,
@@ -233,11 +239,98 @@ function abrirVencidos(titulo, grupo, explicacao) {
   });
 }
 
+/**
+ * O SALDO DO DIA — uma linha por conta, num formulário só.
+ *
+ * "Se todo dia eu tenho que alimentar o saldo bancário das contas, isso é fato,
+ *  para ele conseguir fazer as projeções futuras que eu quero."
+ *
+ * Contas, no plural. Então o formulário mostra todas de uma vez, já preenchidas
+ * com o último valor: no dia em que só uma mudou, ela corrige uma e confirma. É
+ * o contrário de abrir conta por conta.
+ *
+ * Quem ainda não cadastrou conta nenhuma continua informando um número só — e o
+ * app oferece separar por conta, sem obrigar.
+ */
+/**
+ * BANCO POR BANCO, para a pergunta que ela disse que vai receber.
+ *
+ * "Se alguém me perguntar como que tá o recebimento tal dia, como que tá o
+ *  banco tal dia, daquela forma ali, eu vou saber."
+ *
+ * A soma já está no cartão de cima. Aqui fica a quebra — e a data de cada uma,
+ * porque uma conta com saldo de três dias atrás é a única coisa capaz de
+ * estragar a projeção toda sem dar sinal.
+ */
+function contasDoSaldo(r) {
+  const contas = r.saldo?.contas || [];
+  if (!contas.length) {
+    return h('div.linha', { style: { gap: '8px', marginTop: '8px', flexWrap: 'wrap' } },
+      h('span.pequeno.muted', 'Saldo informado como um número só.'),
+      botao('Separar por conta', { pequeno: true, onClick: novaConta }));
+  }
+  const velha = contas.filter((c) => c.valor != null && c.data < today());
+  return h('div.empilha', { style: { gap: '6px', marginTop: '10px' } },
+    ...contas.map((c) => h('div.item', { style: { cursor: 'default' } },
+      h('div.item__corpo',
+        h('div.item__titulo', c.nome),
+        h('div.pequeno.muted', c.data
+          ? `saldo de ${formatDate(c.data)}`
+          : 'sem saldo informado')),
+      h('span.num.forte', c.valor == null ? '—' : money(c.valor)),
+      botao('✕', {
+        pequeno: true, title: `Tirar ${c.nome} do caixa`, onClick: () => tirarConta(c),
+      }))),
+    h('div.linha', { style: { gap: '8px', flexWrap: 'wrap' } },
+      botao('Nova conta', { pequeno: true, onClick: novaConta }),
+      contas.some((c) => c.valor == null)
+        ? h('span.pequeno.muted', 'Conta sem saldo não soma na projeção.')
+        : null,
+      velha.length
+        ? h('span.pequeno.muted',
+          `${velha.length} conta(s) com saldo de outro dia — a projeção usa a data mais antiga.`)
+        : null));
+}
+
 async function pedirSaldo(r) {
+  const contas = r.saldo?.contas || await fluxo.saldosPorConta();
+  if (!contas.length) return pedirSaldoUnico(r);
+
+  const resposta = await formulario({
+    titulo: 'Saldo de hoje',
+    descricao: 'O que cada conta tem agora. A projeção parte da soma — e da data mais antiga, '
+      + 'porque uma conta esquecida envelhece a projeção inteira.',
+    campos: [
+      ...contas.map((c) => ({
+        chave: `c_${c.contaId}`,
+        label: c.nome,
+        tipo: 'dinheiro',
+        valor: c.valor ?? '',
+        ajuda: c.data ? `último saldo: ${formatDate(c.data)}` : 'nunca informado',
+      })),
+      { chave: 'data', label: 'Data-base', tipo: 'data', obrigatorio: true, valor: today() },
+    ],
+    confirmar: 'Salvar',
+  });
+  if (!resposta) return;
+
+  let gravadas = 0;
+  for (const c of contas) {
+    const bruto = resposta[`c_${c.contaId}`];
+    if (bruto === '' || bruto == null) continue;
+    await fluxo.informarSaldoDaConta(c.contaId, Number(bruto), resposta.data);
+    gravadas += 1;
+  }
+  ok(gravadas === 1 ? 'Saldo de 1 conta atualizado.' : `Saldo de ${gravadas} contas atualizado.`);
+  refresh();
+}
+
+async function pedirSaldoUnico(r) {
   const atual = r.saldo;
   const resposta = await formulario({
     titulo: 'Saldo atual disponível',
-    descricao: 'O dinheiro que existe agora, somando as contas. É daqui que a projeção parte.',
+    descricao: 'O dinheiro que existe agora, somando as contas. É daqui que a projeção parte. '
+      + 'Se preferir acompanhar banco por banco, cadastre as contas abaixo do saldo.',
     campos: [
       { chave: 'valor', label: 'Saldo', tipo: 'dinheiro', obrigatorio: true, valor: atual?.valor ?? '' },
       { chave: 'data', label: 'Data-base', tipo: 'data', obrigatorio: true, valor: today() },
@@ -247,6 +340,36 @@ async function pedirSaldo(r) {
   if (!resposta) return;
   await fluxo.informarSaldo(Number(resposta.valor), resposta.data);
   ok('Saldo atualizado.');
+  refresh();
+}
+
+/** Cadastrar e tirar conta — o que sobrou da tela de Bancos, em dois toques. */
+async function novaConta() {
+  const resposta = await formulario({
+    titulo: 'Nova conta',
+    descricao: 'Só o nome que você reconhece no dia a dia. O app não precisa de agência nem número.',
+    campos: [{ chave: 'nome', label: 'Nome da conta', tipo: 'texto', obrigatorio: true }],
+    confirmar: 'Criar',
+  });
+  if (!resposta) return;
+  const id = `conta_${Date.now().toString(36)}`;
+  await store.contas.salvar({ id, nome: String(resposta.nome).trim(), criadaEm: Date.now() });
+  ok('Conta criada. Informe o saldo dela.');
+  refresh();
+}
+
+async function tirarConta(conta) {
+  const sim = await confirmar({
+    titulo: `Tirar ${conta.nome} do caixa?`,
+    texto: 'Os saldos já informados dela ficam guardados, mas param de somar na projeção. '
+      + 'Dá para cadastrar de novo depois.',
+    confirmar: 'Tirar',
+    perigo: true,
+  });
+  if (!sim) return;
+  const atual = await store.contas.obter(conta.contaId);
+  await store.contas.salvar({ ...(atual || { id: conta.contaId }), arquivada: true });
+  ok('Conta fora do caixa.');
   refresh();
 }
 

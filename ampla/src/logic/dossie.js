@@ -17,6 +17,9 @@ import { monthKey, monthLabel, formatDate, money, pct } from '../core/format.js'
 import { cents, sum } from '../core/util.js';
 import * as revenue from './revenue.js';
 import * as commission from './commission.js';
+import * as margemMod from './margem.js';
+import * as quotes from './quotes.js';
+import * as fluxo from './fluxo.js';
 import { dre } from './dre.js';
 import { statusTitulo } from './link.js';
 
@@ -24,7 +27,10 @@ const noMes = (data, mes) => !!data && monthKey(data) === mes;
 
 export async function pasta(mes = monthKey()) {
   const faixa = faixaDoMes(mes);
-  const [resumo, notasDoMes, comissao, contabil, titulos, pagamentos, clientes, pendencias] = await Promise.all([
+  const [
+    resumo, notasDoMes, comissao, contabil, titulos, pagamentos, clientes, pendencias,
+    margem, frete, orcamentos, saldo,
+  ] = await Promise.all([
     revenue.resumo(faixa),
     revenue.notasDoPeriodo(faixa.de, faixa.ate),
     commission.calcular(mes),
@@ -33,15 +39,38 @@ export async function pasta(mes = monthKey()) {
     store.pagar.listar(),
     store.clientes.listar(),
     store.pendencias.listar(),
+    margemMod.margem(faixa),
+    margemMod.frete(faixa),
+    quotes.resumo(faixa),
+    fluxo.saldoInformado(),
   ]);
 
   const nomeCliente = new Map(clientes.map((c) => [c.id, c.nome]));
   const receberMes = titulos.filter((t) => noMes(t.vencimento, mes));
   const pagarMes = pagamentos.filter((p) => noMes(p.vencimento, mes));
 
+  /**
+   * A ORDEM É A DA CONVERSA COM O PAI.
+   *
+   * "Relatório geral da empresa para passar para o meu pai, que é importante:
+   *  fluxo de caixa ali, saldos, margem, quanto que você cobrou de frete,
+   *  faturamento total, faturamento por vendedor, tudo isso eu vou precisar
+   *  ter. Orçamentos não fechados, essa visibilidade, eu preciso enviar para o
+   *  meu pai todo mês. Sala de comissão, e é isso."
+   *
+   * Então o dossiê começa pelo resultado, passa pelo faturamento e pela margem,
+   * mostra o frete, mostra o caixa, mostra o que ficou orçado e termina na
+   * comissão. Nenhum documento novo foi calculado aqui: cada um chama o mesmo
+   * módulo que a tela correspondente usa, para a pasta nunca contar uma história
+   * diferente da do app.
+   */
   const documentos = [
     docDre(contabil),
     docFaturamento(resumo),
+    docMargem(margem),
+    docFrete(frete),
+    docCaixa(saldo, receberMes, pagarMes),
+    docOrcamentos(orcamentos),
     docComissao(comissao),
     docReceber(receberMes),
     docPagar(pagarMes),
@@ -127,6 +156,164 @@ function docFaturamento(r) {
     ],
     linhas: r.ranking,
     total: { nome: 'TOTAL', valor: r.total, notas: r.notas },
+  };
+}
+
+/**
+ * MARGEM — "margem, quanto que você cobrou de frete".
+ *
+ * Vem do mesmo módulo da tela de Margem e frete, com o recorte do mês. A coluna
+ * de cobertura existe porque margem sem custo conhecido não é margem: é uma
+ * conta feita com metade dos dados, e o pai tem direito de ver qual metade.
+ */
+function docMargem(m) {
+  return {
+    id: 'margem',
+    icone: '📐',
+    nome: 'Margem por vendedor',
+    resumo: m.total.margem == null ? 'falta custo' : `${pct(m.total.margem, 1)} de margem`,
+    colunas: [
+      { header: 'Vendedor', key: 'nome' },
+      { header: 'Venda', key: 'venda', tipo: 'money', alinhar: 'direita' },
+      { header: 'Custo', key: 'custo', tipo: 'money', alinhar: 'direita' },
+      { header: 'Lucro', key: 'lucro', tipo: 'money', alinhar: 'direita' },
+      { header: 'Margem', key: 'margem', tipo: 'pct', alinhar: 'direita' },
+      { header: 'Frete cobrado', key: 'frete', tipo: 'money', alinhar: 'direita' },
+      { header: 'Custo conhecido?', key: 'cobertura' },
+    ],
+    linhas: m.vendedores.map((v) => ({
+      ...v,
+      cobertura: v.completa ? 'sim, em tudo' : `falta custo em ${money(v.vendaSemCusto)} de venda`,
+    })),
+    total: {
+      nome: 'TOTAL',
+      venda: m.total.venda,
+      custo: m.total.custo,
+      lucro: m.total.lucro,
+      margem: m.total.margem,
+    },
+  };
+}
+
+/**
+ * FRETE — o cobrado e o que custou, lado a lado.
+ *
+ * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+ *
+ * Os dois números vêm de lugares diferentes de propósito: o cobrado é da nota,
+ * o custo é da planilha de entregas. Por isso a última linha é a conta que
+ * importa — se o frete cobrado paga o frete feito.
+ */
+function docFrete(f) {
+  const linhas = f.vendedores.map((v) => ({
+    nome: v.nome,
+    cobrado: v.frete,
+    custo: v.custo ?? null,
+    resultado: v.custo == null ? null : cents((v.frete || 0) - v.custo),
+    notas: v.notas,
+  }));
+  return {
+    id: 'frete',
+    icone: '🚚',
+    nome: 'Frete cobrado e frete pago',
+    resumo: f.temDado
+      ? `${money(f.total)} cobrado · ${money(f.custo.total)} de custo`
+      : 'a nota do período não traz valor de frete',
+    colunas: [
+      { header: 'Vendedor', key: 'nome' },
+      { header: 'Frete cobrado', key: 'cobrado', tipo: 'money', alinhar: 'direita' },
+      { header: 'Custo das entregas', key: 'custo', tipo: 'money', alinhar: 'direita' },
+      { header: 'Sobra / falta', key: 'resultado', tipo: 'money', alinhar: 'direita' },
+      { header: 'NFs com frete', key: 'notas', tipo: 'int', alinhar: 'direita' },
+    ],
+    linhas,
+    total: {
+      nome: 'TOTAL',
+      cobrado: f.total,
+      custo: f.custo.total,
+      resultado: f.custo.resultado,
+    },
+  };
+}
+
+/**
+ * CAIXA — o saldo informado e o que o mês ainda tem para entrar e sair.
+ *
+ * Não é a projeção dia a dia (essa é a tela do Caixa, e não cabe numa aba de
+ * Excel sem virar ruído). É a posição: de onde o caixa parte e o que o mês do
+ * fechamento movimenta — que é a pergunta que ela diz que vai receber.
+ */
+function docCaixa(saldo, receberMes, pagarMes) {
+  const aReceber = receberMes.filter((t) => statusTitulo(t) !== 'pago');
+  const aPagar = pagarMes.filter((t) => statusTitulo(t) !== 'pago');
+  const entra = cents(sum(aReceber, (t) => t.valor || 0));
+  const sai = cents(sum(aPagar, (t) => t.valor || 0));
+
+  const linhas = [
+    {
+      conta: 'Saldo em banco informado',
+      valor: saldo?.valor ?? null,
+      nota: saldo?.data ? `posição de ${formatDate(saldo.data)}` : 'nenhum saldo informado',
+    },
+    ...(saldo?.contas || []).filter((c) => c.valor != null).map((c) => ({
+      conta: `  ${c.nome}`,
+      valor: c.valor,
+      nota: c.data ? `informado em ${formatDate(c.data)}` : '',
+    })),
+    { conta: '(+) A receber do mês, em aberto', valor: entra, nota: `${aReceber.length} título(s)` },
+    { conta: '(–) A pagar do mês, em aberto', valor: -sai, nota: `${aPagar.length} título(s)` },
+    {
+      conta: '= Posição com o mês liquidado',
+      valor: saldo?.valor == null ? null : cents(saldo.valor + entra - sai),
+      nota: saldo?.valor == null ? 'em branco: falta informar o saldo' : 'se tudo entrar e sair no prazo',
+    },
+  ];
+
+  return {
+    id: 'caixa',
+    icone: '💧',
+    nome: 'Caixa e saldos',
+    resumo: saldo?.valor == null ? 'saldo não informado' : money(saldo.valor),
+    colunas: [
+      { header: 'Posição', key: 'conta' },
+      { header: 'Valor', key: 'valor', tipo: 'money', alinhar: 'direita' },
+      { header: 'Observação', key: 'nota' },
+    ],
+    linhas,
+  };
+}
+
+/**
+ * ORÇAMENTOS NÃO FECHADOS — a visibilidade que ela pediu nominalmente.
+ *
+ * "Orçamentos não fechados, essa visibilidade, eu preciso enviar para o meu pai
+ *  todo mês. É um relatório que tem que ter."
+ *
+ * Então a aba é dos EM ABERTO, maior primeiro, com o cliente e o vendedor. A
+ * taxa de conversão do mês fica no resumo, porque ela é o contexto do número,
+ * não o número.
+ */
+function docOrcamentos(o) {
+  return {
+    id: 'orcamentos',
+    icone: '📝',
+    nome: 'Orçamentos não fechados',
+    resumo: o.abertos.length
+      ? `${o.abertos.length} em aberto · ${money(cents(sum(o.abertos, (x) => x.valorTotal || 0)))}`
+      : 'nenhum orçamento em aberto',
+    colunas: [
+      { header: 'Orçamento', key: 'numero' },
+      { header: 'Data', key: 'data', tipo: 'data' },
+      { header: 'Cliente', key: 'clienteNome' },
+      { header: 'Vendedor', key: 'vendedorNome' },
+      { header: 'Valor', key: 'valorTotal', tipo: 'money', alinhar: 'direita' },
+    ],
+    linhas: o.abertos,
+    total: { numero: 'TOTAL', valorTotal: cents(sum(o.abertos, (x) => x.valorTotal || 0)) },
+    nota: o.taxa == null
+      ? 'Nenhum orçamento decidido no mês, então não há taxa de conversão para mostrar.'
+      : `No mês, ${pct(o.taxa, 0)} dos orçamentos decididos viraram venda `
+        + `(${o.convertido.quantidade} de ${o.decididos}).`,
   };
 }
 

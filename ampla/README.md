@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 557 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 588 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -89,41 +89,75 @@ comissão → caixa → cobrança) e confere os números que o projeto exige.
 
 ## Por onde começar
 
-1. **Central de arquivos** — o app conduz a rotina e diz o que falta importar.
-2. Ordem sugerida: Notas fiscais → Pedidos de venda → **Contas a receber** (é ele que liga nota e pedido) → Contas a pagar → Extratos.
-3. **Conciliação** — resolver as exceções (NF sem vendedor, movimento sem vínculo).
-4. **Ajustes** — meta do mês, regras de comissão, limites de caixa.
+1. **Enviar** — a primeira aba. O app conduz a rotina e diz o que falta mandar.
+2. **Caixa** — informe o saldo de cada conta. É o único número que o app não tira
+   de relatório nenhum.
+3. **Hoje** — defina a meta do mês, ali na própria tela. Sem ela, metade do
+   impulso comercial fica dormindo.
 
 Depois disso, qualquer aba responde na hora.
 
 ---
 
-## Módulos
+## As cinco abas
+
+Eram oito abas na barra e mais oito num menu do topo, e o resultado, nas palavras
+dela, foi: *"ficou muito complexo, onde eu não conseguia mais entender e fazer
+nada. Vamos simplificar esse aplicativo."*
+
+Nada do que ela pediu depois disso era novo — o faturamento diário, a meta, a
+pasta do mês, tudo já existia e estava enterrado. Então o conserto não foi
+construir: foi tirar. A barra passou a ser o aplicativo inteiro.
 
 | Aba | Responde |
 |---|---|
-| 📊 Relatório do dia | vendas do dia, mês até hoje, quanto falta para a meta, quanto precisa por dia e quem precisa vender mais — sai em PDF para mandar |
-| 📊 Visão da empresa | como estamos: D-1, mês, meta, receber, pagar, bancos, caixa, alertas |
-| 💧 Fluxo de caixa | quanto teremos em cada dia — acumulado — e em que dia quebra |
-| 🔴 Inadimplência | quanto está vencido, há quanto tempo, quem são os maiores e o que vence nos próximos dias — só leitura |
-| 📈 Comercial | faturamento, ranking, ticket, evolução e o detalhe de cada vendedor |
-| 📦 Produtos | curva ABC por faturamento, quantidade, clientes e margem |
-| 📝 Orçamentos | quanto foi orçado, quanto virou venda, o que ainda está em aberto e a conversão por cliente |
-| 🎯 Comissões | cálculo por regra, ajuste com motivo e fechamento travado por conferência |
-| 📤 Contas a pagar | vencimentos, categorias e prorrogação que reflete no caixa |
-| 📥 Contas a receber | títulos, saldos e situação |
-| 🏦 Bancos | saldo por conta, extrato e o que não conciliou |
-| ⚠️ Conciliação | só o que exige atenção; resolveu, sai da frente — inclui **Atribuir vendedores**, onde você define o vendedor de cada pedido |
-| 📁 Pasta do mês | o dossiê de fechamento: DRE, faturamento, comissões, a receber, a pagar, clientes e divergências — cada um sai sozinho, ou a pasta inteira de uma vez |
-| 🗂️ Central de arquivos | checklist do dia, importação e histórico |
+| 📤 Enviar | o checklist do dia, a importação e o histórico |
+| 💧 Caixa | quanto teremos em cada dia, de onde o caixa parte (saldo por conta), o que já venceu e em que dia quebra |
+| 📈 Hoje | faturamento do dia e do mês, meta, quanto falta, quanto precisa por dia e quem precisa vender mais |
+| 🎯 Comissão | cálculo por regra, o percentual efetivo de cada nota, ajuste com motivo e fechamento travado por conferência |
+| 📁 Fechamento | o relatório do mês inteiro, pronto para mandar — DRE, faturamento por vendedor, margem, frete cobrado × frete pago, caixa e saldos, orçamentos não fechados, comissão, a receber, a pagar, clientes e divergências |
 
-Simulação de cenários fica dentro do Fluxo de caixa.
+Cada documento sai sozinho em PDF ou Excel, e a pasta inteira sai de uma vez
+(um Excel com uma aba por documento).
+
+### E o que não está na barra
+
+Existe, mas se entra por dentro de onde a pergunta nasce — não por um menu que
+ela precise decorar:
+
+| Tela | De onde se chega |
+|---|---|
+| 📊 Comercial (ranking, evolução, detalhe de cada vendedor) | do Hoje |
+| 📝 Orçamentos · 📐 Margem e frete · 📦 Produtos e curva ABC · 👥 Clientes | do Comercial |
+| 🤝 RT (indicação) | da Comissão |
+| ⚠️ O que o app precisa saber | do aviso que o próprio app levanta |
+| ⚙️ Ajustes | do ☰, no topo |
+
+### O que saiu de vez
+
+*"Não preciso mais do inadimplência, de cobrança, nada disso. Eu estou
+conseguindo fazer aqui pelo sistema mesmo já existente."*
+
+- **Inadimplência e cobrança** — ela faz no sistema dela. O que venceu continua
+  aparecendo no Caixa, à parte da projeção, como informação.
+- **Extrato bancário** — trocado pelo saldo digitado: *"sobre o extrato, eu não
+  vou colocar, porque acho que vai ficar muito complexo. O que eu vou colocar é o
+  saldo, para ele conseguir fazer a estimativa que a gente precisa."* Conciliar
+  extrato com título era o trabalho administrativo mais caro do app, e era
+  justamente o que ela não quer fazer. O app ainda sabe ler um extrato que já
+  entrou; ele só não pede mais.
+- **Visão da empresa** — virou o Fechamento.
+- **Contas a receber e a pagar como telas de gestão** — *"eu não vou ajustar os
+  contas a pagar e receber ali. Ele vai ser a minha visibilidade."* Os títulos
+  aparecem no dia deles, dentro do Caixa, abrindo o dia.
+- **A projeção antiga de caixa e a simulação de cenários** — havia duas
+  projeções concorrentes. Ficou a que parte do saldo informado.
 
 ---
 
 ## A rotina diária
 
-Seis arquivos, nessa ordem ou em qualquer outra, e um número digitado:
+Seis arquivos, nessa ordem ou em qualquer outra, e um número por conta:
 
 1. **XML das notas fiscais** — a fonte oficial do faturamento
 2. **Comissão por venda** — é dela que sai o vendedor de cada nota
@@ -131,7 +165,7 @@ Seis arquivos, nessa ordem ou em qualquer outra, e um número digitado:
 4. **Orçamentos** — a única fonte de orçamento; exportar **sem filtrar a situação**
 5. **Contas a receber** — fotografia dos títulos em aberto
 6. **Contas a pagar** — idem
-7. **Saldo atual do dia**, no Fluxo de caixa
+7. **Saldo de cada conta**, digitado no Caixa
 
 Depois disso, a única conciliação manual é escolher o vendedor das notas que o
 app não conseguiu identificar sozinho.
@@ -179,7 +213,9 @@ app não conseguiu identificar sozinho.
 - **O extrato bancário saiu da rotina.** A projeção parte de um saldo que ela
   digita uma vez por dia e soma o que os relatórios de títulos dizem. Um número
   informado por quem olha a conta vale mais que um saldo montado de lançamentos
-  que ninguém conseguiu conciliar.
+  que ninguém conseguiu conciliar. O saldo é **por conta**, somado, e a data que
+  vale é a **mais antiga** delas: uma conta esquecida envelhece a projeção
+  inteira, e usar a data mais nova esconderia justamente isso.
 - **O que está vencido não é projetado.** Entrada vencida não é entrada certa, e
   obrigação vencida é necessidade de caixa hoje, não no vencimento. Os dois ficam
   fora da linha do tempo e à vista, em lista própria.

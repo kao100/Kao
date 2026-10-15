@@ -66,11 +66,19 @@ export async function telaAjustes() {
       aviso('Apelidos servem para o mesmo vendedor aparecer com nomes diferentes em arquivos diferentes '
         + '(ex.: "Eduardo" e "EDU"). Sem apelido, o app trata como duas pessoas — ele não junta por semelhança.', 'info')),
 
-    secao('Contas bancárias', botao('Gerenciar', { pequeno: true, onClick: () => navigate('/bancos') }),
-      card(null, null, h('div.lista', ...contas.map((c) => h('div.item',
-        h('div.item__corpo',
-          h('div.item__titulo', c.nome),
-          h('div.item__sub', [c.agencia && `ag. ${c.agencia}`, c.numero && `c/c ${c.numero}`].filter(Boolean).join(' · ') || 'sem dados da conta'))))))),
+    /**
+     * As contas moram no Caixa, que é onde o saldo é informado. Ter cadastro de
+     * conta num lugar e o saldo dela em outro era uma viagem a mais por dia.
+     */
+    secao('Contas bancárias', botao('Abrir no Caixa', { pequeno: true, onClick: () => navigate('/fluxo') }),
+      card(null, null,
+        h('p.pequeno.muted', { style: { marginBottom: contas.length ? '10px' : '0' } },
+          'O saldo de cada conta você informa no Caixa, uma vez por dia — é de lá que a projeção '
+          + 'parte. Cadastrar e tirar conta também é por lá.'),
+        contas.length
+          ? h('div.lista', ...contas.filter((c) => !c.arquivada).map((c) => h('div.item',
+            h('div.item__corpo', h('div.item__titulo', c.nome)))))
+          : null)),
 
     secao('Alertas de caixa', null, card(null, null,
       h('div.empilha', { style: { gap: '8px' } },

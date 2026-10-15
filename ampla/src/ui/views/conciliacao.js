@@ -207,9 +207,9 @@ function acoes(p, contexto) {
   } else if (p.tipo === 'item_sem_nf') {
     botoes.push(botao('Importar NFs', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/nfs') }));
   } else if (p.tipo === 'pagar_sem_categoria') {
-    botoes.push(botao('Ver contas a pagar', { tipo: 'primario', pequeno: true, onClick: () => navigate('/pagar') }));
+    botoes.push(botao('Ver o caixa', { tipo: 'primario', pequeno: true, onClick: () => navigate('/fluxo') }));
   } else if (p.tipo === 'pago_sem_banco') {
-    botoes.push(botao('Ver extrato', { tipo: 'primario', pequeno: true, onClick: () => navigate('/bancos') }));
+    botoes.push(botao('Ver o caixa', { tipo: 'primario', pequeno: true, onClick: () => navigate('/fluxo') }));
   }
 
   if (p.status === 'ignorada') {

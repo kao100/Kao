@@ -58,10 +58,76 @@ export function periodoDoHorizonte(id, base = today()) {
  * meio. Quando o saldo está velho, o app diz, em vez de calcular por cima.
  */
 export async function saldoInformado() {
+  /**
+   * POR CONTA, SOMADO — e não um número só.
+   *
+   * "Se todo dia eu tenho que alimentar o saldo bancário das contas, isso é
+   *  fato, para ele conseguir fazer as projeções futuras que eu quero."
+   *
+   * Contas, no plural: ela olha mais de um banco. Então o saldo de partida é a
+   * soma do último saldo de cada conta, e a data que vale é a MAIS ANTIGA
+   * delas — se uma conta ficou sem atualizar desde terça, a projeção é tão velha
+   * quanto terça, e é isso que o app tem de dizer. Pegar a mais nova esconderia
+   * exatamente o erro que importa.
+   */
+  const porConta = await saldosPorConta();
+  if (porConta.length) {
+    const comSaldo = porConta.filter((c) => c.valor != null);
+    if (comSaldo.length) {
+      return {
+        valor: cents(sum(comSaldo, (c) => c.valor)),
+        data: comSaldo.reduce((pior, c) => (pior == null || c.data < pior ? c.data : pior), null),
+        anotadoEm: comSaldo.reduce((m, c) => Math.max(m, c.anotadoEm || 0), 0) || null,
+        contas: porConta,
+      };
+    }
+  }
+  /* sem conta cadastrada, o número único de antes ainda vale */
   const cfg = await store.config();
   const s = cfg.caixa?.saldoAtual;
   if (!s || s.valor == null) return null;
-  return { valor: cents(s.valor), data: s.data || null, anotadoEm: s.anotadoEm || null };
+  return {
+    valor: cents(s.valor), data: s.data || null, anotadoEm: s.anotadoEm || null, contas: [],
+  };
+}
+
+/**
+ * O último saldo de cada conta cadastrada, com a data em que ela anotou.
+ * Conta sem saldo nenhum vem com valor nulo — para a tela poder pedir.
+ */
+export async function saldosPorConta() {
+  const [contas, saldos] = await Promise.all([store.contas.listar(), store.saldos.listar()]);
+  const ativas = contas.filter((c) => !c.arquivada);
+  const ultimo = new Map();
+  for (const s of saldos) {
+    if (s.saldo == null) continue;
+    const atual = ultimo.get(s.contaId);
+    if (!atual || s.data > atual.data) ultimo.set(s.contaId, s);
+  }
+  return ativas.map((c) => {
+    const s = ultimo.get(c.id);
+    return {
+      contaId: c.id,
+      nome: c.nome || c.banco || 'Conta',
+      valor: s ? cents(s.saldo) : null,
+      data: s?.data || null,
+      anotadoEm: s?.anotadoEm || null,
+    };
+  });
+}
+
+/** O saldo de UMA conta, no dia. É o que a tela do Caixa grava. */
+export async function informarSaldoDaConta(contaId, valor, data = today()) {
+  await store.saldos.salvar({
+    id: `sal_${contaId}_${data}`,
+    contaId,
+    data,
+    saldo: cents(valor),
+    origem: 'manual',
+    anotadoEm: Date.now(),
+  });
+  await store.registrar('saldo_informado', { alvoId: contaId, alvo: data, para: cents(valor) });
+  return saldoInformado();
 }
 
 export async function informarSaldo(valor, data = today()) {

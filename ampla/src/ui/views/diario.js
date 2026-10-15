@@ -19,6 +19,9 @@ import { kpi, card, botao, aviso, vazio, progresso, chips } from '../components/
 import { grafLinha } from '../components/chart.js';
 import { tabela } from '../components/table.js';
 import { exportarExcel, imprimir, colunasExcel } from '../../logic/reports.js';
+import { formulario, detalhe, fechar } from '../components/sheet.js';
+import { ok as avisarOk } from '../components/toast.js';
+import { refresh } from '../../core/router.js';
 import { money, pct, formatDate, today, addDays, monthLabel } from '../../core/format.js';
 
 export async function telaDiario({ query }) {
@@ -94,6 +97,24 @@ export async function telaDiario({ query }) {
           ? `Bateu, com ${money(r.dia.vsMeta)} a mais.`
           : `Faltaram ${money(Math.abs(r.dia.vsMeta))} para a meta do dia.`)),
 
+    /**
+     * A META NÃO PODE FICAR DORMINDO EM AJUSTES.
+     *
+     * "As metas dos vendedores, quanto que tem que ser vendido por dia, esse
+     *  impulso comercial — isso não tem."
+     *
+     * Tinha. O cálculo inteiro estava pronto, e sem meta cadastrada esta tela
+     * apenas dizia "defina em Ajustes" — então ela nunca viu funcionar. Agora o
+     * botão está onde a frase estava: o lugar de pedir um número é a tela que
+     * precisa dele.
+     */
+    !m.valor && card(`Meta de ${monthLabel(r.mes)}`, null,
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+        'Falta dizer quanto a empresa quer vender neste mês. Com esse número esta tela passa a '
+        + 'mostrar quanto falta, quanto precisa vender por dia e se o ritmo chega lá — e cada '
+        + 'vendedor ganha o alvo dele.'),
+      botao('Definir a meta do mês', { tipo: 'primario', onClick: () => definirMeta(r.mes) })),
+
     m.valor && card(`Meta de ${monthLabel(r.mes)}`,
       h('span.num.forte', pct(m.percentual, 0)),
       progresso({
@@ -119,9 +140,13 @@ export async function telaDiario({ query }) {
       h('span.mini.muted', 'objetivo de cada um'),
       h('div.empilha', { style: { gap: '12px' } },
         ...r.porVendedor.map((v, i) => linhaVendedor(v, i))),
-      r.porVendedor.some((v) => v.alvoEstimado) && h('p.mini.muted', { style: { marginTop: '10px' } },
-        'Onde diz "estimado", o alvo é a fatia da meta da empresa que a pessoa já vem puxando — '
-        + 'o app não inventa meta. Em Ajustes você define a meta de cada vendedor.')),
+      r.porVendedor.some((v) => v.alvoEstimado) && h('div', { style: { marginTop: '10px' } },
+        h('p.mini.muted',
+          'Onde diz "estimado", o alvo é a fatia da meta da empresa que a pessoa já vem puxando — '
+          + 'o app não inventa meta.'),
+        botao('Definir meta por vendedor', {
+          pequeno: true, onClick: () => escolherVendedorDaMeta(r.porVendedor),
+        }))),
 
     orc && orc.quantidade > 0 && cardOrcamentos(orc),
 
@@ -189,6 +214,73 @@ function linhaRecado(x) {
       onClick: () => navigate(x.rota),
     }, ...conteudo)
     : h('div.linha', { style: { alignItems: 'flex-start', gap: '8px' } }, ...conteudo);
+}
+
+/**
+ * A META DO MÊS, pedida de onde ela é lida.
+ *
+ * Grava no mês que está na tela, não no mês corrente: quem está olhando agosto
+ * em setembro quer corrigir agosto.
+ */
+async function definirMeta(mes) {
+  const cfg = await store.config();
+  const resposta = await formulario({
+    titulo: `Meta de ${monthLabel(mes)}`,
+    descricao: 'Quanto a empresa quer faturar no mês. O app divide pelos dias em que vocês '
+      + 'vendem — não por 30 — e é daí que sai a meta de cada dia.',
+    campos: [{
+      chave: 'valor',
+      label: 'Meta de faturamento',
+      tipo: 'dinheiro',
+      obrigatorio: true,
+      valor: cfg.metasPorMes?.[mes] ?? cfg.metaMensalPadrao ?? '',
+    }],
+    confirmar: 'Salvar',
+  });
+  if (!resposta) return;
+  await store.salvarConfig({
+    metasPorMes: { ...(cfg.metasPorMes || {}), [mes]: Number(resposta.valor) },
+  });
+  await store.registrar('meta', {
+    alvoId: mes, alvo: `Meta ${mes}`, de: cfg.metasPorMes?.[mes], para: Number(resposta.valor),
+  });
+  avisarOk('Meta salva.');
+  refresh();
+}
+
+/** Escolher de quem é a meta, e depois o número — dois toques, sem sair da tela. */
+function escolherVendedorDaMeta(lista) {
+  detalhe('Meta de qual vendedor?',
+    h('div.empilha', { style: { gap: '4px' } },
+      ...lista.map((v) => h('button.item.card--clicavel', {
+        onClick: () => { fechar(); definirMetaVendedor(v); },
+      },
+      h('div.item__corpo',
+        h('div.item__titulo', v.nome),
+        h('div.pequeno.muted', v.meta
+          ? `meta própria de ${money(v.meta)}`
+          : 'sem meta própria — usa a fatia da meta da empresa')),
+      h('span', '›')))));
+}
+
+async function definirMetaVendedor(v) {
+  const atual = await store.vendedores.obter(v.vendedorId);
+  const resposta = await formulario({
+    titulo: `Meta de ${v.nome}`,
+    descricao: 'Meta mensal própria. Sem ela, o alvo da pessoa é a fatia da meta da empresa que '
+      + 'ela já vem puxando — o que é uma estimativa, não um combinado.',
+    campos: [{
+      chave: 'meta', label: 'Meta mensal', tipo: 'dinheiro', valor: atual?.meta ?? '',
+    }],
+    confirmar: 'Salvar',
+  });
+  if (!resposta) return;
+  await store.vendedores.salvar({
+    ...(atual || { id: v.vendedorId, nome: v.nome }),
+    meta: resposta.meta === '' || resposta.meta == null ? null : Number(resposta.meta),
+  });
+  avisarOk('Meta salva.');
+  refresh();
 }
 
 function seletorDia(data) {

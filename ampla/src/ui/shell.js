@@ -8,30 +8,39 @@ import { formatDate, timestampLabel } from '../core/format.js';
 import { detalhe, fechar as fecharFolha } from './components/sheet.js';
 
 /**
- * A barra de baixo tem só o que ela abre todo dia. O resto continua existindo,
- * a um toque, no menu do topo — catorze abas viravam uma barra que rolava para
- * o lado, e rolar para achar uma aba é o contrário de ver o negócio rápido.
+ * CINCO LUGARES NA BARRA, E NENHUM MENU.
+ *
+ * "Ficou muito complexo, onde eu não conseguia mais entender e fazer nada.
+ *  Vamos simplificar esse aplicativo."
+ *
+ * Eram oito abas na barra e mais oito num menu do topo. Um menu de abas é uma
+ * lista de coisas para decidir, e ela não quer decidir — ela quer mandar os
+ * relatórios e ler a resposta. Então a barra passou a ser o aplicativo inteiro:
+ * se não está aqui, se entra por dentro de uma destas cinco.
+ *
+ * A ordem é a do dia dela: manda os arquivos, olha o caixa, cobra o comercial.
+ * Comissão e fechamento são de fim de mês e ficam no fim.
  */
 export const MODULOS = [
-  { path: '/', icone: '📊', label: 'Relatório', titulo: 'Relatório' },
+  { path: '/arquivos', icone: '📤', label: 'Enviar', titulo: 'Mandar os relatórios' },
   { path: '/fluxo', icone: '💧', label: 'Caixa', titulo: 'Fluxo de caixa' },
-  { path: '/cobranca', icone: '🔴', label: 'Vencidos', titulo: 'Inadimplência' },
-  { path: '/comercial', icone: '📈', label: 'Comercial', titulo: 'Comercial' },
-  { path: '/orcamentos', icone: '📝', label: 'Orçados', titulo: 'Orçamentos' },
-  { path: '/clientes', icone: '👥', label: 'Clientes', titulo: 'Clientes' },
-  { path: '/comissoes', icone: '🎯', label: 'Comissões', titulo: 'Comissões' },
-  { path: '/rt', icone: '🤝', label: 'RT', titulo: 'RT (indicação)' },
+  { path: '/', icone: '📈', label: 'Hoje', titulo: 'Hoje' },
+  { path: '/comissoes', icone: '🎯', label: 'Comissão', titulo: 'Comissão' },
+  { path: '/fechamento', icone: '📁', label: 'Fechamento', titulo: 'Fechamento do mês' },
 ];
 
-/** O resto do app, no menu — sem sumir e sem ocupar a barra. */
+/**
+ * Telas que existem, mas não disputam espaço: chega-se nelas pelo lugar onde a
+ * pergunta nasce — o comercial leva ao vendedor, ao orçamento, à margem, à curva
+ * ABC e ao cliente; a comissão leva ao RT. Ajustes mora no canto do topo.
+ */
 export const OUTRAS = [
-  { path: '/fechamento', icone: '📁', label: 'Pasta do mês', titulo: 'Pasta do mês' },
-  { path: '/receber', icone: '📥', label: 'Títulos a receber', titulo: 'Contas a receber' },
-  { path: '/pagar', icone: '💳', label: 'Títulos a pagar', titulo: 'Contas a pagar' },
+  { path: '/comercial', icone: '📊', label: 'Comercial', titulo: 'Comercial' },
+  { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
   { path: '/margem', icone: '📐', label: 'Margem e frete', titulo: 'Margem e frete' },
   { path: '/produtos', icone: '📦', label: 'Produtos e curva ABC', titulo: 'Produtos e curva ABC' },
-  { path: '/conciliacao', icone: '⚠️', label: 'O que ficou sem vendedor', titulo: 'Conciliação' },
-  { path: '/empresa', icone: '🏢', label: 'Visão da empresa', titulo: 'Visão da empresa' },
+  { path: '/clientes', icone: '👥', label: 'Clientes', titulo: 'Clientes' },
+  { path: '/rt', icone: '🤝', label: 'RT', titulo: 'RT (indicação)' },
   { path: '/ajustes', icone: '⚙️', label: 'Ajustes', titulo: 'Ajustes' },
 ];
 
@@ -41,26 +50,20 @@ let refs = {};
 
 export function montarShell(raiz) {
   const outlet = h('main.conteudo');
-  const titulo = h('h1', 'Visão da empresa');
+  const titulo = h('h1', 'Hoje');
   const subtitulo = h('span');
   const voltar = h('button.topo__voltar', { onClick: () => history.back(), style: { display: 'none' } }, '‹');
 
   const marca = h('span.topo__marca', divisa(24, { cor: 'var(--marca)' }));
 
-  // Mandar os relatórios é o que ela faz todo dia, então fica a um toque de
-  // qualquer tela — sem ocupar uma das seis vagas da barra de baixo.
-  const enviar = h('button.topo__acao', {
-    onClick: () => navigate('/arquivos'),
-    title: 'Mandar os relatórios do dia',
-  }, '📤');
-
-  const menu = h('button.topo__acao', { onClick: abrirMenu, title: 'Mais telas' }, '☰');
+  // Mandar os relatórios virou a primeira aba da barra, então o atalho do topo
+  // saiu: dois botões para o mesmo lugar é uma escolha a mais, não a menos.
+  const menu = h('button.topo__acao', { onClick: abrirMenu, title: 'Ajustes e mais telas' }, '☰');
 
   const topo = h('header.topo',
     voltar,
     marca,
     h('div.topo__titulo', titulo, subtitulo),
-    enviar,
     menu);
 
   const nav = h('nav.nav', ...MODULOS.map((m) => h('a.nav__item', {
@@ -74,9 +77,9 @@ export function montarShell(raiz) {
 }
 
 function abrirMenu() {
-  detalhe('Mais telas',
+  detalhe('Ajustes e mais telas',
     h('div.empilha', { style: { gap: '4px' } },
-      ...[{ path: '/arquivos', icone: '📤', label: 'Mandar os relatórios do dia' }, ...OUTRAS]
+      ...OUTRAS
         .map((m) => h('button.item.card--clicavel', {
           onClick: () => { fecharFolha(); navigate(m.path); },
         },
@@ -102,9 +105,12 @@ export function definirTitulo(texto, sub) {
   if (refs.subtitulo) refs.subtitulo.textContent = sub || '';
 }
 
-/** Marca o módulo de conciliação quando existe pendência aberta. */
+/**
+ * A pendência de vendedor não tem mais aba própria — ela aparece no Hoje, que é
+ * onde a pergunta importa ("de quem foi esta venda?"). A bolinha vai para lá.
+ */
 export function marcarPendencias(quantidade) {
-  const el = refs.nav?.querySelector('[data-path="/conciliacao"]');
+  const el = refs.nav?.querySelector('[data-path="/"]');
   el?.classList.toggle('nav__item--alerta', quantidade > 0);
 }
 

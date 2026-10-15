@@ -269,11 +269,25 @@ export const FONTES = {
   },
 
   /* ------------------------------------------------------------------ bancos */
+  /**
+   * O EXTRATO SAIU DA ROTINA DELA.
+   *
+   * "Sobre o extrato, eu não vou colocar o extrato, porque acho que vai ficar
+   *  muito complexo. O que eu vou colocar é o saldo, para ele conseguir fazer a
+   *  estimativa que a gente precisa."
+   *
+   * Conciliar extrato com título é o trabalho administrativo mais caro que
+   * existe, e era justamente o que ela não quer fazer. O saldo digitado uma vez
+   * por dia responde a mesma pergunta — de onde parte a projeção — sem rotina
+   * nenhuma. A fonte fica aqui, fora da lista, só para o app ainda saber ler um
+   * arquivo antigo que já tenha entrado.
+   */
   extrato: {
     id: 'extrato',
     nome: 'Extrato bancário',
     icone: '🏦',
     periodicidade: 'diaria',
+    semImportacao: true,
     store: 'extrato',
     verdadeDe: 'Saldo real e o que de fato entrou e saiu.',
     descricao: 'OFX é o melhor formato (traz identificador único por lançamento e o saldo). '
@@ -531,9 +545,10 @@ export const FONTES = {
     nome: 'Saldos bancários',
     icone: '🪙',
     periodicidade: 'demanda',
+    semImportacao: true,
     store: 'saldos',
     verdadeDe: 'Saldo inicial do fluxo de caixa.',
-    descricao: 'Só é preciso quando o extrato não traz saldo. Dá para digitar direto em Bancos.',
+    descricao: 'O saldo não se manda por arquivo: ela digita no Caixa, uma vez por dia, por conta.',
     formatos: ['xlsx', 'csv'],
     campos: [
       campo('banco', 'Banco', 'texto', { sinonimos: ['banco', 'conta', 'instituicao'] }),

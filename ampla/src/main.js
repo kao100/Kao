@@ -12,17 +12,11 @@ import { reiniciarSePreciso } from './core/reiniciar.js';
 import { montarShell, aoTrocarRota, atualizarAlertas } from './ui/shell.js';
 import { semear } from './data/seed.js';
 
-import { telaEmpresa } from './ui/views/empresa.js';
 import { telaDiario } from './ui/views/diario.js';
-import { telaCaixa, telaSimulacao } from './ui/views/caixa.js';
 import { telaFluxo } from './ui/views/fluxo.js';
-import { telaCobranca } from './ui/views/cobranca.js';
 import { telaComercial, telaVendedor } from './ui/views/comercial.js';
 import { telaProdutos, telaProduto } from './ui/views/produtos.js';
 import { telaComissoes } from './ui/views/comissoes.js';
-import { telaPagar } from './ui/views/pagar.js';
-import { telaReceber } from './ui/views/receber.js';
-import { telaBancos } from './ui/views/bancos.js';
 import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
 import { telaRt } from './ui/views/rt.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
@@ -32,15 +26,30 @@ import { telaOrcamentos } from './ui/views/orcamentos.js';
 import { telaClientes, telaCliente } from './ui/views/clientes.js';
 import { telaMargem } from './ui/views/margem.js';
 
+/**
+ * CINCO LUGARES, E SÓ.
+ *
+ * "Ficou muito complexo, onde eu não conseguia mais entender e fazer nada."
+ *
+ * Eram vinte e oito rotas e dezessete itens de menu. Nada do que ela pede é
+ * novo — o faturamento diário, a meta, a pasta do mês, tudo já estava pronto e
+ * enterrado. O conserto não é construir: é tirar.
+ *
+ * O que ficou são as cinco coisas que ela nomeou: mandar os relatórios, o fluxo
+ * de caixa, o impulso comercial do dia, a comissão e o fechamento do mês. O
+ * resto do comercial continua existindo, mas se entra POR DENTRO do comercial,
+ * não por um menu que ela precise decorar.
+ *
+ * Saíram de vez, nas palavras dela: "não preciso mais do inadimplência, de
+ * cobrança, nada disso — eu estou conseguindo fazer pelo sistema existente".
+ * Com eles saiu o extrato bancário, que ela trocou pelo saldo informado: "o que
+ * eu vou colocar é o saldo, para ele conseguir fazer a estimativa".
+ */
 const ROTAS = [
-  { path: '/', view: telaDiario, titulo: 'Relatório' },
-  { path: '/diario', view: telaDiario, titulo: 'Relatório' },
-  { path: '/empresa', view: telaEmpresa, titulo: 'Visão da empresa' },
+  { path: '/', view: telaDiario, titulo: 'Hoje' },
+  { path: '/diario', view: telaDiario, titulo: 'Hoje' },
   { path: '/fluxo', view: telaFluxo, titulo: 'Fluxo de caixa' },
   { path: '/caixa', view: telaFluxo, titulo: 'Fluxo de caixa' },
-  { path: '/caixa/antigo', view: telaCaixa, titulo: 'Projeção antiga' },
-  { path: '/caixa/simulacao', view: telaSimulacao, titulo: 'Simulação de cenários' },
-  { path: '/cobranca', view: telaCobranca, titulo: 'Inadimplência' },
   { path: '/comercial', view: telaComercial, titulo: 'Comercial' },
   { path: '/comercial/:id', view: telaVendedor, titulo: 'Vendedor' },
   { path: '/orcamentos', view: telaOrcamentos, titulo: 'Orçamentos' },
@@ -49,15 +58,17 @@ const ROTAS = [
   { path: '/margem', view: telaMargem, titulo: 'Margem e frete' },
   { path: '/produtos', view: telaProdutos, titulo: 'Produtos e curva ABC' },
   { path: '/produtos/:id', view: telaProduto, titulo: 'Produto' },
-  { path: '/comissoes', view: telaComissoes, titulo: 'Comissões' },
-  { path: '/pagar', view: telaPagar, titulo: 'Contas a pagar' },
-  { path: '/receber', view: telaReceber, titulo: 'Contas a receber' },
-  { path: '/bancos', view: telaBancos, titulo: 'Bancos e extrato' },
+  { path: '/comissoes', view: telaComissoes, titulo: 'Comissão' },
   { path: '/rt', view: telaRt, titulo: 'RT (indicação)' },
-  { path: '/conciliacao', view: telaConciliacao, titulo: 'Conciliação' },
+  /**
+   * A tela de pendências não é uma aba: é o destino de um aviso. Ela só aparece
+   * quando o app tem uma pergunta — de quem foi esta venda, quanto custou esta
+   * entrega — e é por isso que ela não ocupa vaga na barra.
+   */
+  { path: '/conciliacao', view: telaConciliacao, titulo: 'O que o app precisa saber' },
   { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
-  { path: '/fechamento', view: telaFechamento, titulo: 'Pasta do mês' },
-  { path: '/arquivos', view: telaArquivos, titulo: 'Relatórios que você manda' },
+  { path: '/fechamento', view: telaFechamento, titulo: 'Fechamento do mês' },
+  { path: '/arquivos', view: telaArquivos, titulo: 'Mandar os relatórios' },
   { path: '/arquivos/:fonte', view: telaImportar, titulo: 'Mandar relatório' },
   { path: '/ajustes', view: telaAjustes, titulo: 'Ajustes' },
 ];
