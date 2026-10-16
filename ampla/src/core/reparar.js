@@ -31,7 +31,18 @@
 import { openDB } from './db.js';
 import { interpretarStatusDoArquivo } from '../logic/ingest.js';
 
-const MARCA = 'reparo_situacao_negada';
+/**
+ * A MARCA TEM VERSÃO.
+ *
+ * O conserto roda uma vez por aparelho — mas quando a REGRA de leitura muda, ele
+ * precisa passar outra vez, senão o aparelho que já rodou a versão anterior fica
+ * com o erro antigo gravado para sempre. Subir o número é o que faz o conserto
+ * alcançar quem já abriu o app.
+ *
+ * v2: o contas a pagar tinha uma segunda leitura, própria, com o mesmo defeito
+ *     da negação ("NÃO PAGO" contém "PAGO"). As duas passaram a usar a mesma.
+ */
+const MARCA = 'reparo_situacao_negada_v2';
 const LOJAS = ['receber', 'pagar'];
 
 /**

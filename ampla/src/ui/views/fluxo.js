@@ -37,7 +37,8 @@ export async function telaFluxo({ query }) {
     : fluxo.periodoDoHorizonte(horizonte, base);
 
   const [r, diag] = await Promise.all([fluxo.projetar(periodo), fluxo.diagnosticar(periodo)]);
-  const porQueZero = (r.totalReceber || r.totalPagar) ? [] : fluxo.explicarZero(diag);
+  /* cada lado zerado se explica; o lado que tem movimento fica calado */
+  const porQueZero = fluxo.explicarZero(diag);
   definirTitulo('Fluxo de caixa', `${formatDate(periodo.de)} a ${formatDate(periodo.ate)}`);
 
   if (!r.temSaldo) {

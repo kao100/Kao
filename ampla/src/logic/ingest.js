@@ -847,6 +847,16 @@ function construirReceber(d, ctx) {
         banco: d.banco || null,
         statusArquivo: d.status || null,
         status: situacao,
+        /**
+         * POR QUE O APP DEU ISSO COMO BAIXADO.
+         *
+         * Guardar o motivo é o que permite a tela responder "e os recebimentos,
+         * por que estão zerados?" sem ninguém abrir o arquivo de novo. Sem ele,
+         * um título pago é indistinguível de um título mal lido.
+         */
+        baixaMotivo: quitado ? motivoDaBaixa(d.status, d.dataRecebimento) : null,
+        /* reimportado em aberto: a baixa por ausência de antes não vale mais */
+        baixadoPorAusencia: quitado ? undefined : false,
         vendedorId: null,
         origem: 'relatorio',
       },
@@ -867,7 +877,17 @@ function construirPagar(d, ctx) {
   const valorPag = d.valor == null ? null : cents(d.valor);
   // mesmo motivo do contas a receber: conta prorrogada é a mesma conta
   const id = unico(`pag_${fornecedor?.id || 'sem'}_${referencia}_${valorPag ?? 'sv'}`, ctx.usados);
-  const pago = !!(d.dataPagamento || /pago|quitad|liquidad|baixad/i.test(d.status || ''));
+  /**
+   * A MESMA LEITURA DO CONTAS A RECEBER, E NÃO UMA SEGUNDA REGRA.
+   *
+   * Aqui havia uma regex própria, com exatamente o mesmo defeito que foi
+   * consertado do outro lado: /pago/ casava com "NÃO PAGO". Duas leituras para a
+   * mesma pergunta é como um conserto arruma metade do app — os pagamentos dela
+   * voltaram pelo reparo da base e teriam quebrado de novo na importação
+   * seguinte, porque esta linha nunca soube da correção.
+   */
+  const situacaoPag = interpretarStatusTitulo(d.status, null, d.dataPagamento);
+  const pago = situacaoPag === 'pago';
 
   return [
     {
@@ -886,9 +906,13 @@ function construirPagar(d, ctx) {
         formaPagamento: d.formaPagamento || null,
         banco: d.banco || null,
         statusArquivo: d.status || null,
-        status: pago ? 'pago' : 'aberto',
+        status: situacaoPag,
         dataPagamento: d.dataPagamento || null,
         valorPago: null,
+        saldo: pago ? 0 : valorPag,
+        baixaMotivo: pago ? motivoDaBaixa(d.status, d.dataPagamento) : null,
+        /* reimportado em aberto: a baixa por ausência de antes não vale mais */
+        baixadoPorAusencia: pago ? undefined : false,
         origem: 'relatorio',
       },
     },
@@ -1154,6 +1178,21 @@ function interpretarStatusNf(texto) {
  * errar para pago, errar para aberto é melhor: um título que aparece no caixa e
  * não devia é uma pergunta; um título que desaparece é um buraco silencioso.
  */
+/**
+ * QUAL FOI A EVIDÊNCIA que fez o app dar o título como baixado.
+ *
+ * "E os recebimentos? Que tá tudo zerado ainda nos recebimentos."
+ *
+ * Sem guardar isto, um título pago é indistinguível de um título mal lido, e a
+ * única forma de descobrir qual é qual é abrir o arquivo de novo — trabalho que
+ * este app existe para não existir. Com o motivo gravado, a tela responde.
+ */
+function motivoDaBaixa(statusArquivo, data) {
+  if (statusArquivo && interpretarStatusTitulo(statusArquivo, null, null) === 'pago') return 'situacao';
+  if (data) return 'data';
+  return 'saldo';
+}
+
 export function interpretarStatusDoArquivo(statusArquivo) {
   return interpretarStatusTitulo(statusArquivo, null, null);
 }

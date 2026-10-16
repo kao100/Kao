@@ -415,6 +415,94 @@ console.log('\n▶ "Não pago" é aberto, e não pago');
   for (const t of titulos) await store.receber.remover(t.id);
 }
 
+console.log('\n▶ O app diz POR QUE deu o título como baixado');
+{
+  /**
+   * "E os recebimentos? Que tá tudo zerado ainda nos recebimentos. Aí parece
+   *  que vai ficar negativado pra sempre. Só tem pagamento, né? Não."
+   *
+   * Dizer "estão todos baixados" não serve: ela sabe que não estão. O que
+   * resolve é dizer POR QUE o app acha que estão, com o texto que ele leu na
+   * coluna Situação. Se o texto diz "Não recebido", o erro é do app. Se diz
+   * "Recebido", o erro está no filtro do export. São conversas diferentes, e
+   * sem o texto nenhuma das duas começa — foi exatamente este ida e volta que
+   * custou três rodadas.
+   */
+  const guardados = {
+    receber: await store.receber.listar(),
+    pagar: await store.pagar.listar(),
+  };
+  const limpar = async () => {
+    for (const t of await store.receber.listar()) await store.receber.remover(t.id);
+    for (const t of await store.pagar.listar()) await store.pagar.remover(t.id);
+  };
+
+  await limpar();
+  /* o cenário dela: as saídas aparecem, as entradas não */
+  await store.pagar.salvar({ id: 'q1', fornecedorNome: 'F', vencimento: '2026-11-20', valor: 5000, status: 'aberto' });
+  /* entradas baixadas por motivos diferentes, para a frase separar um do outro */
+  await store.receber.salvar({ id: 'w1', clienteNome: 'A', vencimento: '2026-11-10', valor: 1000, status: 'pago', saldo: 0, statusArquivo: 'Recebido', baixaMotivo: 'situacao' });
+  await store.receber.salvar({ id: 'w2', clienteNome: 'B', vencimento: '2026-11-11', valor: 2000, status: 'pago', saldo: 0, statusArquivo: 'Em aberto', baixaMotivo: 'data', dataRecebimento: '2026-11-05' });
+  await store.receber.salvar({ id: 'w3', clienteNome: 'C', vencimento: '2026-11-12', valor: 3000, status: 'pago', saldo: 0, baixadoPorAusencia: true });
+  await store.receber.salvar({ id: 'w4', clienteNome: 'D', vencimento: '2026-11-13', valor: 4000, status: 'pago', saldo: 0, baixaManual: true });
+
+  const d = await fluxo.diagnosticar({ de: '2026-11-01', ate: '2026-11-30' });
+  const frase = fluxo.explicarZero(d).map((f) => f.texto).join(' || ');
+
+  ok('a frase nomeia o motivo da baixa', /coluna Situação do arquivo dizia/.test(frase), frase);
+  ok('e mostra o texto que o app leu, entre aspas', /"Recebido"/.test(frase), frase);
+  ok('a data preenchida é nomeada como motivo próprio',
+    /data de pagamento\/recebimento preenchida/.test(frase), frase);
+  ok('e o texto desse caso também aparece — é o que denuncia o erro de leitura',
+    /"Em aberto"/.test(frase), frase);
+
+  /**
+   * E O QUE ELA MESMA CAUSOU NÃO VIRA SUSPEITA: sumir do relatório e baixar à
+   * mão são o app funcionando. Misturá-los com o erro de leitura esconderia o
+   * erro no meio do normal.
+   */
+  const motivos = d.receber.porQueBaixados.map((g) => g.motivo).sort();
+  igual('os quatro motivos são separados', motivos.join(','), 'ausencia,data,manual,situacao');
+
+  /**
+   * E CADA LADO SE EXPLICA SOZINHO — era aqui o furo.
+   *
+   * A explicação só aparecia quando OS DOIS lados estavam zerados. Com as saídas
+   * funcionando e as entradas zeradas (o caso dela, e o mais assustador, porque
+   * o caixa fica negativo para sempre) a tela não dizia nada.
+   */
+  const proj = await fluxo.projetar({ de: '2026-11-01', ate: '2026-11-30' });
+  igual('as saídas aparecem', proj.totalPagar, 5000);
+  igual('e as entradas estão zeradas — o cenário dela', proj.totalReceber, 0);
+  ok('mesmo com um lado funcionando, o lado zerado é explicado',
+    /a receber/.test(frase), frase);
+  ok('e o lado que funciona fica calado', !/a pagar/.test(frase), frase);
+
+  /**
+   * NO CASO MISTO A SUSPEITA SE SEPARA DO NORMAL.
+   *
+   * Com um título em aberto (ainda que fora do período), a frase deixa de ser
+   * "está tudo baixado" e passa a explicar o período — e aí a nota das baixas
+   * precisa aparecer por conta própria, falando SÓ das que podem ser erro de
+   * leitura. Sumir do relatório e baixar à mão são o app funcionando: acusá-las
+   * aqui esconderia o erro no meio do normal.
+   */
+  await store.receber.salvar({
+    id: 'w5', clienteNome: 'E', vencimento: '2027-06-01', valor: 9000, status: 'aberto',
+  });
+  const d2 = await fluxo.diagnosticar({ de: '2026-11-01', ate: '2026-11-30' });
+  const falas2 = fluxo.explicarZero(d2);
+  const suspeita = falas2.find((f) => /app leu errado/.test(f.texto));
+  ok('a nota de suspeita existe', !!suspeita, falas2.map((f) => f.texto).join(' || '));
+  ok('ela conta só as duas baixas duvidosas', /2 títulos a receber \(R\$ 3\.000,00\)/.test(suspeita.texto), suspeita.texto);
+  ok('e não acusa a baixa por ausência', !/sumiram de um relatório/.test(suspeita.texto), suspeita.texto);
+  ok('nem a baixa feita à mão por ela', !/à mão/.test(suspeita.texto), suspeita.texto);
+
+  await limpar();
+  for (const t of guardados.receber) await store.receber.salvar(t);
+  for (const t of guardados.pagar) await store.pagar.salvar(t);
+}
+
 console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
 {
   /**
@@ -443,7 +531,7 @@ console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
     { id: 'rp7', clienteNome: 'G', vencimento: '2026-11-16', valor: 7000, statusArquivo: 'Em aberto', status: 'aberto', saldo: 7000 },
   ];
   for (const t of base) await store.receber.salvar(t);
-  await dbMod.remove('kv', 'reparo_situacao_negada');
+  await dbMod.remove('kv', 'reparo_situacao_negada_v2');
 
   const r = await reparar.repararSituacaoNegada();
   igual('reabre só os que o próprio texto diz em aberto', r.reabertos, 2);

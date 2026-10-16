@@ -27,7 +27,9 @@
 
 import * as store from '../core/store.js';
 import { cents, sum } from '../core/util.js';
-import { today, addDays, eachDay, monthStart, monthEnd, addMonths, monthKey } from '../core/format.js';
+import {
+  money, today, addDays, eachDay, monthStart, monthEnd, addMonths, monthKey,
+} from '../core/format.js';
 import { statusTitulo } from './link.js';
 
 export const HORIZONTES = [
@@ -348,6 +350,7 @@ function contarOndeEstao(titulos, de, fim) {
   return {
     importados: titulos.length,
     baixados: titulos.filter((t) => statusTitulo(t) === 'pago').length,
+    porQueBaixados: agruparMotivos(titulos.filter((t) => statusTitulo(t) === 'pago')),
     cancelados: titulos.filter((t) => statusTitulo(t) === 'cancelado').length,
     emAberto: emAberto.length,
     vencidos: comData.filter((t) => t.vencimento < de).length,
@@ -358,6 +361,51 @@ function contarOndeEstao(titulos, de, fim) {
     semValor: noPeriodo.filter((t) => !saldoDe(t)).length,
     valorNoPeriodo: cents(sum(noPeriodo, saldoDe)),
   };
+}
+
+/**
+ * POR QUE CADA TÍTULO FOI DADO COMO BAIXADO, agrupado e com exemplos.
+ *
+ * "E os recebimentos? Que tá tudo zerado ainda nos recebimentos. Aí parece que
+ *  vai ficar negativado pra sempre. Só tem pagamento, né? Não."
+ *
+ * Dizer "estão todos baixados" não serve: ela sabe que não estão. O que resolve
+ * é dizer POR QUE o app acha que estão — e mostrar o texto que ele leu na coluna
+ * Situação, palavra por palavra. Se o texto diz "Não recebido", o erro é do app
+ * e aparece na hora. Se diz "Recebido", o erro está no filtro do export. São
+ * conversas diferentes, e sem o texto nenhuma das duas começa.
+ */
+function agruparMotivos(baixados) {
+  const grupos = new Map();
+  for (const t of baixados) {
+    const motivo = t.baixadoPorAusencia ? 'ausencia'
+      : (t.baixaManual ? 'manual' : (t.baixaMotivo || (t.statusArquivo ? 'situacao' : 'indefinido')));
+    if (!grupos.has(motivo)) grupos.set(motivo, { motivo, quantidade: 0, valor: 0, textos: new Set() });
+    const g = grupos.get(motivo);
+    g.quantidade += 1;
+    g.valor = cents(g.valor + (t.valor || 0));
+    if (t.statusArquivo) g.textos.add(String(t.statusArquivo).trim());
+  }
+  return [...grupos.values()]
+    .map((g) => ({ ...g, textos: [...g.textos].slice(0, 4) }))
+    .sort((a, b) => b.quantidade - a.quantidade);
+}
+
+const NOME_DO_MOTIVO = {
+  situacao: 'porque a coluna Situação do arquivo dizia isso',
+  data: 'porque o arquivo trouxe uma data de pagamento/recebimento preenchida',
+  saldo: 'porque o arquivo trouxe saldo zero',
+  ausencia: 'porque sumiram de um relatório posterior (o app entende sumir como baixa)',
+  manual: 'porque a baixa foi feita aqui dentro, à mão',
+  indefinido: 'sem motivo registrado — entraram antes do app passar a guardar isso',
+};
+
+/** A frase que descreve um grupo de baixas, com o texto lido entre aspas. */
+function frasearMotivo(g) {
+  const base = `${g.quantidade} ${g.quantidade === 1 ? 'título' : 'títulos'} `
+    + `(${money(g.valor)}) ${NOME_DO_MOTIVO[g.motivo] || g.motivo}`;
+  if (!g.textos.length) return `${base}.`;
+  return `${base} — o arquivo dizia ${g.textos.map((t) => `"${t}"`).join(', ')}.`;
 }
 
 /**
@@ -377,6 +425,19 @@ export function explicarZero(d) {
   ];
 
   for (const { nome, c, arquivo } of lados) {
+    /**
+     * CADA LADO SE EXPLICA SOZINHO.
+     *
+     * "E os recebimentos? Que tá tudo zerado ainda nos recebimentos. Aí parece
+     *  que vai ficar negativado pra sempre. Só tem pagamento, né? Não."
+     *
+     * Era exatamente este o furo: a explicação só aparecia quando OS DOIS lados
+     * estavam zerados. Com as saídas funcionando e as entradas zeradas — o caso
+     * dela, e o mais assustador de todos, porque o caixa fica negativo para
+     * sempre — a tela não dizia nada. Agora o lado que tem movimento fica
+     * calado e o lado zerado fala.
+     */
+    if (c.valorNoPeriodo) continue;
     if (!c.importados) {
       falas.push({
         nivel: 'atencao',
@@ -391,8 +452,10 @@ export function explicarZero(d) {
         nivel: 'atencao',
         texto: `${tit(c.importados)} ${nome} ${c.importados === 1 ? 'entrou' : 'entraram'} na base, `
           + (c.importados === 1 ? 'e está baixado ou cancelado' : 'e estão baixados ou cancelados')
-          + ' — então não há nada para projetar. Se não é isso que você esperava, confira a coluna '
-          + `Situação do export do "${arquivo}": o app já errou aqui lendo "Não pago" como pago.`,
+          + ' — então não há nada para projetar. O app deu baixa assim: '
+          + c.porQueBaixados.map(frasearMotivo).join(' ')
+          + ' Se o arquivo dizia que o título está EM ABERTO, o erro é de leitura do app, e isto '
+          + 'aqui é o que eu preciso saber para consertar.',
       });
       continue;
     }
@@ -424,6 +487,8 @@ export function explicarZero(d) {
         texto: `Nenhum título ${nome} vence neste período: ${partes.join('; ')}. `
           + (c.depoisDoPeriodo ? 'Amplie o período no filtro de cima para vê-los.' : ''),
       });
+      const suspeita = notaDasBaixas(c, nome);
+      if (suspeita) falas.push(suspeita);
       continue;
     }
     if (c.semValor === c.noPeriodo) {
@@ -450,8 +515,36 @@ export function explicarZero(d) {
           + 'vencimento e ficou fora da projeção — não aparece em dia nenhum.',
       });
     }
+    const suspeita = notaDasBaixas(c, nome);
+    if (suspeita) falas.push(suspeita);
   }
   return falas;
+}
+
+/**
+ * A NOTA SOBRE AS BAIXAS QUE MERECEM DESCONFIANÇA.
+ *
+ * Baixa por ausência no relatório e baixa feita à mão são o app funcionando: ela
+ * mesma causou as duas. Baixa decidida pela coluna Situação, por uma data ou sem
+ * motivo registrado é onde o erro de leitura mora — foi ali que "NÃO PAGO" virou
+ * pago. Então a nota fala só desses, com o texto que o arquivo trazia.
+ *
+ * Ela só aparece quando o lado em questão está contribuindo zero: num mês
+ * normal, títulos baixados são o esperado e não precisam de aviso.
+ */
+function notaDasBaixas(c, nome) {
+  const suspeitos = (c.porQueBaixados || [])
+    .filter((g) => g.motivo === 'situacao' || g.motivo === 'data' || g.motivo === 'indefinido');
+  if (!suspeitos.length) return null;
+  const quantos = suspeitos.reduce((a, g) => a + g.quantidade, 0);
+  const valor = cents(suspeitos.reduce((a, g) => a + g.valor, 0));
+  return {
+    nivel: 'atencao',
+    texto: `E há ${quantos} ${quantos === 1 ? 'título' : 'títulos'} ${nome} (${money(valor)}) que o `
+      + 'app deu como baixados por conta do que leu no arquivo: '
+      + suspeitos.map(frasearMotivo).join(' ')
+      + ' Se algum desses está EM ABERTO no seu sistema, o app leu errado.',
+  };
 }
 
 /** Os totais do mês corrente, para o resumo de abertura. */

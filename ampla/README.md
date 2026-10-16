@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 616 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 629 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -227,6 +227,26 @@ app não conseguiu identificar sozinho.
   previsto, parcial) vence as que significam "aconteceu". Entre errar para
   aberto e errar para pago, erra-se para aberto: um título que aparece no caixa
   e não devia é uma pergunta; um título que desaparece é um buraco silencioso.
+- **Uma leitura só para a mesma pergunta.** O contas a pagar tinha uma segunda
+  regra, própria, com exatamente o mesmo defeito da negação que havia sido
+  consertado no contas a receber. O conserto da base fez os pagamentos dela
+  voltarem, e a importação seguinte os teria quebrado de novo, porque aquela
+  linha nunca soube da correção. Duas leituras para a mesma pergunta é como um
+  conserto arrumar metade do app.
+- **Cada lado do caixa se explica sozinho.** A explicação do zero só aparecia
+  quando as duas pontas estavam zeradas. Com as saídas funcionando e as entradas
+  em zero — o caso mais assustador, porque o caixa fica negativo para sempre — a
+  tela não dizia nada. Agora o lado com movimento fica calado e o lado zerado
+  fala.
+- **O app diz POR QUE deu o título como baixado, com o texto que leu.** "Estão
+  todos baixados" não serve: ela sabe que não estão. O título guarda a evidência
+  da baixa — a coluna Situação, uma data preenchida, saldo zero, ausência no
+  relatório seguinte, baixa feita à mão — e a tela mostra o texto do arquivo
+  entre aspas. Se o arquivo dizia "Não recebido", o erro é de leitura do app e
+  aparece na hora; se dizia "Recebido", o erro está no filtro do export. São
+  conversas diferentes, e sem o texto nenhuma das duas começa. Ausência e baixa
+  manual não entram na lista de suspeitas: as duas são o app funcionando, e
+  misturá-las esconderia o erro no meio do normal.
 - **Erro gravado na base se conserta sem reimportação.** Cada título guarda
   `statusArquivo`, o texto cru da coluna Situação — então o conserto relê esse
   texto com a regra certa, uma vez por aparelho, e não toca no que foi baixado
