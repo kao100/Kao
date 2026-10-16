@@ -1,103 +1,130 @@
 /**
- * CONSERTO DE UM ERRO QUE JÁ ESTÁ GRAVADO NA BASE.
+ * FAZER OS TÍTULOS GUARDADOS CONCORDAREM COM O QUE O ARQUIVO DIZIA.
  *
- * "Eu acabei de mandar o contas a pagar só a partir do dia 17 e o que tá em
- *  aberto, ou seja, não tinha nenhum pago. E não tá calhando, tá aparecendo
- *  zero. E eu sei que não é zero. Tem alguma coisa errada e não é o relatório."
+ * "Eu reenviei. Esse mesmo arquivo que eu passei para você, eu enviei aqui. Eu
+ *  apaguei e reenviei. E não foi."
  *
- * Não era o relatório. A leitura da situação do título procurava "pago",
- * "recebid", "baixad" dentro do texto sem olhar a negação na frente — e
- * "NÃO PAGO" CONTÉM "PAGO". Todo título em aberto entrava no app como baixado,
- * com saldo zero, e o fluxo de caixa dava zero com a base cheia de títulos.
+ * O app mostrava 1232 títulos baixados, afirmando que a coluna Situação dizia
+ * isso — sobre linhas em que o arquivo diz, em letras, "Em aberto". Nenhuma
+ * versão do código faz isso na importação: aqueles registros foram gravados por
+ * uma versão antiga, quando a leitura da situação ainda era a errada, e ficaram
+ * ali. Cada conserto novo só alcança o que entra DEPOIS dele, e a base continua
+ * contando a história velha.
  *
- * Corrigir a leitura resolve as PRÓXIMAS importações. Não resolve o que já está
- * gravado — e mandar ela reimportar tudo seria cobrar dela o preço do meu erro,
- * justamente no app que existe para eliminar trabalho administrativo.
+ * A saída é não depender de quando o registro entrou. Cada título guarda
+ * `statusArquivo`: o texto cru que veio na coluna Situação. Relendo esse texto
+ * com a regra de hoje, o estado guardado volta a concordar com o arquivo — sem
+ * reimportar nada, e de novo a cada vez que a regra melhorar.
  *
- * Felizmente cada título guarda `statusArquivo`: o texto cru que veio na coluna
- * Situação. Então o conserto não precisa de arquivo nenhum — ele relê esse texto
- * com a regra certa.
+ * NOS DOIS SENTIDOS, e isso é o que faz dele um conserto e não um remendo:
+ * título que o arquivo diz EM ABERTO volta a abrir; título que o arquivo diz
+ * RECEBIDO (no relatório dela, "Confirmado") é baixado. Um conserto que só abre
+ * trocaria um erro por outro — inflaria o caixa.
  *
- * O QUE ELE NÃO TOCA, de propósito:
+ * O QUE ELE NUNCA TOCA, de propósito:
  *
- *  - título cujo texto de origem realmente diz pago, quitado, recebido;
- *  - título baixado por AUSÊNCIA no relatório (a fotografia funcionando: ele
- *    sumiu do export porque foi pago de verdade no sistema dela);
- *  - título baixado À MÃO por ela aqui dentro;
- *  - título sem `statusArquivo`, porque aí não há texto de origem para reler e
- *    reabri-lo seria adivinhação — exatamente o que o app não faz.
+ *  - título baixado À MÃO por ela aqui dentro: é decisão dela, e o arquivo não
+ *    sabe dela;
+ *  - título baixado por AUSÊNCIA no relatório seguinte: é a fotografia
+ *    funcionando — ele sumiu do export porque foi pago de verdade, e o texto
+ *    guardado é de um arquivo mais velho que esse silêncio;
+ *  - título sem `statusArquivo`, porque aí não há texto para reler e decidir
+ *    qualquer coisa seria adivinhação.
  */
 
 import { openDB } from './db.js';
 import { interpretarStatusDoArquivo } from '../logic/ingest.js';
 
 /**
- * A MARCA TEM VERSÃO.
- *
- * O conserto roda uma vez por aparelho — mas quando a REGRA de leitura muda, ele
- * precisa passar outra vez, senão o aparelho que já rodou a versão anterior fica
- * com o erro antigo gravado para sempre. Subir o número é o que faz o conserto
- * alcançar quem já abriu o app.
+ * A marca tem versão: quando a REGRA de leitura muda, o conserto precisa passar
+ * outra vez, senão o aparelho que já rodou a versão anterior fica com o erro
+ * antigo gravado para sempre.
  *
  * v2: o contas a pagar tinha uma segunda leitura, própria, com o mesmo defeito
  *     da negação ("NÃO PAGO" contém "PAGO"). As duas passaram a usar a mesma.
+ * v3: "Confirmado" passou a ser lido como recebido, e o conserto passou a
+ *     fechar, e não só a reabrir.
  */
-const MARCA = 'reparo_situacao_negada_v2';
+const MARCA = 'reparo_situacao_v3';
 const LOJAS = ['receber', 'pagar'];
 
 /**
- * Roda uma vez por aparelho. Nunca derruba a abertura do app: na dúvida, não
- * mexe em nada e deixa o app abrir.
- *
- * @returns {Promise<{reparou: boolean, reabertos?: number, valor?: number, erro?: string}>}
+ * Roda uma vez por aparelho, na abertura. Nunca derruba o app: na dúvida, não
+ * mexe em nada.
  */
 export async function repararSituacaoNegada() {
   try {
     if (typeof indexedDB === 'undefined') return { reparou: false };
     const db = await openDB();
     if (await jaReparado(db)) return { reparou: false };
-
-    let reabertos = 0;
-    let valor = 0;
-    for (const loja of LOJAS) {
-      const r = await repararLoja(db, loja);
-      reabertos += r.reabertos;
-      valor += r.valor;
-    }
-    await marcar(db, { reabertos, valor });
-    return { reparou: reabertos > 0, reabertos, valor };
+    const r = await relerSituacoes();
+    await marcar(db, r);
+    return { ...r, reparou: r.mudados > 0 };
   } catch (err) {
     return { reparou: false, erro: String(err?.message || err) };
   }
 }
 
-async function repararLoja(db, loja) {
-  const titulos = await todos(db, loja);
-  const consertados = [];
+/**
+ * A mesma releitura, a pedido dela, quantas vezes quiser.
+ *
+ * O automático resolve quem abre o app e nem percebe. Este é para quando ela
+ * está olhando um número errado AGORA e quer que ele se acerte na hora — sem
+ * apagar nada, sem reimportar, sem depender de eu ter acertado a versão.
+ */
+export async function relerSituacoes() {
+  let reabertos = 0;
+  let baixados = 0;
+  let valorReaberto = 0;
+  let valorBaixado = 0;
 
-  for (const t of titulos) {
-    if (t.status !== 'pago') continue;
-    if (t.baixadoPorAusencia || t.baixaManual) continue;
-    if (!t.statusArquivo) continue;
+  for (const loja of LOJAS) {
+    const db = await openDB();
+    const titulos = await todos(db, loja);
+    const mudar = [];
 
-    /* o texto de origem é relido com a regra certa — sem data e sem saldo, para
-       a decisão vir da palavra que o relatório escreveu, e só dela */
-    if (interpretarStatusDoArquivo(t.statusArquivo) !== 'aberto') continue;
+    for (const t of titulos) {
+      if (t.baixaManual || t.baixadoPorAusencia) continue;
+      if (!t.statusArquivo) continue;
 
-    consertados.push({
-      ...t,
-      status: 'aberto',
-      saldo: t.valor ?? null,
-      valorRecebido: null,
-      valorPago: null,
-      reabertoPorConserto: true,
-    });
+      const deveria = interpretarStatusDoArquivo(t.statusArquivo);
+      const agora = t.status === 'pago' || t.status === 'cancelado' ? t.status : 'aberto';
+      if (deveria === agora) continue;
+      if (deveria === 'cancelado') continue;
+
+      if (deveria === 'aberto') {
+        mudar.push({
+          ...t,
+          status: 'aberto',
+          saldo: t.valor ?? null,
+          valorRecebido: null,
+          valorPago: null,
+          baixaMotivo: null,
+        });
+        reabertos += 1;
+        valorReaberto += t.valor || 0;
+      } else {
+        mudar.push({
+          ...t,
+          status: 'pago',
+          saldo: 0,
+          baixaMotivo: 'situacao',
+        });
+        baixados += 1;
+        valorBaixado += t.valor || 0;
+      }
+    }
+
+    if (mudar.length) await salvarTodos(db, loja, mudar);
   }
 
-  if (consertados.length) await salvarTodos(db, loja, consertados);
+  const cent = (v) => Math.round(v * 100) / 100;
   return {
-    reabertos: consertados.length,
-    valor: consertados.reduce((a, t) => a + (t.valor || 0), 0),
+    reabertos,
+    baixados,
+    mudados: reabertos + baixados,
+    valorReaberto: cent(valorReaberto),
+    valorBaixado: cent(valorBaixado),
   };
 }
 

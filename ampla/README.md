@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 643 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 658 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -276,6 +276,25 @@ app não conseguiu identificar sozinho.
   conversas diferentes, e sem o texto nenhuma das duas começa. Ausência e baixa
   manual não entram na lista de suspeitas: as duas são o app funcionando, e
   misturá-las esconderia o erro no meio do normal.
+- **O conserto não pode depender de quando o registro entrou.** Cada correção
+  da leitura só alcança o que entra DEPOIS dela, e reimportar só resolve se o
+  aparelho já estiver com o código novo — coisa que ela não tem como saber. Daí
+  o botão **"Reler as situações do arquivo"**: cada título guardou o texto cru
+  da coluna Situação, e relê-lo com a regra de hoje faz o estado guardado voltar
+  a concordar com o arquivo, sem apagar nada e sem reimportar, quantas vezes for
+  preciso. Nos **dois sentidos**: o que o arquivo diz em aberto volta a abrir, o
+  que ele diz recebido é baixado — um conserto que só abre trocaria um erro por
+  outro e inflaria o caixa. Baixa manual e baixa por ausência no relatório
+  seguem intocadas.
+- **Palpite não se apresenta como leitura.** Quando o motivo da baixa não estava
+  gravado, o app dizia "a coluna Situação dizia isso" — e escreveu isso sobre
+  1232 títulos cujo arquivo diz, em letras, "Em aberto". A frase acusava o
+  relatório de algo que o relatório não diz e mandou a investigação para o lado
+  errado. Agora a falta de motivo é dita como falta de motivo.
+- **Conserto que não aparece é igual a conserto que não funcionou.** A releitura
+  escreve direto no banco, e o app guarda os títulos em memória: sem limpar esse
+  cache, 65 títulos voltavam a abrir de verdade e a tela seguia mostrando
+  R$ 0,00. Quem pagaria essa diferença é quem está olhando a tela.
 - **Erro gravado na base se conserta sem reimportação.** Cada título guarda
   `statusArquivo`, o texto cru da coluna Situação — então o conserto relê esse
   texto com a regra certa, uma vez por aparelho, e não toca no que foi baixado

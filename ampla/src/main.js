@@ -115,12 +115,15 @@ async function iniciar() {
         import('./ui/components/toast.js'),
         import('./core/store.js'),
       ]);
-      ok(`${reparo.reabertos} título(s) voltaram para "em aberto" — ${money(reparo.valor)}.`);
+      const partes = [];
+      if (reparo.reabertos) partes.push(`${reparo.reabertos} voltaram para "em aberto" (${money(reparo.valorReaberto)})`);
+      if (reparo.baixados) partes.push(`${reparo.baixados} foram dados como recebidos (${money(reparo.valorBaixado)})`);
+      ok(`Títulos relidos do arquivo: ${partes.join(' e ')}.`);
       /* e fica no histórico: um aviso de rodapé passa, o número precisa ficar */
       await store.registrar('conserto', {
-        alvo: 'Situação lida com negação',
-        de: `${reparo.reabertos} títulos como pagos`,
-        para: `em aberto (${money(reparo.valor)})`,
+        alvo: 'Situações relidas do arquivo',
+        de: `${reparo.mudados} títulos`,
+        para: partes.join(' e '),
       });
     }
   } catch (err) {

@@ -214,7 +214,13 @@ export async function telaAjustes() {
         'Faça isto uma vez, e logo depois importe os relatórios de Contas a Receber e a Pagar mais '
         + 'recentes. Eles passam a ser a fotografia inicial, e daí para a frente o app acompanha '
         + 'as baixas sozinho.'),
+      h('p.pequeno.muted', { style: { marginTop: '8px' } },
+        'Antes de apagar, tente reler: cada título guardou o texto que veio na coluna Situação do '
+        + 'seu relatório, e reler faz o que está guardado voltar a concordar com o arquivo — sem '
+        + 'apagar nada e sem reimportar.'),
       h('div.btn-linha', { style: { marginTop: '10px' } },
+        botao('🔁 Reler as situações do arquivo', { tipo: 'primario', onClick: () => relerSituacoes() })),
+      h('div.btn-linha', { style: { marginTop: '8px' } },
         botao('🧹 Apagar títulos e recomeçar', { tipo: 'perigo', onClick: () => recomecarFinanceiro() }))),
       aviso('O extrato bancário saiu da rotina. A projeção agora parte do saldo que você informa no '
         + 'Fluxo de caixa, somando o que os relatórios de títulos dizem. Nada de conciliar '
@@ -374,6 +380,39 @@ async function editarVendedor(vendedor) {
  * e WhatsApp; comprimida dá 590 KB, que vai por qualquer lugar. Num navegador
  * sem CompressionStream, sai o JSON mesmo — grande, mas funcionando.
  */
+async function relerSituacoes() {
+  const [{ relerSituacoes: reler }, link] = await Promise.all([
+    import('../../core/reparar.js'),
+    import('../../logic/link.js'),
+  ]);
+  const r = await reler();
+  if (!r.mudados) {
+    ok('Nada mudou: o que está guardado já concorda com o que os arquivos diziam.');
+    return;
+  }
+  /**
+   * LIMPAR A MEMÓRIA ANTES DE REDESENHAR.
+   *
+   * A releitura escreve direto no banco, e o app guarda os títulos em memória
+   * para não reler o banco a cada tela. Sem limpar, ela apertava o botão, 65
+   * títulos voltavam a abrir de verdade — e a tela continuava mostrando
+   * R$ 0,00. Um conserto que funciona mas não aparece é indistinguível de um
+   * conserto que não funciona, e é ela quem pagaria por essa diferença.
+   */
+  store.limparCache();
+  await link.recalcular();
+  const partes = [];
+  if (r.reabertos) partes.push(`${r.reabertos} voltaram para "em aberto" (${money(r.valorReaberto)})`);
+  if (r.baixados) partes.push(`${r.baixados} foram dados como recebidos (${money(r.valorBaixado)})`);
+  await store.registrar('conserto', {
+    alvo: 'Situações relidas do arquivo',
+    de: `${r.mudados} títulos`,
+    para: partes.join(' e '),
+  });
+  ok(`${partes.join(' e ')}.`);
+  refresh();
+}
+
 async function recomecarFinanceiro() {
   const [receber, pagar] = await Promise.all([store.receber.listar(), store.pagar.listar()]);
   const todos = [...receber, ...pagar];

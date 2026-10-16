@@ -378,8 +378,19 @@ function contarOndeEstao(titulos, de, fim) {
 function agruparMotivos(baixados) {
   const grupos = new Map();
   for (const t of baixados) {
+    /**
+     * SEM MOTIVO GRAVADO, O APP NÃO CHUTA UM.
+     *
+     * Aqui a falta de motivo virava "a coluna Situação dizia isso" — e foi isso
+     * que o app escreveu na tela dela sobre 1232 títulos cujo arquivo dizia, em
+     * letras, "Em aberto". A frase acusava o relatório de uma coisa que o
+     * relatório não diz, e mandou a investigação para o lado errado.
+     *
+     * Um palpite apresentado como leitura é pior que um "não sei": o "não sei"
+     * ao menos leva à pergunta certa.
+     */
     const motivo = t.baixadoPorAusencia ? 'ausencia'
-      : (t.baixaManual ? 'manual' : (t.baixaMotivo || (t.statusArquivo ? 'situacao' : 'indefinido')));
+      : (t.baixaManual ? 'manual' : (t.baixaMotivo || 'indefinido'));
     if (!grupos.has(motivo)) grupos.set(motivo, { motivo, quantidade: 0, valor: 0, textos: new Set() });
     const g = grupos.get(motivo);
     g.quantidade += 1;
@@ -397,7 +408,8 @@ const NOME_DO_MOTIVO = {
   saldo: 'porque o arquivo trouxe saldo zero',
   ausencia: 'porque sumiram de um relatório posterior (o app entende sumir como baixa)',
   manual: 'porque a baixa foi feita aqui dentro, à mão',
-  indefinido: 'sem motivo registrado — entraram antes do app passar a guardar isso',
+  indefinido: 'sem motivo registrado: foram baixados por uma versão antiga do app, que não '
+    + 'guardava o porquê — o botão "Reler as situações" acerta isso sem reimportar nada',
 };
 
 /** A frase que descreve um grupo de baixas, com o texto lido entre aspas. */

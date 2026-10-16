@@ -455,6 +455,69 @@ console.log('\n▶ Gráfico sem número não finge desenho');
   ok('o gráfico descarta ponto sem número', /Number\.isFinite/.test(chart), '');
 }
 
+console.log('\n▶ Reler as situações acerta a base sem reimportar');
+{
+  /**
+   * "Eu reenviei. Esse mesmo arquivo que eu passei para você, eu enviei aqui.
+   *  Eu apaguei e reenviei. E não foi."
+   *
+   * A tela dela mostrava 1232 títulos baixados, afirmando que a coluna Situação
+   * dizia isso — sobre linhas em que o arquivo diz, em letras, "Em aberto".
+   * Nenhuma versão do código faz isso na importação: aqueles registros foram
+   * gravados por uma versão antiga e ficaram. Cada conserto novo só alcança o
+   * que entra DEPOIS dele, e reimportar só resolve se o aparelho já estiver com
+   * o código novo — coisa que ela não tem como saber.
+   *
+   * Então o conserto não pode depender de quando o registro entrou. Ele relê o
+   * `statusArquivo` guardado com a regra de hoje, nos DOIS sentidos.
+   */
+  const reparar = await import('../src/core/reparar.js');
+  const guardados = await store.receber.listar();
+  for (const t of guardados) await store.receber.remover(t.id);
+
+  /* a base dela: tudo baixado, inclusive o que o arquivo diz em aberto */
+  const base = [
+    { id: 'x1', clienteNome: 'A', vencimento: '2026-12-08', valor: 4904.95, statusArquivo: 'Em aberto', status: 'pago', saldo: 0, valorRecebido: 4904.95 },
+    { id: 'x2', clienteNome: 'B', vencimento: '2026-12-15', valor: 9670, statusArquivo: 'Em aberto', status: 'pago', saldo: 0, valorRecebido: 9670 },
+    { id: 'x3', clienteNome: 'C', vencimento: '2026-10-01', valor: 900, statusArquivo: 'Atrasado', status: 'pago', saldo: 0, valorRecebido: 900 },
+    /* este o arquivo diz recebido, e estava aberto: o conserto tem de FECHAR */
+    { id: 'x4', clienteNome: 'D', vencimento: '2026-08-11', valor: 2500, statusArquivo: 'Confirmado', status: 'aberto', saldo: 2500 },
+    /* e estes o conserto não encosta */
+    { id: 'x5', clienteNome: 'E', vencimento: '2026-11-01', valor: 700, statusArquivo: 'Em aberto', status: 'pago', saldo: 0, baixaManual: true },
+    { id: 'x6', clienteNome: 'F', vencimento: '2026-11-02', valor: 800, statusArquivo: 'Em aberto', status: 'pago', saldo: 0, baixadoPorAusencia: true },
+    { id: 'x7', clienteNome: 'G', vencimento: '2026-11-03', valor: 600, status: 'pago', saldo: 0 },
+  ];
+  for (const t of base) await store.receber.salvar(t);
+
+  const r = await reparar.relerSituacoes();
+  igual('reabre o que o arquivo diz em aberto (e o atrasado)', r.reabertos, 3);
+  igual('e fecha o que o arquivo diz recebido', r.baixados, 1);
+  igual('somando o que voltou para o caixa', r.valorReaberto, 15474.95);
+  igual('e o que saiu dele', r.valorBaixado, 2500);
+
+  const dep = new Map((await store.receber.listar()).map((t) => [t.id, t]));
+  igual('"Em aberto" volta a abrir', dep.get('x1').status, 'aberto');
+  igual('com o saldo cheio', dep.get('x1').saldo, 4904.95);
+  igual('e sem recebimento registrado', dep.get('x1').valorRecebido, null);
+  igual('"Atrasado" também abre — atraso não é baixa', dep.get('x3').status, 'aberto');
+  igual('"Confirmado" é baixado, nos dois sentidos', dep.get('x4').status, 'pago');
+  igual('e zera o saldo', dep.get('x4').saldo, 0);
+  igual('baixa feita à mão por ela é respeitada', dep.get('x5').status, 'pago');
+  igual('baixa por ausência no relatório é respeitada', dep.get('x6').status, 'pago');
+  igual('sem texto de origem, o app não adivinha', dep.get('x7').status, 'pago');
+
+  /* e o caixa deixa de estar zerado */
+  const proj = await fluxo.projetar({ de: '2026-11-15', ate: '2026-12-31' });
+  igual('o caixa volta a ter entrada', proj.totalReceber, 14574.95);
+
+  /* rodar de novo não muda mais nada: o conserto é idempotente */
+  const r2 = await reparar.relerSituacoes();
+  igual('reler de novo não mexe em nada', r2.mudados, 0);
+
+  for (const t of base) await store.receber.remover(t.id);
+  for (const t of guardados) await store.receber.salvar(t);
+}
+
 console.log('\n▶ O app diz POR QUE deu o título como baixado');
 {
   /**
@@ -674,11 +737,11 @@ console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
     { id: 'rp7', clienteNome: 'G', vencimento: '2026-11-16', valor: 7000, statusArquivo: 'Em aberto', status: 'aberto', saldo: 7000 },
   ];
   for (const t of base) await store.receber.salvar(t);
-  await dbMod.remove('kv', 'reparo_situacao_negada_v2');
+  await dbMod.remove('kv', 'reparo_situacao_v3');
 
   const r = await reparar.repararSituacaoNegada();
   igual('reabre só os que o próprio texto diz em aberto', r.reabertos, 2);
-  igual('somando o valor que tinha sumido do caixa', r.valor, 3000);
+  igual('somando o valor que tinha sumido do caixa', r.valorReaberto, 3000);
 
   const dep = new Map((await store.receber.listar()).map((t) => [t.id, t]));
   igual('"Não pago" volta para aberto', dep.get('rp1').status, 'aberto');

@@ -114,6 +114,19 @@ export async function telaFluxo({ query }) {
        * foram parar, e o que fazer.
        */
       ...porQueZero.map((f) => aviso(f.texto, f.nivel)),
+      /**
+       * E UM BOTÃO PARA ACERTAR NA HORA.
+       *
+       * "Eu apaguei e reenviei. E não foi."
+       *
+       * Reimportar só conserta se o código do aparelho já estiver novo, e ela
+       * não tem como saber se está. Este botão não depende disso: ele relê o
+       * texto da coluna Situação que cada título guardou e faz o estado
+       * concordar com o arquivo, nos dois sentidos. É o conserto que ela pode
+       * aplicar sozinha, olhando o número errado.
+       */
+      porQueZero.length > 0 && h('div.btn-linha', { style: { marginBottom: '10px' } },
+        botao('🔁 Reler as situações do arquivo', { tipo: 'primario', onClick: relerSituacoes })),
       h('div.grade.grade--2',
         kpi({ label: 'A receber', valor: money(r.totalReceber), icone: '↗', cor: 'ok' }),
         kpi({ label: 'A pagar', valor: money(r.totalPagar), icone: '↘', cor: 'laranja' }),
@@ -288,6 +301,46 @@ function abrirVencidos(titulo, grupo, explicacao) {
  * Quem ainda não cadastrou conta nenhuma continua informando um número só — e o
  * app oferece separar por conta, sem obrigar.
  */
+/**
+ * RELER A COLUNA SITUAÇÃO DE TODOS OS TÍTULOS GUARDADOS.
+ *
+ * Cada título guardou o texto cru que veio na coluna Situação. Relendo esse
+ * texto com a regra de hoje, o estado guardado volta a concordar com o arquivo —
+ * sem apagar nada, sem reimportar, e quantas vezes ela quiser.
+ */
+async function relerSituacoes() {
+  const [{ relerSituacoes: reler }, link] = await Promise.all([
+    import('../../core/reparar.js'),
+    import('../../logic/link.js'),
+  ]);
+  const r = await reler();
+  if (!r.mudados) {
+    ok('Nada mudou: o que está guardado já concorda com o que os arquivos diziam.');
+    return;
+  }
+  /**
+   * LIMPAR A MEMÓRIA ANTES DE REDESENHAR.
+   *
+   * A releitura escreve direto no banco, e o app guarda os títulos em memória
+   * para não reler o banco a cada tela. Sem limpar, ela apertava o botão, 65
+   * títulos voltavam a abrir de verdade — e a tela continuava mostrando
+   * R$ 0,00. Um conserto que funciona mas não aparece é indistinguível de um
+   * conserto que não funciona, e é ela quem pagaria por essa diferença.
+   */
+  store.limparCache();
+  await link.recalcular();
+  const partes = [];
+  if (r.reabertos) partes.push(`${r.reabertos} voltaram para "em aberto" (${money(r.valorReaberto)})`);
+  if (r.baixados) partes.push(`${r.baixados} foram dados como recebidos (${money(r.valorBaixado)})`);
+  await store.registrar('conserto', {
+    alvo: 'Situações relidas do arquivo',
+    de: `${r.mudados} títulos`,
+    para: partes.join(' e '),
+  });
+  ok(`${partes.join(' e ')}.`);
+  refresh();
+}
+
 /**
  * BANCO POR BANCO, para a pergunta que ela disse que vai receber.
  *
