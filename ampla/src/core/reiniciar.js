@@ -10,7 +10,13 @@
  *  • 21/09 — descartar o que foi mandado nos primeiros testes;
  *  • 29/09 — recomeçar depois das duas pontes entre nota e pedido, para tudo ser
  *    lido de novo pelas regras novas em vez de ficar convivendo com vínculos
- *    calculados pelas antigas.
+ *    calculados pelas antigas;
+ *  • 16/10 — "apague todos os dados que a gente já enviou, tudo para começar do
+ *    zero, como se fosse utilizar o aplicativo pela primeira vez". A base tinha
+ *    passado por várias versões da leitura de situação dos títulos, e sobrou
+ *    nela registro gravado por cada uma — misturado, e sem como saber qual veio
+ *    de onde. Base assim não se conserta, se refaz: partir do zero custa uma
+ *    tarde de reenvio e devolve um número em que dá para confiar.
  *
  * É isso que este arquivo faz, e só isso:
  *
@@ -31,7 +37,7 @@ import { NOME_ANTIGO, MARCA as MARCA_MIGRACAO } from './migrar.js';
  * Trocar esta marca dispara UM novo recomeço em todos os aparelhos. Só mude
  * quando a intenção for mesmo apagar os dados de quem já está usando.
  */
-export const MARCA = 'recomeco-2026-09-29';
+export const MARCA = 'recomeco-2026-10-16';
 
 /**
  * @returns {Promise<{reiniciou: boolean, erro?: string}>}
