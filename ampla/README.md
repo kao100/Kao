@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 671 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 677 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -299,6 +299,14 @@ app não conseguiu identificar sozinho.
   worker reconferir, apaga o que está guardado e recarrega da rede). O teste
   exige que o número e o cache do service worker andem juntos: versão que não
   acompanha o cache é pior que nenhuma, porque mente com cara de verdade.
+- **Toda importação de título acerta a base inteira, não só as linhas novas.**
+  Era esta a volta que não fechava: cada conserto na leitura só alcança o que
+  entra DEPOIS dele, então um título gravado por uma versão antiga ficava com o
+  estado velho para sempre — e reenviar o arquivo só resolvia se o aparelho já
+  estivesse com o código novo, coisa que ela não tem como saber. Agora o fim de
+  cada importação de contas a receber ou a pagar relê a coluna Situação de todos
+  os títulos guardados e diz quantos mudou. Ela não precisa saber que existe um
+  botão para isso.
 - **O conserto não pode depender de quando o registro entrou.** Cada correção
   da leitura só alcança o que entra DEPOIS dela, e reimportar só resolve se o
   aparelho já estiver com o código novo — coisa que ela não tem como saber. Daí

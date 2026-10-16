@@ -1302,6 +1302,69 @@ function motivoDaBaixa(statusArquivo, data) {
   return 'saldo';
 }
 
+/**
+ * FAZER OS TÍTULOS GUARDADOS CONCORDAREM COM O QUE O ARQUIVO DIZIA.
+ *
+ * "Eu reenviei (...) e não foi. Tá dando sempre a mesma coisa."
+ *
+ * Cada conserto na leitura só alcança o que entra DEPOIS dele. Um título
+ * gravado por uma versão antiga fica com o estado velho para sempre, e reenviar
+ * o arquivo só resolve se o aparelho já estiver com o código novo — coisa que
+ * ela não tem como saber, e que já a fez repetir o mesmo passo cinco vezes.
+ *
+ * Como cada título guarda `statusArquivo` (o texto cru da coluna Situação),
+ * basta reler esse texto com a regra de hoje. Isto roda ao FIM DE CADA
+ * IMPORTAÇÃO de título, sem ela pedir: a base inteira passa a concordar com os
+ * arquivos, não só as linhas que vieram agora.
+ *
+ * NOS DOIS SENTIDOS: o que o arquivo diz em aberto abre, o que ele diz recebido
+ * fecha. Um conserto que só abre trocaria um erro por outro e inflaria o caixa.
+ *
+ * NÃO TOCA no que ela baixou à mão nem no que foi baixado por ausência no
+ * relatório seguinte: as duas são informação que o arquivo não tem.
+ */
+export async function relerSituacoesGravadas() {
+  let reabertos = 0;
+  let baixados = 0;
+  let valorReaberto = 0;
+  let valorBaixado = 0;
+
+  for (const loja of ['receber', 'pagar']) {
+    const titulos = await db.getAll(loja);
+    const mudar = [];
+    for (const t of titulos) {
+      if (t.baixaManual || t.baixadoPorAusencia) continue;
+      if (!t.statusArquivo) continue;
+
+      const deveria = interpretarStatusDoArquivo(t.statusArquivo);
+      if (deveria === 'cancelado') continue;
+      const agora = t.status === 'pago' || t.status === 'cancelado' ? t.status : 'aberto';
+      if (deveria === agora) continue;
+
+      if (deveria === 'aberto') {
+        mudar.push({
+          ...t, status: 'aberto', saldo: t.valor ?? null, valorRecebido: null, valorPago: null, baixaMotivo: null,
+        });
+        reabertos += 1;
+        valorReaberto += t.valor || 0;
+      } else {
+        mudar.push({ ...t, status: 'pago', saldo: 0, baixaMotivo: 'situacao' });
+        baixados += 1;
+        valorBaixado += t.valor || 0;
+      }
+    }
+    if (mudar.length) await db.putMany(loja, mudar);
+  }
+
+  return {
+    reabertos,
+    baixados,
+    mudados: reabertos + baixados,
+    valorReaberto: cents(valorReaberto),
+    valorBaixado: cents(valorBaixado),
+  };
+}
+
 export function interpretarStatusDoArquivo(statusArquivo) {
   return interpretarStatusTitulo(statusArquivo, null, null);
 }
@@ -1592,6 +1655,34 @@ export async function confirmar(preparo, { observacao = null } = {}) {
         + 'É assim que o app acompanha as baixas que você faz no seu sistema.',
       );
     }
+  }
+
+  /**
+   * E A BASE INTEIRA PASSA A CONCORDAR COM OS ARQUIVOS.
+   *
+   * Não só as linhas que vieram agora: é isto que faz o conserto alcançar o que
+   * já estava gravado por uma versão antiga, sem ela precisar saber que existe
+   * um botão para isso. Vale com ou sem fotografia completa — reler o texto que
+   * o arquivo trouxe não dá baixa por silêncio, só põe no lugar o que já estava
+   * escrito.
+   */
+  if (FONTES_FOTOGRAFIA[preparo.fonteId]) {
+    preparo.releitura = await relerSituacoesGravadas();
+  }
+  if (preparo.releitura?.mudados) {
+    const partes = [];
+    if (preparo.releitura.reabertos) {
+      partes.push(`${preparo.releitura.reabertos} voltaram para "em aberto" `
+        + `(${money(preparo.releitura.valorReaberto)})`);
+    }
+    if (preparo.releitura.baixados) {
+      partes.push(`${preparo.releitura.baixados} foram dados como recebidos `
+        + `(${money(preparo.releitura.valorBaixado)})`);
+    }
+    preparo.avisos.push(
+      `O app releu a situação de todos os títulos guardados: ${partes.join(' e ')}. `
+      + 'Isso acerta o que tinha entrado por uma versão antiga do app.',
+    );
   }
 
   const registro = {

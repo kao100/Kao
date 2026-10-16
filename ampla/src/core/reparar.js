@@ -33,7 +33,6 @@
  */
 
 import { openDB } from './db.js';
-import { interpretarStatusDoArquivo } from '../logic/ingest.js';
 
 /**
  * A marca tem versão: quando a REGRA de leitura muda, o conserto precisa passar
@@ -73,82 +72,13 @@ export async function repararSituacaoNegada() {
  * apagar nada, sem reimportar, sem depender de eu ter acertado a versão.
  */
 export async function relerSituacoes() {
-  let reabertos = 0;
-  let baixados = 0;
-  let valorReaberto = 0;
-  let valorBaixado = 0;
-
-  for (const loja of LOJAS) {
-    const db = await openDB();
-    const titulos = await todos(db, loja);
-    const mudar = [];
-
-    for (const t of titulos) {
-      if (t.baixaManual || t.baixadoPorAusencia) continue;
-      if (!t.statusArquivo) continue;
-
-      const deveria = interpretarStatusDoArquivo(t.statusArquivo);
-      const agora = t.status === 'pago' || t.status === 'cancelado' ? t.status : 'aberto';
-      if (deveria === agora) continue;
-      if (deveria === 'cancelado') continue;
-
-      if (deveria === 'aberto') {
-        mudar.push({
-          ...t,
-          status: 'aberto',
-          saldo: t.valor ?? null,
-          valorRecebido: null,
-          valorPago: null,
-          baixaMotivo: null,
-        });
-        reabertos += 1;
-        valorReaberto += t.valor || 0;
-      } else {
-        mudar.push({
-          ...t,
-          status: 'pago',
-          saldo: 0,
-          baixaMotivo: 'situacao',
-        });
-        baixados += 1;
-        valorBaixado += t.valor || 0;
-      }
-    }
-
-    if (mudar.length) await salvarTodos(db, loja, mudar);
-  }
-
-  const cent = (v) => Math.round(v * 100) / 100;
-  return {
-    reabertos,
-    baixados,
-    mudados: reabertos + baixados,
-    valorReaberto: cent(valorReaberto),
-    valorBaixado: cent(valorBaixado),
-  };
+  const { relerSituacoesGravadas } = await import('../logic/ingest.js');
+  return relerSituacoesGravadas();
 }
 
 /* ------------------------------------------------------------ IndexedDB cru */
 
-function todos(db, loja) {
-  return new Promise((resolve) => {
-    try {
-      const req = db.transaction(loja).objectStore(loja).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    } catch { resolve([]); }
-  });
-}
 
-function salvarTodos(db, loja, registros) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(loja, 'readwrite');
-    const os = tx.objectStore(loja);
-    for (const r of registros) os.put(r);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
 
 function jaReparado(db) {
   return new Promise((resolve) => {

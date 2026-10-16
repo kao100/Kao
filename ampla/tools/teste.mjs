@@ -707,6 +707,63 @@ console.log('\n▶ "Confirmado" quer dizer recebido — provado pelos totais do 
   for (const t of meus) await store.receber.remover(t.id);
 }
 
+console.log('\n▶ Importar acerta a base inteira, não só as linhas novas');
+{
+  /**
+   * "Eu reenviei. (...) E não foi. Tá dando sempre a mesma coisa."
+   *
+   * Cada conserto na leitura só alcança o que entra DEPOIS dele. Um título
+   * gravado por uma versão antiga fica com o estado velho para sempre — e
+   * reenviar o arquivo só resolve se o aparelho já estiver com o código novo,
+   * coisa que ela não tem como saber. Era essa a volta que não fechava.
+   *
+   * Agora toda importação de título relê a situação de TODA a base guardada.
+   * Ela não precisa saber que existe um botão para isso.
+   */
+  const CAB = 'Destinado à;Vencimento;Situação;Valor total';
+  const guardados = await store.receber.listar();
+  for (const t of guardados) await store.receber.remover(t.id);
+
+  /* títulos gravados por uma versão antiga: fechados, sem motivo registrado */
+  await store.receber.salvar({
+    id: 'velho1', clienteNome: 'VELHO A', vencimento: '2026-12-10', valor: 5000,
+    statusArquivo: 'Em aberto', status: 'pago', saldo: 0, valorRecebido: 5000,
+  });
+  await store.receber.salvar({
+    id: 'velho2', clienteNome: 'VELHO B', vencimento: '2026-12-11', valor: 7000,
+    statusArquivo: 'Atrasado', status: 'pago', saldo: 0, valorRecebido: 7000,
+  });
+  /* e um que o arquivo dizia recebido, mas entrou aberto */
+  await store.receber.salvar({
+    id: 'velho3', clienteNome: 'VELHO C', vencimento: '2026-09-01', valor: 3000,
+    statusArquivo: 'Confirmado', status: 'aberto', saldo: 3000,
+  });
+
+  /* ela manda um arquivo que nem menciona esses títulos */
+  const { preparo } = await importar('receber', 'outro.csv',
+    `${CAB}\nNOVO X;20/12/2026;Em aberto;900,00`, { fotografiaCompleta: false });
+
+  const dep = new Map((await store.receber.listar()).map((t) => [t.id, t]));
+  igual('o título velho que o arquivo dizia em aberto foi reaberto', dep.get('velho1').status, 'aberto');
+  igual('com o saldo cheio', dep.get('velho1').saldo, 5000);
+  igual('o atrasado também', dep.get('velho2').status, 'aberto');
+  igual('e o que o arquivo dizia recebido foi baixado', dep.get('velho3').status, 'pago');
+  ok('e a importação conta o que fez',
+    preparo.avisos.some((a) => /releu a situação de todos os títulos guardados/.test(a)),
+    JSON.stringify(preparo.avisos).slice(0, 250));
+
+  /* importar de novo não mexe mais em nada: é idempotente */
+  const r2 = await importar('receber', 'outro.csv',
+    `${CAB}\nNOVO X;20/12/2026;Em aberto;900,00`, { fotografiaCompleta: false });
+  ok('e na segunda vez não há o que acertar',
+    !r2.preparo.avisos.some((a) => /releu a situação/.test(a)), JSON.stringify(r2.preparo.avisos));
+
+  for (const t of await store.receber.listar()) {
+    if (/^(VELHO [ABC]|NOVO X)$/.test(t.clienteNome || '')) await store.receber.remover(t.id);
+  }
+  for (const t of guardados) await store.receber.salvar(t);
+}
+
 console.log('\n▶ A importação diz o que vai fazer ANTES do confirmar');
 {
   /**
