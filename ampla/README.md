@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 661 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 671 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -276,6 +276,21 @@ app não conseguiu identificar sozinho.
   conversas diferentes, e sem o texto nenhuma das duas começa. Ausência e baixa
   manual não entram na lista de suspeitas: as duas são o app funcionando, e
   misturá-las esconderia o erro no meio do normal.
+- **A importação diz o que vai fazer antes do "confirmar".** Ela confirmava, ia
+  para o Caixa e só lá descobria que tudo tinha entrado baixado — tarde demais,
+  e com um aviso genérico numa outra tela. Agora a tela de conferência mostra
+  quantos títulos entram EM ABERTO e quantos entram COMO PAGOS, com a palavra do
+  arquivo ao lado de cada grupo. Se "Em aberto" aparecer na coluna dos pagos, o
+  erro salta aos olhos no único momento em que ainda dá para não confirmar. Dois
+  casos viram aviso forte: nenhum título entrando em aberto (quase sempre
+  leitura errada de uma palavra — e o aviso mostra a palavra), e a coluna
+  Situação não ligada, que faz o app decidir por data ou saldo, adivinhação com
+  cara de leitura.
+- **O mapeamento salvo é visível e descartável.** Ele existe para ela não ligar
+  coluna toda vez. Mas se um dia foi salvo errado, reaplica-se calado em toda
+  importação seguinte, e apagar a base não o alcança: o relatório entra torto de
+  novo, igual, para sempre — que é exatamente o que "está dando sempre a mesma
+  coisa" produz.
 - **A versão fica à vista, e não pode mentir.** "Não apareceu o botão" tem duas
   causas possíveis — o conserto não funcionou, ou o conserto ainda não chegou no
   aparelho — e elas levam a conversas opostas. Sem o número da versão, não há

@@ -707,6 +707,75 @@ console.log('\n▶ "Confirmado" quer dizer recebido — provado pelos totais do 
   for (const t of meus) await store.receber.remover(t.id);
 }
 
+console.log('\n▶ A importação diz o que vai fazer ANTES do confirmar');
+{
+  /**
+   * "Eu coloquei aqui os relatórios de contas a receber e a pagar. E só foi de
+   *  pagamento, não tá indo de recebimento. Tá dando sempre a mesma coisa."
+   *
+   * Ela confirmava, ia para o Caixa e só lá descobria que tudo tinha entrado
+   * baixado. A conta precisa aparecer ANTES — no único momento em que ainda dá
+   * para não confirmar — e com a palavra do arquivo ao lado de cada grupo.
+   */
+  const CAB = 'Destinado à;Vencimento;Situação;Valor total';
+  const linhas = [
+    'A;10/12/2026;Em aberto;1.000,00',
+    'B;11/12/2026;Em aberto;2.000,00',
+    'C;01/09/2026;Confirmado;3.000,00',
+    'D;02/09/2026;Confirmado;4.000,00',
+    'E;03/10/2026;Atrasado;500,00',
+  ];
+  const { preparo } = await importar('receber', 'situacoes.csv', `${CAB}\n${linhas.join('\n')}`,
+    { fotografiaCompleta: false });
+
+  ok('o preparo traz o resumo das situações', !!preparo.situacoes, '');
+  igual('conta quantos entram em aberto', preparo.situacoes.abertos, 3);
+  igual('e quantos entram como pagos', preparo.situacoes.baixados, 2);
+  const porTexto = new Map(preparo.situacoes.porTexto.map((g) => [g.texto, g]));
+  igual('"Em aberto" aparece com a contagem dele', porTexto.get('Em aberto').abertos, 2);
+  igual('"Confirmado" aparece como pago', porTexto.get('Confirmado').abertos, 0);
+  igual('"Atrasado" conta como aberto', porTexto.get('Atrasado').abertos, 1);
+  ok('e nada disso vira aviso quando está certo',
+    !preparo.avisos.some((a) => /ATENÇÃO: nenhum/.test(a)), JSON.stringify(preparo.avisos));
+
+  for (const t of await store.receber.listar()) {
+    if (/^[A-E]$/.test(t.clienteNome || '')) await store.receber.remover(t.id);
+  }
+
+  /**
+   * E QUANDO NENHUM ENTRA EM ABERTO, O APP GRITA ANTES.
+   *
+   * Num contas a receber isso é quase sempre leitura errada de uma palavra — e
+   * é o aviso que teria evitado todas as idas e voltas: ele mostra a palavra.
+   */
+  const soPagos = ['F;01/09/2026;Confirmado;3.000,00', 'G;02/09/2026;Confirmado;4.000,00'];
+  const r2 = await importar('receber', 'sopagos.csv', `${CAB}\n${soPagos.join('\n')}`,
+    { fotografiaCompleta: false });
+  ok('avisa que nenhum título entraria em aberto',
+    r2.preparo.avisos.some((a) => /nenhum dos 2 títulos deste arquivo vai entrar EM ABERTO/.test(a)),
+    JSON.stringify(r2.preparo.avisos).slice(0, 300));
+  ok('e mostra a palavra que o arquivo trouxe',
+    r2.preparo.avisos.some((a) => /2× "Confirmado"/.test(a)), '');
+
+  for (const t of await store.receber.listar()) {
+    if (/^[FG]$/.test(t.clienteNome || '')) await store.receber.remover(t.id);
+  }
+
+  /**
+   * E A COLUNA SITUAÇÃO NÃO LIGADA É O PIOR CASO: sem ela o app decide por data
+   * ou por saldo, que é adivinhação com cara de leitura.
+   */
+  const semSituacao = await importar('receber', 'sem-situacao.csv',
+    `Destinado à;Vencimento;Valor total\nH;10/12/2026;1.000,00`, { fotografiaCompleta: false });
+  ok('avisa quando a coluna Situação não foi ligada',
+    semSituacao.preparo.avisos.some((a) => /coluna SITUAÇÃO não foi ligada/.test(a)),
+    JSON.stringify(semSituacao.preparo.avisos).slice(0, 200));
+
+  for (const t of await store.receber.listar()) {
+    if (t.clienteNome === 'H') await store.receber.remover(t.id);
+  }
+}
+
 console.log('\n▶ Arquivo cheio que vira quase nada tem de gritar');
 {
   /**

@@ -389,7 +389,22 @@ function passoMapear(estado, ctx) {
       botao('Trocar arquivo', { pequeno: true, onClick: () => { estado.passo = 'arquivo'; estado.leitura = null; desenhar(); } })),
 
     estado.aviso && aviso(estado.aviso, 'atencao'),
-    estado.perfilSalvo && aviso('Já conhecia este layout — as colunas vieram do perfil salvo.', 'ok'),
+    /**
+     * O MAPEAMENTO SALVO SOBREVIVE A TUDO — inclusive a apagar os títulos.
+     *
+     * Ele existe para ela não ligar coluna toda vez, e isso é bom. Mas se um dia
+     * ele foi salvo errado, ele se reaplica calado em TODA importação seguinte,
+     * e apagar a base não o alcança: o relatório entra torto de novo, igual,
+     * para sempre. "Tá dando sempre a mesma coisa" é exatamente o que isso
+     * produz. Então ele tem de ser visível e descartável em um toque.
+     */
+    estado.perfilSalvo && h('div.aviso.aviso--ok',
+      h('div.crescer',
+        h('strong.pequeno', 'As colunas vieram de um mapeamento salvo'),
+        h('div.mini.muted', 'Ele é reaplicado em toda importação deste relatório, e apagar os '
+          + 'títulos não o apaga. Se o resultado vier errado sempre igual, descarte e ligue as '
+          + 'colunas de novo.')),
+      botao('Descartar', { pequeno: true, onClick: () => descartarPerfil(estado, ctx, fonte) })),
 
     estado.leitura.planilhas.length > 1 && h('div.campo',
       h('label', 'Planilha'),
@@ -481,6 +496,23 @@ async function preparar(estado, ctx) {
 
 /* ----- passo 3: conferir e gravar */
 
+/**
+ * Joga fora o mapeamento salvo deste relatório e recomeça pela sugestão
+ * automática. Não apaga nada de dado: só a memória de como ligar as colunas.
+ */
+async function descartarPerfil(estado, ctx, fonte) {
+  const linhas = estado.leitura.planilhas[estado.planilhaIndex].linhas;
+  const { cabecalho } = rowsToObjects(linhas, estado.headerRow);
+  const alvo = assinatura(cabecalho);
+  for (const p of await store.perfisImport.listar()) {
+    if (p.fonte === fonte.id && p.assinatura === alvo) await store.perfisImport.remover(p.id);
+  }
+  estado.mapeamento = ingest.sugerirMapeamento(fonte.id, cabecalho);
+  estado.perfilSalvo = false;
+  ok('Mapeamento descartado. As colunas voltaram para a sugestão automática.');
+  ctx.desenhar();
+}
+
 function passoConferir(estado, ctx) {
   const { desenhar } = ctx;
   const p = estado.preparo;
@@ -509,6 +541,34 @@ function passoConferir(estado, ctx) {
       h('div.empilha', { style: { gap: '5px' } }, ...porStore.map((s) => h('div.linha.linha--entre',
         h('span.pequeno', rotuloStore(s.nome)),
         h('span.num.forte', num(s.quantidade, 0)))))),
+
+    /**
+     * O QUE VAI ACONTECER COM OS TÍTULOS, ANTES DO "CONFIRMAR".
+     *
+     * "Eu coloquei os relatórios de contas a receber e a pagar. E só foi de
+     *  pagamento, não tá indo de recebimento. Tá dando sempre a mesma coisa."
+     *
+     * Ela confirmava, ia para o Caixa e só lá descobria que tudo tinha entrado
+     * baixado. Aqui a conta aparece antes, com a palavra que veio no arquivo ao
+     * lado de cada grupo — se "Em aberto" estiver na coluna dos pagos, o erro
+     * salta aos olhos no único momento em que ainda dá para não confirmar.
+     */
+    p.situacoes && card('Situação dos títulos neste arquivo',
+      h('span.mini.muted', 'o que o app entendeu de cada palavra'),
+      h('div.grade.grade--2', { style: { marginBottom: '10px' } },
+        kpi({
+          label: 'Entram em aberto', valor: num(p.situacoes.abertos, 0), icone: '📥',
+          cor: p.situacoes.abertos ? 'ok' : 'ruim',
+        }),
+        kpi({
+          label: 'Entram como pagos', valor: num(p.situacoes.baixados, 0), icone: '✅',
+          cor: p.situacoes.abertos ? undefined : 'ruim',
+        })),
+      h('div.empilha', { style: { gap: '5px' } }, ...p.situacoes.porTexto.map((g) => h('div.linha.linha--entre',
+        h('span.pequeno', `"${g.texto}"`),
+        h('span.pequeno', g.abertos === g.total
+          ? `${g.total} em aberto`
+          : (g.abertos ? `${g.abertos} em aberto, ${g.total - g.abertos} pagos` : `${g.total} como PAGOS`)))))),
 
     p.cancelamentos.length > 0 && aviso(`${p.cancelamentos.length} evento(s) de cancelamento — as notas serão marcadas como canceladas.`, 'atencao'),
     ...p.avisos.map((a) => aviso(a, 'atencao')),

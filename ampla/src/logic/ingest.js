@@ -242,9 +242,74 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
    */
   await conferirMesOcupado(saida, fonte);
   conferirAproveitamento(saida, fonte, registros.length);
+  conferirSituacoes(saida, fonte, mapeamento);
   await classificar(saida, contexto);
   conferirCoberturaDoReceber(saida);
   return saida;
+}
+
+/**
+ * O QUE ESTE ARQUIVO VAI FAZER COM OS TÍTULOS — dito ANTES de ela confirmar.
+ *
+ * "Eu coloquei aqui os relatórios de contas a receber e a pagar. E só foi de
+ *  pagamento, não tá indo de recebimento. Tá dando sempre a mesma coisa."
+ *
+ * A importação nunca mostrou quantos títulos entrariam em aberto e quantos como
+ * recebidos. Ela confirmava, ia para o Caixa e só lá descobria que tudo tinha
+ * entrado baixado — e então já era tarde, e a única pista era um aviso genérico
+ * numa outra tela.
+ *
+ * Duas coisas aqui NUNCA podem passar caladas:
+ *
+ *  - a coluna Situação não ter sido ligada. Sem ela o app decide o estado de
+ *    cada título por data ou por saldo, que é adivinhação com cara de leitura;
+ *  - um relatório de títulos chegar sem NENHUM em aberto. É possível, mas é tão
+ *    improvável num contas a receber que merece ser dito antes do "confirmar",
+ *    e não depois.
+ */
+function conferirSituacoes(preparo, fonte, mapeamento) {
+  if (!FONTES_FOTOGRAFIA[fonte.id]) return;
+  const titulos = [...(preparo.porStore[fonte.store]?.values() || [])];
+  if (!titulos.length) return;
+
+  if (!mapeamento?.status) {
+    preparo.avisos.push(
+      'A coluna SITUAÇÃO não foi ligada a nenhuma coluna do arquivo. Sem ela o app não sabe o que '
+      + 'está em aberto e o que já foi pago: ele passa a decidir por data ou por saldo, que é '
+      + 'adivinhação. Volte um passo e ligue a coluna Situação — é a mais importante deste '
+      + 'relatório.',
+    );
+  }
+
+  const abertos = titulos.filter((t) => t.status === 'aberto');
+  const porTexto = new Map();
+  for (const t of titulos) {
+    const k = t.statusArquivo || '(em branco)';
+    if (!porTexto.has(k)) porTexto.set(k, { texto: k, total: 0, abertos: 0 });
+    const g = porTexto.get(k);
+    g.total += 1;
+    if (t.status === 'aberto') g.abertos += 1;
+  }
+  /* o resumo fica guardado para a tela de conferência mostrar, não só avisar */
+  preparo.situacoes = {
+    total: titulos.length,
+    abertos: abertos.length,
+    baixados: titulos.length - abertos.length,
+    porTexto: [...porTexto.values()].sort((a, b) => b.total - a.total),
+  };
+
+  if (!abertos.length) {
+    const lista = preparo.situacoes.porTexto
+      .map((g) => `${g.total}× "${g.texto}"`)
+      .slice(0, 5)
+      .join(', ');
+    preparo.avisos.push(
+      `ATENÇÃO: nenhum dos ${titulos.length} títulos deste arquivo vai entrar EM ABERTO — todos `
+      + `seriam dados como pagos. As situações lidas foram: ${lista}. Se alguma dessas quer dizer `
+      + '"ainda não recebi", NÃO confirme: o fluxo de caixa vai ficar zerado. Me diga qual é a '
+      + 'palavra e eu conserto a leitura.',
+    );
+  }
 }
 
 /**
