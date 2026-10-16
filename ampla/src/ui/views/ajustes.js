@@ -8,6 +8,7 @@ import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as db from '../../core/db.js';
 import { recalcular } from '../../logic/link.js';
+import { VERSAO } from '../../core/versao.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, secao, botao, aviso, selo } from '../components/ui.js';
 import { formulario, confirmar, detalhe } from '../components/sheet.js';
@@ -244,11 +245,29 @@ export async function telaAjustes() {
             e.motivo && h('div.mini', `"${e.motivo}"`)))))
         : h('p.pequeno.muted', 'Nenhuma alteração manual registrada ainda.'))),
 
+    /**
+     * A VERSÃO, E UM BOTÃO PARA BUSCAR A NOVA.
+     *
+     * "Na parte do caixa não aparecia essa parte que você falava."
+     *
+     * Não aparecia porque ainda não tinha sido publicada. Sem o número da
+     * versão à vista, "não apareceu" tem duas causas possíveis — não funcionou,
+     * ou não chegou — e elas levam a conversas opostas. O número encerra a
+     * dúvida em dois segundos.
+     */
+    secao('Versão do aplicativo', selo(VERSAO, 'info'), card(null, null,
+      h('p.pequeno.muted',
+        'Quando eu disser que consertei alguma coisa, confira este número antes de testar. '
+        + 'Se ainda for o antigo, o conserto não chegou no seu aparelho — e aí não adianta '
+        + 'reimportar nem apagar nada.'),
+      h('div.btn-linha', { style: { marginTop: '10px' } },
+        botao('⬇️ Buscar versão nova', { tipo: 'primario', onClick: () => buscarAtualizacao() })))),
+
     /* o rodapé não pode mentir: com a nuvem ligada, os dados não são só locais */
     h('p.mini.muted.centro', { style: { padding: '10px 0 20px' } },
       nuvemEstado.ligado
-        ? 'AMPLA — gestão administrativa · dados no aparelho e no seu Google Drive'
-        : 'AMPLA — gestão administrativa · dados locais no aparelho'));
+        ? `AMPLA ${VERSAO} — gestão administrativa · dados no aparelho e no seu Google Drive`
+        : `AMPLA ${VERSAO} — gestão administrativa · dados locais no aparelho`));
 }
 
 function formatarValor(v) {
@@ -380,6 +399,29 @@ async function editarVendedor(vendedor) {
  * e WhatsApp; comprimida dá 590 KB, que vai por qualquer lugar. Num navegador
  * sem CompressionStream, sai o JSON mesmo — grande, mas funcionando.
  */
+/**
+ * BUSCAR A VERSÃO NOVA, de dentro do app.
+ *
+ * Atualizar a página nem sempre basta: o navegador guarda os arquivos do app
+ * por alguns minutos, e o service worker precisa ser avisado de que há coisa
+ * nova. Este botão faz os dois — manda o service worker reconferir, apaga o que
+ * está guardado e recarrega buscando da rede.
+ */
+async function buscarAtualizacao() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.update().catch(() => {})));
+    }
+    if (typeof caches !== 'undefined') {
+      const nomes = await caches.keys();
+      await Promise.all(nomes.map((n) => caches.delete(n)));
+    }
+  } catch { /* se falhar, recarregar mesmo assim já tenta a rede */ }
+  ok('Buscando a versão nova…');
+  setTimeout(() => window.location.reload(), 400);
+}
+
 async function relerSituacoes() {
   const [{ relerSituacoes: reler }, link] = await Promise.all([
     import('../../core/reparar.js'),

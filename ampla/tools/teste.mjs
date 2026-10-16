@@ -455,6 +455,35 @@ console.log('\n▶ Gráfico sem número não finge desenho');
   ok('o gráfico descarta ponto sem número', /Number\.isFinite/.test(chart), '');
 }
 
+console.log('\n▶ A versão do app não pode mentir');
+{
+  /**
+   * "Na parte do caixa não aparecia essa parte que você falava, de reler as
+   *  situações do arquivo."
+   *
+   * Não aparecia porque ainda não tinha sido publicada: ela testou nos minutos
+   * entre o conserto e o deploy. Sem o número da versão à vista, "não apareceu"
+   * tem duas causas possíveis — não funcionou, ou não chegou — e elas levam a
+   * conversas opostas. Custou rodadas não saber qual era.
+   *
+   * Uma versão que não acompanha o cache do service worker é pior que nenhuma,
+   * porque mente com cara de verdade. Por isso o teste cobra os dois juntos.
+   */
+  const { readFileSync: ler } = await import('node:fs');
+  const { join: jn, dirname: dn } = await import('node:path');
+  const { fileURLToPath: fu } = await import('node:url');
+  const raiz = jn(dn(fu(import.meta.url)), '..');
+
+  const { VERSAO } = await import('../src/core/versao.js');
+  const sw = ler(jn(raiz, 'sw.js'), 'utf8');
+  const doCache = (sw.match(/const CACHE = 'ampla-([^']+)'/) || [])[1];
+  igual('a versão mostrada é a mesma do cache do app', VERSAO, doCache);
+
+  const ajustes = ler(jn(raiz, 'src/ui/views/ajustes.js'), 'utf8');
+  ok('e ela aparece em Ajustes', /VERSAO/.test(ajustes), '');
+  ok('com um botão para buscar a versão nova', /buscarAtualizacao/.test(ajustes), '');
+}
+
 console.log('\n▶ Reler as situações acerta a base sem reimportar');
 {
   /**

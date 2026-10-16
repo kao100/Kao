@@ -6,6 +6,7 @@ import * as store from '../core/store.js';
 import { navigate } from '../core/router.js';
 import { formatDate, timestampLabel } from '../core/format.js';
 import { detalhe, fechar as fecharFolha } from './components/sheet.js';
+import { VERSAO } from '../core/versao.js';
 
 /**
  * CINCO LUGARES NA BARRA, E NENHUM MENU.
@@ -78,6 +79,9 @@ export function montarShell(raiz) {
 
 function abrirMenu() {
   detalhe('Ajustes e mais telas',
+    /* a versão fica aqui também: é o primeiro lugar onde ela vai procurar */
+    h('p.mini.muted', { style: { marginBottom: '8px' } },
+      `AMPLA ${VERSAO} — confira este número antes de testar um conserto novo.`),
     h('div.empilha', { style: { gap: '4px' } },
       ...OUTRAS
         .map((m) => h('button.item.card--clicavel', {

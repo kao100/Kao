@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 658 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 661 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -276,6 +276,14 @@ app não conseguiu identificar sozinho.
   conversas diferentes, e sem o texto nenhuma das duas começa. Ausência e baixa
   manual não entram na lista de suspeitas: as duas são o app funcionando, e
   misturá-las esconderia o erro no meio do normal.
+- **A versão fica à vista, e não pode mentir.** "Não apareceu o botão" tem duas
+  causas possíveis — o conserto não funcionou, ou o conserto ainda não chegou no
+  aparelho — e elas levam a conversas opostas. Sem o número da versão, não há
+  como saber qual é, e custou rodadas descobrir. Agora ele aparece em Ajustes e
+  no menu ☰, com um botão que força a busca da versão nova (manda o service
+  worker reconferir, apaga o que está guardado e recarrega da rede). O teste
+  exige que o número e o cache do service worker andem juntos: versão que não
+  acompanha o cache é pior que nenhuma, porque mente com cara de verdade.
 - **O conserto não pode depender de quando o registro entrou.** Cada correção
   da leitura só alcança o que entra DEPOIS dela, e reimportar só resolve se o
   aparelho já estiver com o código novo — coisa que ela não tem como saber. Daí
