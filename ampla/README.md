@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 632 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 643 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -216,6 +216,23 @@ app não conseguiu identificar sozinho.
   que ninguém conseguiu conciliar. O saldo é **por conta**, somado, e a data que
   vale é a **mais antiga** delas: uma conta esquecida envelhece a projeção
   inteira, e usar a data mais nova esconderia justamente isso.
+- **"Confirmado" quer dizer recebido — e quem provou foi o próprio relatório.**
+  O contas a receber de 01/08 a 31/12 traz três números no topo e 1232 linhas
+  embaixo. Somando as linhas por situação: 548 "Em aberto" (R$ 1.305.654,69) +
+  15 "Atrasado" (R$ 23.461,84) = R$ 1.329.116,53, que é exatamente o "A receber
+  — total a receber no período" do cabeçalho; e 669 "Confirmado" =
+  R$ 1.275.435,33, exatamente o "Confirmado — valores já confirmados". Os dois
+  baldes são disjuntos e somam o total, ao centavo. Então "Confirmado" não é um
+  título a receber que foi conferido: é dinheiro que já entrou. O app lia como
+  aberto e teria inflado o caixa em R$ 1,27 milhão — o mesmo erro dos R$ 600
+  mil, pelo caminho oposto. "Atrasado" continua aberto: atraso não é baixa.
+- **Arquivo cheio que vira quase nada tem de gritar.** O relatório começa com um
+  painel de totais ("A receber / Confirmado / Total") logo acima da tabela. Se a
+  linha de cabeçalho cair nesse painel, o app casa a coluna "Total" com o campo
+  Valor, ignora o resto e monta UM registro — de 1232 — sem reclamar de nada. O
+  financeiro fica vazio e parece "não tem movimento", a mentira mais cara que
+  aquela tela pode contar. Agora um aproveitamento abaixo da metade vira aviso,
+  dizendo onde procurar a linha certa.
 - **A negação é lida antes da palavra.** "NÃO PAGO" contém "PAGO". "NÃO
   RECEBIDO" contém "RECEBID". A leitura da coluna Situação procurava esses
   pedaços no texto sem olhar a negação na frente, e todo título em aberto do

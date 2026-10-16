@@ -543,6 +543,109 @@ console.log('\n▶ O app diz POR QUE deu o título como baixado');
   for (const t of guardados.pagar) await store.pagar.salvar(t);
 }
 
+console.log('\n▶ "Confirmado" quer dizer recebido — provado pelos totais do relatório');
+{
+  /**
+   * "Eu vou te mandar um relatório de recebimento, porque não tá vinculando."
+   *
+   * O relatório de contas a receber dela, de 01/08 a 31/12, traz três números
+   * no topo e 1232 linhas embaixo. Somando as linhas por situação:
+   *
+   *     548 Em aberto    1.305.654,69
+   *      15 Atrasado        23.461,84   → juntos, 1.329.116,53
+   *     669 Confirmado   1.275.435,33
+   *
+   * E o topo do relatório diz, com todas as letras:
+   *
+   *     A receber   1.329.116,53   "total a receber no período"
+   *     Confirmado  1.275.435,33   "valores já confirmados"
+   *     Total       2.604.551,86   "1232 cobranças no período"
+   *
+   * Os dois baldes são disjuntos e somam o total, ao centavo. Então "Confirmado"
+   * não é um título a receber que foi conferido: é dinheiro que já entrou. O app
+   * lia como aberto e inflaria o caixa dela em R$ 1,27 milhão.
+   *
+   * Os dados abaixo são sintéticos — o arquivo real tem nome, CPF e CNPJ de
+   * cliente, e este repositório é público. O que se reproduz aqui é a ESTRUTURA
+   * e a aritmética, que é o que estava errado.
+   */
+  const CAB = 'Destinado à;CPF;CNPJ;Descrição;Forma de pagamento;Conta bancária;'
+    + 'Vencimento;Situação;Valor total;NF-e';
+  const linha = (i, situacao, venc, valor) => `CLIENTE ${i};;;Venda de nº ${i};PIX;`
+    + `CONTA BANCÁRIA - X;${venc};${situacao};${valor};${4000 + i}`;
+
+  const linhas = [
+    linha(1, 'Confirmado', '11/08/2026', '2.500,00'),
+    linha(2, 'Confirmado', '12/08/2026', '1.500,00'),
+    linha(3, 'Atrasado', '01/10/2026', '900,00'),
+    linha(4, 'Em aberto', '08/12/2026', '4.904,95'),
+    linha(5, 'Em aberto', '15/12/2026', '9.670,00'),
+  ];
+  await importar('receber', 'receber-real.csv', `${CAB}\n${linhas.join('\n')}`,
+    { fotografiaCompleta: false });
+
+  const meus = (await store.receber.listar()).filter((t) => /^CLIENTE [1-5]$/.test(t.clienteNome || ''));
+  igual('as cinco linhas viraram cinco títulos', meus.length, 5);
+
+  const porSituacao = (txt) => meus.filter((t) => t.statusArquivo === txt);
+  ok('"Confirmado" entra como recebido',
+    porSituacao('Confirmado').every((t) => t.status === 'pago'),
+    JSON.stringify(porSituacao('Confirmado').map((t) => t.status)));
+  ok('"Em aberto" continua em aberto',
+    porSituacao('Em aberto').every((t) => t.status === 'aberto'), '');
+  ok('"Atrasado" também: atraso não é baixa',
+    porSituacao('Atrasado').every((t) => t.status === 'aberto'), '');
+
+  /**
+   * A ARITMÉTICA DO RELATÓRIO: o que fica em aberto é "Em aberto" + "Atrasado",
+   * e o que sai é "Confirmado". É esta soma que bate com o topo do arquivo dela.
+   */
+  const emAberto = meus.filter((t) => t.status === 'aberto');
+  igual('o que fica em aberto são os três certos', emAberto.length, 3);
+  const somar = (lista) => Math.round(lista.reduce((a, t) => a + t.valor, 0) * 100) / 100;
+  igual('somando o valor que o relatório chama de "A receber"', somar(emAberto), 15474.95);
+  igual('e o recebido some do em aberto, como manda o topo do relatório',
+    somar(meus.filter((t) => t.status === 'pago')), 4000);
+
+  /* o atrasado fica fora da projeção, mas à vista — não vira baixa */
+  const venc = fluxo.separarVencidos(meus, '2026-11-01');
+  igual('o atrasado sai da projeção', venc.vencidos.length, 1);
+  igual('e os dois futuros entram', venc.aVencer.length, 2);
+
+  for (const t of meus) await store.receber.remover(t.id);
+}
+
+console.log('\n▶ Arquivo cheio que vira quase nada tem de gritar');
+{
+  /**
+   * O relatório dela começa com um painel de totais — "A receber / Confirmado /
+   * Total" — logo acima da tabela. Se o cabeçalho escolhido cair nesse painel, o
+   * app casa a coluna "Total" com o campo Valor, ignora o resto e monta UM
+   * registro, sem reclamar de nada. O financeiro fica vazio e parece "não tem
+   * movimento" — a mentira mais cara que aquela tela pode contar.
+   */
+  const comPainel = [
+    'A receber;;;Confirmado;;;;Total;;',
+    '1.329.116,53;;;1.275.435,33;;;;2.604.551,86;;',
+    'Destinado à;CPF;CNPJ;Descrição;Forma de pagamento;Conta bancária;Vencimento;Situação;Valor total;NF-e',
+    ...Array.from({ length: 12 }, (_, i) => `CLIENTE P${i};;;Venda;PIX;CONTA;10/12/2026;Em aberto;100,00;${7000 + i}`),
+  ].join('\n');
+
+  /* com o cabeçalho no painel de totais, o aproveitamento despenca */
+  const { preparo } = await importar('receber', 'painel.csv', comPainel, { fotografiaCompleta: false });
+  ok('o app avisa que quase nada foi aproveitado',
+    preparo.avisos.some((a) => /LINHA DE CABEÇALHO está errada/.test(a)),
+    JSON.stringify(preparo.avisos).slice(0, 300));
+  ok('e diz onde procurar a linha certa',
+    preparo.avisos.some((a) => /"Vencimento", "Situação" e "Valor total"/.test(a)), '');
+
+  for (const t of await store.receber.listar()) {
+    if (/^CLIENTE P\d+$/.test(t.clienteNome || '') || t.valor === 2604551.86) {
+      await store.receber.remover(t.id);
+    }
+  }
+}
+
 console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
 {
   /**

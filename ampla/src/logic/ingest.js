@@ -241,9 +241,37 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
    * diferente que foi marcado errado. O app não escolhe por ela — ele mostra.
    */
   await conferirMesOcupado(saida, fonte);
+  conferirAproveitamento(saida, fonte, registros.length);
   await classificar(saida, contexto);
   conferirCoberturaDoReceber(saida);
   return saida;
+}
+
+/**
+ * O ARQUIVO TINHA 1.232 LINHAS E SAIU 1 REGISTRO?
+ *
+ * O relatório de contas a receber dela começa com um painel de totais — "A
+ * receber / Confirmado / Total" — logo acima da tabela de verdade. Se a linha de
+ * cabeçalho escolhida cair nesse painel, o app casa a coluna "Total" com o campo
+ * Valor, ignora todo o resto e monta UM registro, sem reclamar de nada.
+ *
+ * Um arquivo cheio que vira quase nada nunca é o que ela quis. O app não
+ * conserta sozinho (quem escolhe o cabeçalho é ela, e pode haver motivo), mas
+ * não pode deixar passar calado: um financeiro vazio por causa disso parece
+ * "não tem movimento", que é a mentira mais cara que esta tela pode contar.
+ */
+function conferirAproveitamento(preparo, fonte, linhasDoArquivo) {
+  if (linhasDoArquivo < 10) return;
+  const montados = preparo.porStore[fonte.store]?.size || 0;
+  if (montados >= linhasDoArquivo * 0.5) return;
+
+  preparo.avisos.push(
+    `O arquivo tem ${linhasDoArquivo} linha(s) de dados, mas só ${montados} registro(s) foram `
+    + 'montados. Quase sempre isto quer dizer que a LINHA DE CABEÇALHO está errada — muitos '
+    + 'relatórios trazem um painel de totais antes da tabela, e o app pode ter lido esse painel '
+    + 'como se fossem os nomes das colunas. Volte um passo e escolha a linha que tem "Vencimento", '
+    + '"Situação" e "Valor total".',
+  );
 }
 
 async function conferirMesOcupado(preparo, fonte) {
@@ -1177,6 +1205,22 @@ function interpretarStatusNf(texto) {
  * não aconteceu" vence as que significam "aconteceu". Entre errar para aberto e
  * errar para pago, errar para aberto é melhor: um título que aparece no caixa e
  * não devia é uma pergunta; um título que desaparece é um buraco silencioso.
+ *
+ * E "CONFIRMADO" QUER DIZER RECEBIDO — provado pelo relatório dela, ao centavo.
+ *
+ * O contas a receber de 01/08 a 31/12 traz no topo três números: "A receber
+ * 1.329.116,53 (total a receber no período)", "Confirmado 1.275.435,33 (valores
+ * já confirmados)" e "Total 2.604.551,86 (1232 cobranças)". Somando as 1232
+ * linhas por situação:
+ *
+ *     548 Em aberto    1.305.654,69
+ *      15 Atrasado        23.461,84   → juntos, 1.329.116,53 = "A receber"
+ *     669 Confirmado   1.275.435,33   → igual ao "Confirmado" do topo
+ *
+ * Os dois baldes são disjuntos e somam o total. Então "Confirmado" não é um
+ * título a receber que foi conferido: é dinheiro que já entrou. Ler isso como
+ * aberto inflaria o caixa dela em R$ 1,27 milhão — o mesmo tipo de erro dos
+ * R$ 600 mil, pelo caminho oposto.
  */
 /**
  * QUAL FOI A EVIDÊNCIA que fez o app dar o título como baixado.
@@ -1202,7 +1246,7 @@ function interpretarStatusTitulo(statusArquivo, saldo, dataRecebimento) {
   /* "baixad por perda" nunca casava com "baixado por perda" — faltava a letra */
   if (/cancel|baixad\w* por perda/.test(t)) return 'cancelado';
   if (emAbertoNoTexto(t)) return 'aberto';
-  if (dataRecebimento || /pago|quitad|liquidad|recebid|baixad/.test(t)) return 'pago';
+  if (dataRecebimento || /pago|quitad|liquidad|recebid|baixad|confirmad/.test(t)) return 'pago';
   if (saldo != null && saldo <= 0) return 'pago';
   return 'aberto';
 }
