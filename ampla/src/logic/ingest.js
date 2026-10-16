@@ -1134,12 +1134,54 @@ function interpretarStatusNf(texto) {
   return 'autorizada';
 }
 
+/**
+ * A SITUAÇÃO DO TÍTULO, LIDA DO ARQUIVO.
+ *
+ * "Eu acabei de mandar o contas a pagar só a partir do dia 17 e o que tá em
+ *  aberto, ou seja, não tinha nenhum pago. E não tá calhando, tá aparecendo
+ *  zero. E eu sei que não é zero. Tem alguma coisa errada e não é o relatório."
+ *
+ * Ela estava certa. "NÃO PAGO" CONTÉM "PAGO". "NÃO RECEBIDO" CONTÉM "RECEBID".
+ * A regra procurava esses pedaços no texto sem olhar a negação na frente, então
+ * todo título em aberto do relatório dela entrava no app como baixado, com saldo
+ * zero — e o fluxo de caixa ficava zerado com a base cheia de títulos.
+ *
+ * É o pior tipo de erro que este app pode ter: ele não dava erro, não deixava
+ * aviso, e o número errado era um número redondo e tranquilo.
+ *
+ * Por isso a NEGAÇÃO É LIDA PRIMEIRO, e qualquer palavra que signifique "ainda
+ * não aconteceu" vence as que significam "aconteceu". Entre errar para aberto e
+ * errar para pago, errar para aberto é melhor: um título que aparece no caixa e
+ * não devia é uma pergunta; um título que desaparece é um buraco silencioso.
+ */
+export function interpretarStatusDoArquivo(statusArquivo) {
+  return interpretarStatusTitulo(statusArquivo, null, null);
+}
+
 function interpretarStatusTitulo(statusArquivo, saldo, dataRecebimento) {
   const t = normalize(statusArquivo);
-  if (/cancel|baixad por perda/.test(t)) return 'cancelado';
+  /* "baixad por perda" nunca casava com "baixado por perda" — faltava a letra */
+  if (/cancel|baixad\w* por perda/.test(t)) return 'cancelado';
+  if (emAbertoNoTexto(t)) return 'aberto';
   if (dataRecebimento || /pago|quitad|liquidad|recebid|baixad/.test(t)) return 'pago';
   if (saldo != null && saldo <= 0) return 'pago';
   return 'aberto';
+}
+
+/**
+ * O texto diz, em alguma das formas que os sistemas usam, que ainda está aberto?
+ *
+ * - negação: "não pago", "nao recebido", "sem baixa";
+ * - futuro:  "a receber", "a pagar", "a vencer", "aguardando";
+ * - estado:  "em aberto", "pendente", "vencido", "em atraso", "previsto";
+ * - parcial: pagamento parcial não é baixa — o que falta continua em aberto.
+ */
+function emAbertoNoTexto(t) {
+  if (!t) return false;
+  if (/\b(nao|sem)\b/.test(t)) return true;
+  if (/\ba (receber|pagar|vencer)\b/.test(t)) return true;
+  if (/aberto|pendente|pendencia|vencid|atrasad|atraso|previst|programad|aguardand|parcial/.test(t)) return true;
+  return false;
 }
 
 function resumoLinha(registro) {

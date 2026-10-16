@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 598 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 616 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -216,6 +216,25 @@ app não conseguiu identificar sozinho.
   que ninguém conseguiu conciliar. O saldo é **por conta**, somado, e a data que
   vale é a **mais antiga** delas: uma conta esquecida envelhece a projeção
   inteira, e usar a data mais nova esconderia justamente isso.
+- **A negação é lida antes da palavra.** "NÃO PAGO" contém "PAGO". "NÃO
+  RECEBIDO" contém "RECEBID". A leitura da coluna Situação procurava esses
+  pedaços no texto sem olhar a negação na frente, e todo título em aberto do
+  relatório dela entrava no app como **baixado, com saldo zero** — o fluxo de
+  caixa dava zero com a base cheia de títulos. Não dava erro, não deixava aviso,
+  e o número errado era redondo e tranquilo: o pior erro que este app pode ter.
+  Agora qualquer palavra que signifique "ainda não aconteceu" (não, sem, a
+  receber, a vencer, em aberto, pendente, vencido, em atraso, aguardando,
+  previsto, parcial) vence as que significam "aconteceu". Entre errar para
+  aberto e errar para pago, erra-se para aberto: um título que aparece no caixa
+  e não devia é uma pergunta; um título que desaparece é um buraco silencioso.
+- **Erro gravado na base se conserta sem reimportação.** Cada título guarda
+  `statusArquivo`, o texto cru da coluna Situação — então o conserto relê esse
+  texto com a regra certa, uma vez por aparelho, e não toca no que foi baixado
+  por ausência no relatório, no que ela baixou à mão, nem no que não tem texto
+  de origem para reler. Fazê-la reimportar tudo seria cobrar dela o preço de um
+  erro do app, no aplicativo que existe para eliminar trabalho administrativo. O
+  conserto é anunciado e fica no histórico: um app que corrige em silêncio é um
+  app em que não se pode confiar.
 - **Um zero tem de dizer de onde veio.** Projeção zerada pode querer dizer seis
   coisas: não chegou título, chegou tudo baixado, chegou tudo vencido (e aí sai
   da projeção de propósito), vence depois do recorte, veio sem data de

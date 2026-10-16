@@ -349,6 +349,124 @@ console.log('\n▶ O saldo são as contas, somadas, pela data mais velha');
   igual('sem conta cadastrada, o número único de antes ainda vale', s4.valor, 30000);
 }
 
+console.log('\n▶ "Não pago" é aberto, e não pago');
+{
+  /**
+   * "Eu acabei de mandar o contas a pagar só a partir do dia 17 e o que tá em
+   *  aberto, ou seja, não tinha nenhum pago. E não tá calhando, tá aparecendo
+   *  zero. E eu sei que não é zero. Tem alguma coisa errada e não é o relatório."
+   *
+   * Não era o relatório. "NÃO PAGO" CONTÉM "PAGO", e "NÃO RECEBIDO" CONTÉM
+   * "RECEBID" — a leitura da situação procurava esses pedaços sem olhar a
+   * negação na frente. Todo título em aberto do relatório dela entrava como
+   * baixado, com saldo zero, e o fluxo de caixa ficava zerado com a base cheia.
+   *
+   * Nenhum aviso, nenhum erro, e o número errado era redondo e tranquilo: o
+   * pior erro que este app pode cometer. Então a tabela abaixo é exaustiva de
+   * propósito, com o vocabulário que os sistemas usam de verdade.
+   */
+  const VOCAB = [
+    ['Não pago', 'aberto'], ['Nao pago', 'aberto'], ['NÃO PAGO', 'aberto'],
+    ['Não recebido', 'aberto'], ['Nao recebido', 'aberto'],
+    ['Em aberto', 'aberto'], ['A receber', 'aberto'], ['A pagar', 'aberto'],
+    ['A vencer', 'aberto'], ['Pendente', 'aberto'], ['Vencido', 'aberto'],
+    ['Em atraso', 'aberto'], ['Atrasado', 'aberto'], ['Aguardando pagamento', 'aberto'],
+    ['Previsto', 'aberto'], ['Sem baixa', 'aberto'],
+    /* pagamento parcial não é baixa: o que falta continua em aberto */
+    ['Pago parcialmente', 'aberto'], ['Parcialmente recebido', 'aberto'],
+    ['Pago', 'pago'], ['PAGO', 'pago'], ['Recebido', 'pago'], ['Quitado', 'pago'],
+    ['Liquidado', 'pago'], ['Baixado', 'pago'],
+    ['Cancelado', 'cancelado'], ['Baixado por perda', 'cancelado'],
+    ['', 'aberto'],
+  ];
+
+  const CAB = 'Destinado a;Vencimento;Situação;Valor total;Nota fiscal';
+  const linhas = VOCAB.map(([situacao], i) => `CLIENTE ${i};20/11/2026;${situacao};1.000,00;90${i}`);
+  await importar('receber', 'vocab.csv', `${CAB}\n${linhas.join('\n')}`,
+    { fotografiaCompleta: false });
+
+  const titulos = (await store.receber.listar()).filter((t) => /^CLIENTE \d+$/.test(t.clienteNome || ''));
+  igual('cada linha do vocabulário virou um título', titulos.length, VOCAB.length);
+
+  let errados = [];
+  for (const [situacao, esperado] of VOCAB) {
+    const t = titulos.find((x) => (x.statusArquivo || '') === situacao);
+    if (!t || t.status !== esperado) {
+      errados.push(`${JSON.stringify(situacao)} → ${t ? t.status : 'não achou'} (esperado ${esperado})`);
+    }
+  }
+  ok('toda situação é lida como a palavra diz', errados.length === 0, errados.join(' | '));
+
+  /* e o saldo acompanha: aberto mantém o valor, pago zera */
+  const aberto = titulos.find((t) => t.statusArquivo === 'Não pago');
+  igual('título em aberto guarda o valor cheio', aberto.saldo, 1000);
+  igual('e não registra pagamento nenhum', aberto.valorRecebido, null);
+  const pago = titulos.find((t) => t.statusArquivo === 'Pago');
+  igual('título pago zera o saldo', pago.saldo, 0);
+
+  /**
+   * E O FLUXO DE CAIXA SAI DO ZERO — que é a prova que importa, porque é a tela
+   * onde ela viu o erro.
+   */
+  const emAberto = VOCAB.filter(([, e]) => e === 'aberto').length;
+  const proj = await fluxo.projetar({ de: '2026-11-01', ate: '2026-11-30' });
+  igual('e o fluxo de caixa deixa de ser zero', proj.totalReceber, emAberto * 1000);
+
+  for (const t of titulos) await store.receber.remover(t.id);
+}
+
+console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
+{
+  /**
+   * Corrigir a leitura resolve as PRÓXIMAS importações. Não resolve o que já
+   * está gravado — e mandar ela reimportar tudo seria cobrar dela o preço do meu
+   * erro, no app que existe para eliminar trabalho administrativo.
+   *
+   * Cada título guarda `statusArquivo`: o texto cru da coluna Situação. Então o
+   * conserto relê esse texto com a regra certa, sem precisar de arquivo nenhum.
+   */
+  const reparar = await import('../src/core/reparar.js');
+
+  const base = [
+    /* o caso dela: entrou como pago porque "não pago" contém "pago" */
+    { id: 'rp1', clienteNome: 'A', vencimento: '2026-11-10', valor: 1000, statusArquivo: 'Não pago', status: 'pago', saldo: 0, valorRecebido: 1000 },
+    { id: 'rp2', clienteNome: 'B', vencimento: '2026-11-11', valor: 2000, statusArquivo: 'Não recebido', status: 'pago', saldo: 0, valorRecebido: 2000 },
+    /* pago de verdade: não se encosta */
+    { id: 'rp3', clienteNome: 'C', vencimento: '2026-11-12', valor: 3000, statusArquivo: 'Pago', status: 'pago', saldo: 0, valorRecebido: 3000 },
+    /* baixado por AUSÊNCIA: a fotografia funcionando, não é erro de leitura */
+    { id: 'rp4', clienteNome: 'D', vencimento: '2026-11-13', valor: 4000, statusArquivo: 'Não pago', status: 'pago', saldo: 0, baixadoPorAusencia: true },
+    /* baixado À MÃO por ela: decisão dela, o app não desfaz */
+    { id: 'rp5', clienteNome: 'E', vencimento: '2026-11-14', valor: 5000, statusArquivo: 'Não pago', status: 'pago', saldo: 0, baixaManual: true },
+    /* sem texto de origem: reabrir seria adivinhação */
+    { id: 'rp6', clienteNome: 'F', vencimento: '2026-11-15', valor: 6000, status: 'pago', saldo: 0 },
+    /* já está aberto: nada a fazer */
+    { id: 'rp7', clienteNome: 'G', vencimento: '2026-11-16', valor: 7000, statusArquivo: 'Em aberto', status: 'aberto', saldo: 7000 },
+  ];
+  for (const t of base) await store.receber.salvar(t);
+  await dbMod.remove('kv', 'reparo_situacao_negada');
+
+  const r = await reparar.repararSituacaoNegada();
+  igual('reabre só os que o próprio texto diz em aberto', r.reabertos, 2);
+  igual('somando o valor que tinha sumido do caixa', r.valor, 3000);
+
+  const dep = new Map((await store.receber.listar()).map((t) => [t.id, t]));
+  igual('"Não pago" volta para aberto', dep.get('rp1').status, 'aberto');
+  igual('com o saldo cheio de volta', dep.get('rp1').saldo, 1000);
+  igual('e sem pagamento registrado', dep.get('rp1').valorRecebido, null);
+  igual('"Não recebido" também', dep.get('rp2').status, 'aberto');
+  igual('título realmente pago continua pago', dep.get('rp3').status, 'pago');
+  igual('baixado por ausência do relatório continua baixado', dep.get('rp4').status, 'pago');
+  igual('baixa feita à mão por ela é respeitada', dep.get('rp5').status, 'pago');
+  igual('sem texto de origem, o app não adivinha', dep.get('rp6').status, 'pago');
+  igual('o que já estava aberto fica como está', dep.get('rp7').status, 'aberto');
+
+  /* roda uma vez só: abrir o app de novo não reabre nada */
+  const r2 = await reparar.repararSituacaoNegada();
+  igual('na segunda abertura não mexe em nada', r2.reparou, false);
+
+  for (const t of base) await store.receber.remover(t.id);
+}
+
 console.log('\n▶ Um zero na projeção tem de dizer de onde veio');
 {
   /**

@@ -9,6 +9,7 @@ import { defineRoutes, initRouter } from './core/router.js';
 import { requestPersistence } from './core/db.js';
 import { migrarDoNomeAntigo } from './core/migrar.js';
 import { reiniciarSePreciso } from './core/reiniciar.js';
+import { repararSituacaoNegada } from './core/reparar.js';
 import { montarShell, aoTrocarRota, atualizarAlertas } from './ui/shell.js';
 import { semear } from './data/seed.js';
 
@@ -81,6 +82,13 @@ async function iniciar() {
     // de volta.
     const recomeco = await reiniciarSePreciso();
     const migracao = recomeco.reiniciou ? { migrou: false } : await migrarDoNomeAntigo();
+    /**
+     * Conserta, uma vez, os títulos que entraram como baixados porque "NÃO
+     * PAGO" contém "PAGO". Vem depois da migração, para alcançar também o que
+     * veio do banco antigo, e antes de qualquer tela, para ela nunca ver o
+     * número errado.
+     */
+    const reparo = recomeco.reiniciou ? { reparou: false } : await repararSituacaoNegada();
     await semear();
     const outlet = montarShell(raiz);
     defineRoutes(ROTAS);
@@ -95,6 +103,25 @@ async function iniciar() {
     } else if (migracao.migrou) {
       const { ok } = await import('./ui/components/toast.js');
       ok(`${migracao.registros} registro(s) trazidos do aplicativo antigo.`);
+    }
+    /**
+     * O conserto é anunciado, não escondido. Ela viu o caixa zerado e precisa
+     * saber que o número mudou, e por quê — um app que corrige silenciosamente
+     * é um app em que não se pode confiar.
+     */
+    if (reparo.reparou) {
+      const [{ money }, { ok }, store] = await Promise.all([
+        import('./core/format.js'),
+        import('./ui/components/toast.js'),
+        import('./core/store.js'),
+      ]);
+      ok(`${reparo.reabertos} título(s) voltaram para "em aberto" — ${money(reparo.valor)}.`);
+      /* e fica no histórico: um aviso de rodapé passa, o número precisa ficar */
+      await store.registrar('conserto', {
+        alvo: 'Situação lida com negação',
+        de: `${reparo.reabertos} títulos como pagos`,
+        para: `em aberto (${money(reparo.valor)})`,
+      });
     }
   } catch (err) {
     console.error(err);

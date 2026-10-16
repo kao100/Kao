@@ -390,9 +390,9 @@ export function explicarZero(d) {
       falas.push({
         nivel: 'atencao',
         texto: `${tit(c.importados)} ${nome} ${c.importados === 1 ? 'entrou' : 'entraram'} na base, `
-          + `${c.importados === 1 ? 'e está' : 'e estão'} baixado ou cancelado — então não há nada `
-          + 'para projetar. Se não é isso que você esperava, o export do '
-          + `"${arquivo}" provavelmente veio com a coluna de situação já liquidada.`,
+          + (c.importados === 1 ? 'e está baixado ou cancelado' : 'e estão baixados ou cancelados')
+          + ' — então não há nada para projetar. Se não é isso que você esperava, confira a coluna '
+          + `Situação do export do "${arquivo}": o app já errou aqui lendo "Não pago" como pago.`,
       });
       continue;
     }
