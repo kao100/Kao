@@ -28,6 +28,7 @@
 import * as store from '../core/store.js';
 import { cents, sum } from '../core/util.js';
 import { today, addDays, eachDay, monthStart, monthEnd, addMonths, monthKey } from '../core/format.js';
+import { statusTitulo } from './link.js';
 
 export const HORIZONTES = [
   { id: '7', dias: 7, label: 'Próximos 7 dias' },
@@ -166,7 +167,16 @@ export function extraordinarioEm(recursos, data) {
 
 /* ------------------------------------------------------- títulos do período */
 
-const aberto = (t) => t.status !== 'pago' && t.status !== 'cancelado';
+/**
+ * ABERTO É A MESMA COISA AQUI E NO RESTO DO APP.
+ *
+ * Isto era duas verdades sobre o mesmo título: o Caixa olhava só a coluna de
+ * situação, enquanto o resto do app também considerava pago o título com data de
+ * recebimento ou com saldo zerado. Dava para um título aparecer como entrada
+ * futura numa tela e como pago na outra — e a tela em que a divergência não
+ * aparece é sempre a que mente.
+ */
+const aberto = (t) => statusTitulo(t) === 'aberto';
 const saldoDe = (t) => cents(t.saldo ?? t.valor ?? 0);
 
 /**
@@ -303,6 +313,145 @@ export async function projetar({ de = today(), ate = null, dias = 30 } = {}) {
       valor: cents(sum([...rec.semData, ...pag.semData], saldoDe)),
     },
   };
+}
+
+/**
+ * POR QUE ESTÁ ZERADO.
+ *
+ * "Mandei todos os arquivos. Aí eu vou na parte caixa, já alimentei o saldo, aí
+ *  eu vejo a projeção para os 30 dias. E aí recebimento, pagamento, líquido —
+ *  tá tudo zerado. Eu já mandei."
+ *
+ * Um zero pode querer dizer seis coisas, e o app mostrava sempre o mesmo zero:
+ * não chegou título nenhum, chegou e já está tudo baixado, chegou e está tudo
+ * vencido (então sai da projeção de propósito), chegou e vence depois do
+ * recorte, chegou sem data de vencimento, ou chegou com valor zero. São
+ * problemas diferentes, com soluções diferentes — e um deles nem é problema.
+ *
+ * Então esta função não calcula nada novo: ela conta onde os títulos foram
+ * parar. Quem mostra o zero tem a obrigação de dizer de onde ele veio.
+ */
+export async function diagnosticar({ de = today(), ate = null, dias = 30 } = {}) {
+  const fim = ate || addDays(de, dias - 1);
+  const [receber, pagar] = await Promise.all([store.receber.listar(), store.pagar.listar()]);
+  return {
+    periodo: { de, ate: fim },
+    receber: contarOndeEstao(receber, de, fim),
+    pagar: contarOndeEstao(pagar, de, fim),
+  };
+}
+
+function contarOndeEstao(titulos, de, fim) {
+  const emAberto = titulos.filter(aberto);
+  const comData = emAberto.filter((t) => !!t.vencimento);
+  const noPeriodo = comData.filter((t) => t.vencimento >= de && t.vencimento <= fim);
+  return {
+    importados: titulos.length,
+    baixados: titulos.filter((t) => statusTitulo(t) === 'pago').length,
+    cancelados: titulos.filter((t) => statusTitulo(t) === 'cancelado').length,
+    emAberto: emAberto.length,
+    vencidos: comData.filter((t) => t.vencimento < de).length,
+    depoisDoPeriodo: comData.filter((t) => t.vencimento > fim).length,
+    semVencimento: emAberto.length - comData.length,
+    noPeriodo: noPeriodo.length,
+    /* título em aberto, no prazo, e valendo zero: o valor não veio do arquivo */
+    semValor: noPeriodo.filter((t) => !saldoDe(t)).length,
+    valorNoPeriodo: cents(sum(noPeriodo, saldoDe)),
+  };
+}
+
+/**
+ * O diagnóstico virado em frases, do mais provável para o menos.
+ *
+ * Cada frase diz O QUE fazer, não só o que está errado: um aviso que não dá o
+ * próximo passo faz ela voltar aqui me perguntar, que é o trabalho que o app
+ * deveria eliminar.
+ */
+export function explicarZero(d) {
+  const falas = [];
+  /* "Os 1 títulos" é o tipo de frase que faz ela desconfiar do número ao lado */
+  const tit = (n) => (n === 1 ? '1 título' : `${n} títulos`);
+  const lados = [
+    { nome: 'a receber', c: d.receber, arquivo: 'Contas a receber' },
+    { nome: 'a pagar', c: d.pagar, arquivo: 'Contas a pagar' },
+  ];
+
+  for (const { nome, c, arquivo } of lados) {
+    if (!c.importados) {
+      falas.push({
+        nivel: 'atencao',
+        texto: `Nenhum título ${nome} entrou na base. O relatório "${arquivo}" não foi importado, `
+          + 'ou foi importado e a confirmação no fim não foi concluída. Em Enviar, veja se ele '
+          + 'aparece no histórico do dia.',
+      });
+      continue;
+    }
+    if (!c.emAberto) {
+      falas.push({
+        nivel: 'atencao',
+        texto: `${tit(c.importados)} ${nome} ${c.importados === 1 ? 'entrou' : 'entraram'} na base, `
+          + `${c.importados === 1 ? 'e está' : 'e estão'} baixado ou cancelado — então não há nada `
+          + 'para projetar. Se não é isso que você esperava, o export do '
+          + `"${arquivo}" provavelmente veio com a coluna de situação já liquidada.`,
+      });
+      continue;
+    }
+    if (c.semVencimento === c.emAberto) {
+      falas.push({
+        nivel: 'atencao',
+        texto: `${tit(c.emAberto)} ${nome} em aberto ${c.emAberto === 1 ? 'está' : 'estão'} SEM DATA `
+          + 'DE VENCIMENTO. Sem a data o app não sabe em que dia pôr cada um, e por isso nenhum '
+          + `entra na projeção. Reenvie o "${arquivo}" com a coluna Vencimento — e, se a coluna `
+          + 'estiver lá, confira na importação se ela foi apontada como Vencimento.',
+      });
+      continue;
+    }
+    if (!c.noPeriodo) {
+      const partes = [];
+      if (c.vencidos) {
+        partes.push(`${tit(c.vencidos)} já ${c.vencidos === 1 ? 'venceu' : 'venceram'} `
+          + '(fica na seção Vencidos, fora da projeção de propósito)');
+      }
+      if (c.depoisDoPeriodo) {
+        partes.push(`${tit(c.depoisDoPeriodo)} ${c.depoisDoPeriodo === 1 ? 'vence' : 'vencem'} `
+          + 'depois do fim do período');
+      }
+      if (c.semVencimento) {
+        partes.push(`${tit(c.semVencimento)} ${c.semVencimento === 1 ? 'está' : 'estão'} sem data de vencimento`);
+      }
+      falas.push({
+        nivel: 'info',
+        texto: `Nenhum título ${nome} vence neste período: ${partes.join('; ')}. `
+          + (c.depoisDoPeriodo ? 'Amplie o período no filtro de cima para vê-los.' : ''),
+      });
+      continue;
+    }
+    if (c.semValor === c.noPeriodo) {
+      falas.push({
+        nivel: 'atencao',
+        texto: `${tit(c.noPeriodo)} ${nome} ${c.noPeriodo === 1 ? 'vence' : 'vencem'} neste período `
+          + `e ${c.noPeriodo === 1 ? 'está' : 'estão'} com VALOR ZERO. O valor não veio do arquivo: `
+          + `reenvie o "${arquivo}" conferindo, na importação, qual coluna foi apontada como `
+          + '"Valor total".',
+      });
+      continue;
+    }
+    if (c.semValor) {
+      falas.push({
+        nivel: 'info',
+        texto: `${c.semValor} de ${tit(c.noPeriodo)} ${nome} do período ${c.semValor === 1 ? 'está' : 'estão'} `
+          + 'com valor zero, e por isso não somam nada na projeção.',
+      });
+    }
+    if (c.semVencimento) {
+      falas.push({
+        nivel: 'info',
+        texto: `${tit(c.semVencimento)} ${nome} ${c.semVencimento === 1 ? 'está' : 'estão'} sem data de `
+          + 'vencimento e ficou fora da projeção — não aparece em dia nenhum.',
+      });
+    }
+  }
+  return falas;
 }
 
 /** Os totais do mês corrente, para o resumo de abertura. */

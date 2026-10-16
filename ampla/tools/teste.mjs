@@ -349,6 +349,94 @@ console.log('\n▶ O saldo são as contas, somadas, pela data mais velha');
   igual('sem conta cadastrada, o número único de antes ainda vale', s4.valor, 30000);
 }
 
+console.log('\n▶ Um zero na projeção tem de dizer de onde veio');
+{
+  /**
+   * "Mandei todos os arquivos. Aí eu vou na parte caixa, já alimentei o saldo,
+   *  aí eu vejo a projeção para os 30 dias. E aí recebimento, pagamento,
+   *  líquido — tá tudo zerado. Eu já mandei."
+   *
+   * Seis causas, um zero só na tela. Este teste exige que cada causa produza a
+   * SUA frase: é a diferença entre ela resolver sozinha em dez segundos e ela
+   * vir me perguntar.
+   */
+  const originais = {
+    receber: await store.receber.listar(),
+    pagar: await store.pagar.listar(),
+  };
+  const limpar = async () => {
+    for (const t of await store.receber.listar()) await store.receber.remover(t.id);
+    for (const t of await store.pagar.listar()) await store.pagar.remover(t.id);
+  };
+  const frases = async () => {
+    const d = await fluxo.diagnosticar({ de: '2026-09-13', dias: 30 });
+    return fluxo.explicarZero(d).map((f) => f.texto).join(' || ');
+  };
+
+  /* 1 — não chegou título nenhum */
+  await limpar();
+  ok('sem título nenhum, o app diz que o relatório não entrou',
+    /não foi importado/.test(await frases()), await frases());
+
+  /* 2 — chegou, mas está tudo baixado */
+  await limpar();
+  await store.receber.salvar({ id: 'z1', vencimento: '2026-09-20', valor: 1000, status: 'pago' });
+  ok('tudo baixado, o app diz que não há o que projetar',
+    /baixado ou cancelado/.test(await frases()), await frases());
+
+  /* 3 — chegou sem data de vencimento (o caso invisível de antes) */
+  await limpar();
+  await store.receber.salvar({ id: 'z2', valor: 1000, status: 'aberto' });
+  ok('sem vencimento, o app nomeia a coluna que falta',
+    /SEM DATA DE VENCIMENTO/.test(await frases()), await frases());
+
+  /* 4 — tudo vencido: sai da projeção de propósito, e isso não é defeito */
+  await limpar();
+  await store.receber.salvar({ id: 'z3', vencimento: '2026-08-01', valor: 1000, status: 'aberto' });
+  const f4 = (await frases()).split(' || ').find((x) => /a receber/.test(x)) || '';
+  ok('tudo vencido, o app explica que é de propósito', /já venceu/.test(f4), f4);
+  ok('e não chama isso de erro', !/VALOR ZERO|não foi importado/.test(f4), f4);
+
+  /* 5 — vence depois do recorte */
+  await limpar();
+  await store.receber.salvar({ id: 'z4', vencimento: '2027-01-10', valor: 1000, status: 'aberto' });
+  const f5 = (await frases()).split(' || ').find((x) => /a receber/.test(x)) || '';
+  ok('vencendo depois do período, o app manda ampliar o período',
+    /vence depois do fim do período/.test(f5) && /Amplie o período/.test(f5), f5);
+
+  /* 6 — no prazo, mas com valor zero: a coluna de valor não veio */
+  await limpar();
+  await store.receber.salvar({ id: 'z5', vencimento: '2026-09-20', valor: 0, status: 'aberto' });
+  ok('valor zero, o app nomeia a coluna "Valor total"',
+    /VALOR ZERO/.test(await frases()), await frases());
+
+  /* e quando há movimento de verdade, o app não inventa explicação */
+  await limpar();
+  await store.receber.salvar({ id: 'z6', vencimento: '2026-09-20', valor: 5000, status: 'aberto' });
+  const d = await fluxo.diagnosticar({ de: '2026-09-13', dias: 30 });
+  igual('com título no prazo, ele entra na conta', d.receber.valorNoPeriodo, 5000);
+  const proj = await fluxo.projetar({ de: '2026-09-13', dias: 30 });
+  igual('e a projeção deixa de ser zero', proj.totalReceber, 5000);
+
+  /**
+   * E "ABERTO" É A MESMA COISA AQUI E NO RESTO DO APP.
+   *
+   * Eram duas verdades sobre o mesmo título: o Caixa olhava só a situação, o
+   * resto do app também considerava pago o título com data de recebimento ou
+   * saldo zerado. Um título podia ser entrada futura numa tela e pago na outra.
+   */
+  await limpar();
+  await store.receber.salvar({
+    id: 'z7', vencimento: '2026-09-20', valor: 7000, status: 'aberto', dataRecebimento: '2026-09-14',
+  });
+  const p2 = await fluxo.projetar({ de: '2026-09-13', dias: 30 });
+  igual('título com data de recebimento não é entrada futura', p2.totalReceber, 0);
+
+  await limpar();
+  for (const t of originais.receber) await store.receber.salvar(t);
+  for (const t of originais.pagar) await store.pagar.salvar(t);
+}
+
 console.log('\n▶ Reimportar não duplica');
 await importar('nfs', 'fiscal.csv', FISCAL);
 await importar('receber', 'receber.csv', RECEBER);

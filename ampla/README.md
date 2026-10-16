@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 588 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 598 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -216,6 +216,19 @@ app não conseguiu identificar sozinho.
   que ninguém conseguiu conciliar. O saldo é **por conta**, somado, e a data que
   vale é a **mais antiga** delas: uma conta esquecida envelhece a projeção
   inteira, e usar a data mais nova esconderia justamente isso.
+- **Um zero tem de dizer de onde veio.** Projeção zerada pode querer dizer seis
+  coisas: não chegou título, chegou tudo baixado, chegou tudo vencido (e aí sai
+  da projeção de propósito), vence depois do recorte, veio sem data de
+  vencimento, ou veio com valor zero. São seis problemas diferentes, com
+  soluções diferentes, e um deles nem é problema — e o app mostrava o mesmo zero
+  para todos. Agora o Caixa conta onde os títulos foram parar e diz o próximo
+  passo, nomeando a coluna que falta no export. Um aviso que não dá o próximo
+  passo devolve a pergunta para quem perguntou.
+- **"Em aberto" é a mesma coisa em toda tela.** O Caixa olhava só a coluna de
+  situação, enquanto o resto do app também considerava pago o título com data de
+  recebimento ou com saldo zerado — então o mesmo título podia ser entrada
+  futura numa tela e pago na outra. A regra agora é uma só, e a tela em que a
+  divergência não aparece é sempre a que mente.
 - **O que está vencido não é projetado.** Entrada vencida não é entrada certa, e
   obrigação vencida é necessidade de caixa hoje, não no vencimento. Os dois ficam
   fora da linha do tempo e à vista, em lista própria.

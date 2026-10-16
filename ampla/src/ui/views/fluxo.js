@@ -36,7 +36,8 @@ export async function telaFluxo({ query }) {
     ? { de: query.de, ate: query.ate }
     : fluxo.periodoDoHorizonte(horizonte, base);
 
-  const r = await fluxo.projetar(periodo);
+  const [r, diag] = await Promise.all([fluxo.projetar(periodo), fluxo.diagnosticar(periodo)]);
+  const porQueZero = (r.totalReceber || r.totalPagar) ? [] : fluxo.explicarZero(diag);
   definirTitulo('Fluxo de caixa', `${formatDate(periodo.de)} a ${formatDate(periodo.ate)}`);
 
   if (!r.temSaldo) {
@@ -88,6 +89,19 @@ export async function telaFluxo({ query }) {
 
     /* -------------------------------------------------------- o que vem */
     secao(`Próximos dias (${formatDate(periodo.de, 'short')} a ${formatDate(periodo.ate, 'short')})`, null,
+      /**
+       * UM ZERO TEM DE DIZER DE ONDE VEIO.
+       *
+       * "Mandei todos os arquivos (...) e aí recebimento, pagamento, líquido —
+       *  tá tudo zerado. Eu já mandei."
+       *
+       * Zero pode ser: não chegou título, chegou tudo baixado, chegou tudo
+       * vencido (e aí sai da projeção de propósito), vence depois do recorte,
+       * veio sem data, ou veio com valor zero. São seis problemas diferentes e o
+       * app mostrava o mesmo zero para todos. Agora ele conta onde os títulos
+       * foram parar, e o que fazer.
+       */
+      ...porQueZero.map((f) => aviso(f.texto, f.nivel)),
       h('div.grade.grade--2',
         kpi({ label: 'A receber', valor: money(r.totalReceber), icone: '↗', cor: 'ok' }),
         kpi({ label: 'A pagar', valor: money(r.totalPagar), icone: '↘', cor: 'laranja' }),
@@ -104,6 +118,16 @@ export async function telaFluxo({ query }) {
         `${r.diasNegativos.length} dia(s) com saldo negativo neste período, a partir de `
         + `${formatDate(r.diasNegativos[0])}. É aqui que dá para antecipar uma cobrança ou negociar `
         + 'um pagamento — abra o dia e veja de quem é cada valor.', 'ruim')),
+
+    /**
+     * TÍTULO SEM DATA NÃO ENTRA EM DIA NENHUM — então ele tem de aparecer aqui.
+     * Antes isto era calculado e nunca mostrado: o valor simplesmente faltava na
+     * projeção, sem nada dizendo que faltava.
+     */
+    (r.semVencimento.receber > 0 || r.semVencimento.pagar > 0) && aviso(
+      `${r.semVencimento.receber + r.semVencimento.pagar} título(s) estão sem data de vencimento, `
+      + `somando ${money(r.semVencimento.valor)}. Eles não entram em dia nenhum da projeção. `
+      + 'Reenvie o relatório com a coluna Vencimento preenchida para eles entrarem.', 'atencao'),
 
     /* ----------------------------------------------------------- vencidos */
     (r.vencidos.receber.quantidade > 0 || r.vencidos.pagar.quantidade > 0) && secao('Vencidos', null,
