@@ -9,7 +9,18 @@ const L = { esq: 6, dir: 6, topo: 10, base: 20 };
  * Linha/área com linha do zero e, opcionalmente, linha de meta.
  * @param {Array<{rotulo:string, valor:number}>} pontos
  */
-export function grafLinha(pontos, { altura = 130, cor = 'var(--azul)', meta = null, rotulos = 4 } = {}) {
+export function grafLinha(entrada, { altura = 130, cor = 'var(--azul)', meta = null, rotulos = 4 } = {}) {
+  /**
+   * PONTO SEM NÚMERO NÃO DESENHA NADA — e tem de dizer isso.
+   *
+   * Um chamador passou { x, y } onde este componente lê { rotulo, valor }. Todo
+   * ponto virou NaN, o navegador recusou o SVG e o cartão ficou em branco, numa
+   * tela de dinheiro, sem uma palavra. Gráfico vazio parece "não tem nada".
+   *
+   * Agora o ponto sem número é descartado, e se não sobrar nenhum o componente
+   * assume o silêncio em vez de fingir um desenho.
+   */
+  const pontos = (entrada || []).filter((p) => Number.isFinite(p?.valor));
   if (!pontos.length) return h('div.vazio.pequeno', 'Sem dados no período.');
   const larg = 320;
   const valores = pontos.map((p) => p.valor);

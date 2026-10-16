@@ -415,6 +415,46 @@ console.log('\n▶ "Não pago" é aberto, e não pago');
   for (const t of titulos) await store.receber.remover(t.id);
 }
 
+console.log('\n▶ Gráfico sem número não finge desenho');
+{
+  /**
+   * O cartão "Evolução do saldo projetado" passava { x, y } para um componente
+   * que lê { rotulo, valor }. Todo ponto virava NaN, o navegador recusava o SVG
+   * e o cartão ficava EM BRANCO — numa tela de dinheiro, sem uma palavra, na
+   * exata tela onde ela estava procurando o que faltava.
+   */
+  const { readFileSync: ler } = await import('node:fs');
+  const { join: jn, dirname: dn } = await import('node:path');
+  const { fileURLToPath: fu } = await import('node:url');
+  const raiz = jn(dn(fu(import.meta.url)), '..');
+
+  for (const arquivo of ['src/ui/views/fluxo.js', 'src/ui/views/diario.js']) {
+    const fonte = ler(jn(raiz, arquivo), 'utf8');
+    let desde = 0;
+    let n = 0;
+    for (;;) {
+      const i = fonte.indexOf('grafLinha(', desde);
+      if (i < 0) break;
+      desde = i + 10;
+      n += 1;
+      const argumento = fonte.slice(desde, desde + 300);
+      /* a série pode vir montada ali mesmo, ou por um nome declarado antes */
+      let trecho = argumento;
+      const nome = (argumento.match(/^\s*([A-Za-z_$][\w$]*)\s*,/) || [])[1];
+      if (nome) {
+        const j = fonte.indexOf(`const ${nome} =`);
+        if (j >= 0) trecho = fonte.slice(j, j + 400);
+      }
+      ok(`${arquivo}: a série ${n} do gráfico tem rotulo e valor`,
+        /rotulo/.test(trecho) && /valor/.test(trecho), trecho.slice(0, 160));
+    }
+  }
+
+  /* e o componente não desenha com número inválido */
+  const chart = ler(jn(raiz, 'src/ui/components/chart.js'), 'utf8');
+  ok('o gráfico descarta ponto sem número', /Number\.isFinite/.test(chart), '');
+}
+
 console.log('\n▶ O app diz POR QUE deu o título como baixado');
 {
   /**

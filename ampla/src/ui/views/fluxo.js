@@ -52,7 +52,18 @@ export async function telaFluxo({ query }) {
           botao('Cadastrar conta', { onClick: novaConta }))));
   }
 
-  const serie = r.linhas.map((l) => ({ x: l.data, y: l.saldoProjetado }));
+  /**
+   * O GRÁFICO LIA CAMPOS QUE NÃO EXISTIAM.
+   *
+   * Isto vinha como { x, y } e o componente de linha lê { rotulo, valor }: todo
+   * ponto virava NaN, o SVG era recusado pelo navegador e o cartão aparecia
+   * vazio. Um gráfico em branco numa tela de dinheiro parece "não tem nada" — e
+   * dizia isso justamente na tela onde ela estava procurando o que faltava.
+   */
+  const serie = r.linhas.map((l) => ({
+    rotulo: formatDate(l.data, 'short'),
+    valor: l.saldoProjetado,
+  }));
 
   return h('div.empilha', { style: { gap: '14px' } },
     filtros(horizonte, query),

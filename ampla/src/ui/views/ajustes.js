@@ -376,15 +376,31 @@ async function editarVendedor(vendedor) {
  */
 async function recomecarFinanceiro() {
   const [receber, pagar] = await Promise.all([store.receber.listar(), store.pagar.listar()]);
-  const emAberto = [...receber, ...pagar].filter((t) => t.status !== 'pago' && t.status !== 'cancelado');
+  const todos = [...receber, ...pagar];
+  const emAberto = todos.filter((t) => t.status !== 'pago' && t.status !== 'cancelado');
+  const fechados = todos.length - emAberto.length;
   const total = emAberto.reduce((a, t) => a + (t.saldo ?? t.valor ?? 0), 0);
 
+  /**
+   * O AVISO TEM DE CONTAR OS FECHADOS TAMBÉM.
+   *
+   * Ele dizia só quanto está EM ABERTO — e quem aperta este botão é justamente
+   * quem desconfia que os títulos foram fechados errado. Nesse caso o aviso
+   * mostrava "R$ 0,00", como se não houvesse nada para apagar, na exata
+   * situação em que apagar é o que resolve.
+   */
   const confirmado = await confirmar({
     titulo: 'Apagar todos os títulos?',
-    texto: `Vão sair ${receber.length} título(s) a receber e ${pagar.length} a pagar — `
-      + `${money(total)} que hoje aparecem em aberto. Notas fiscais, faturamento, comissões e `
-      + 'cadastros NÃO são tocados. Depois disso, importe os relatórios mais recentes de Contas a '
-      + 'Receber e a Pagar: eles viram a fotografia inicial. Não dá para desfazer.',
+    texto: `Vão sair ${receber.length} título(s) a receber e ${pagar.length} a pagar. `
+      + `Hoje ${emAberto.length} ${emAberto.length === 1 ? 'está' : 'estão'} em aberto `
+      + `(${money(total)})`
+      + (fechados
+        ? ` e ${fechados} ${fechados === 1 ? 'está como baixado' : 'estão como baixados'} — se algum `
+          + 'desses está em aberto no seu sistema, é exatamente isso que apagar resolve.'
+        : '.')
+      + ' Notas fiscais, faturamento, comissões e cadastros NÃO são tocados. Depois disso, importe '
+      + 'os relatórios mais recentes de Contas a Receber e a Pagar: eles viram a fotografia '
+      + 'inicial. Não dá para desfazer.',
     confirmar: 'Apagar e recomeçar',
     perigo: true,
   });

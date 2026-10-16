@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 629 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 632 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -238,6 +238,18 @@ app não conseguiu identificar sozinho.
   em zero — o caso mais assustador, porque o caixa fica negativo para sempre — a
   tela não dizia nada. Agora o lado com movimento fica calado e o lado zerado
   fala.
+- **Gráfico sem número não finge desenho.** O cartão de evolução do saldo
+  passava `{ x, y }` para um componente que lê `{ rotulo, valor }`: todo ponto
+  virava NaN, o navegador recusava o SVG e o cartão ficava em branco — numa tela
+  de dinheiro, sem uma palavra, exatamente onde se procura o que está faltando.
+  Um gráfico vazio parece "não tem nada". Agora o componente descarta ponto sem
+  número e, se não sobrar nenhum, assume o silêncio; e o teste confere as séries
+  de quem o chama, porque esse erro não aparece em número nenhum.
+- **Quem apaga os títulos precisa ver quantos estão baixados.** O aviso do
+  "Recomeçar o financeiro" mostrava só o total em aberto — e quem aperta esse
+  botão é justamente quem desconfia que os títulos foram baixados errado. Na
+  situação em que apagar é o que resolve, o aviso dizia "R$ 0,00", como se não
+  houvesse nada para apagar.
 - **O app diz POR QUE deu o título como baixado, com o texto que leu.** "Estão
   todos baixados" não serve: ela sabe que não estão. O título guarda a evidência
   da baixa — a coluna Situação, uma data preenchida, saldo zero, ausência no
