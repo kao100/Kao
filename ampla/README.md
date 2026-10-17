@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 716 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 726 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -246,6 +246,22 @@ app não conseguiu identificar sozinho.
   `dataRecebimento`, e é o que o nome da coluna diz), o outro perde a ligação e
   fica em branco — campo que o arquivo não tem nunca é preenchido por suposição —
   e a tela avisa quando ela mesma cruzar duas colunas à mão.
+- **Uma régua só para todas as fontes de custo.** O app já descartava custo
+  absurdo vindo do cadastro de produtos (acima de 1,5× o preço de venda) e do
+  relatório de produtos vendidos (acima de 5×). Só o custo do PEDIDO — que vem
+  **antes dos dois** — entrava sem nenhuma conferência, e um pedido com custo 36
+  vezes a venda passava direto. Em outubro foram 28 pedidos assim, por um
+  produto cadastrado em unidade trocada (tijolo comum com custo de milheiro e
+  venda por pacote de 10): sozinhos levaram dois vendedores ao negativo e a
+  margem da empresa de 39% para 10,31%. Corrigir o cadastro na origem **não
+  reescreve pedido já emitido** — o custo fica congelado nele —, então sem a
+  régua aqueles pedidos distorceriam a margem para sempre. Custo acima da venda
+  é venda com prejuízo de verdade (raro, e o app não presume) ou unidade trocada
+  (comum): nos dois casos não serve para calcular margem, e inventar prejuízo é
+  pior do que dizer "deste pedaço eu não sei". O custo suspeito sai da conta, a
+  venda dele vai para "sem custo confiável" em reais, e os pedidos aparecem numa
+  tabela com número, NF, vendedor e a razão custo/venda — é a lista que se leva
+  para corrigir na origem.
 - **O que o arquivo AFIRMA vence o que uma data SUGERE.** Este foi o último, e o
   que mais custou. O log da importação mostrava a releitura abrindo 565 títulos
   e o diagnóstico, logo em seguida, mostrava os mesmos 565 fechados: quem

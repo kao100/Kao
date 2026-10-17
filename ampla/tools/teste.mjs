@@ -580,6 +580,95 @@ console.log('\n▶ Dois campos na mesma coluna: o perfil salvo não manda nisso'
   for (const t of guardados) await store.receber.salvar(t);
 }
 
+console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade trocada');
+{
+  /**
+   * "Mandei os arquivos, tudo certinho, mas mantém o custo. Eu queria ter o
+   *  valor real. Pelo Gestão Click acho inviável mudar agora."
+   *
+   * Em outubro, 28 pedidos entraram com custo acima da venda — um deles com
+   * R$ 56.000,00 de custo sobre R$ 1.550,00 de venda, 36 vezes. A causa estava
+   * no cadastro (TIJOLO COMUM com custo de milheiro e venda por pacote de 10),
+   * mas corrigir o cadastro NÃO reescreve pedido já emitido: o custo fica
+   * congelado nele. Dois vendedores ficaram negativos por isso.
+   *
+   * O app já descartava custo absurdo vindo do cadastro de produtos (acima de
+   * 1,5× o preço) e do relatório de produtos vendidos (acima de 5×). Só o custo
+   * do PEDIDO — que vem ANTES dos dois — entrava sem nenhuma conferência.
+   *
+   * Custo acima da venda é venda com prejuízo de verdade (raro) ou unidade
+   * trocada (comum). Nos dois casos não serve para calcular margem, e inventar
+   * prejuízo é pior que dizer "deste pedaço eu não sei".
+   */
+  const guardadas = { nfs: await store.nfs.listar(), pedidos: await store.pedidos.listar() };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  await store.vendedores.salvar({ id: 'vA', nome: 'VENDEDOR A' });
+
+  const nota = (n, pedidoNumero, valor) => ({
+    id: `nfm_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: valor, valorProdutos: valor, vendedorId: 'vA', pedidoNumero: String(pedidoNumero),
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  const pedido = (n, custo, total) => ({
+    id: `pedm_${n}`, numero: String(n), data: '2026-10-09', valorCusto: custo, valorTotal: total,
+  });
+
+  const guardadosItens = await store.nfItens.listar();
+  for (const x of guardadosItens) await store.nfItens.remover(x.id);
+  /* a margem por vendedor sai dos ITENS da nota: sem eles não há tabela */
+  const item = (n, valor) => store.nfItens.salvar({
+    id: `itm_${n}`, nfId: `nfm_${n}`, data: '2026-10-10', nfStatus: 'autorizada',
+    vendedorId: 'vA', produtoId: `prod_${n}`, descricao: `PRODUTO ${n}`,
+    quantidade: 1, valorTotal: valor,
+  });
+
+  /* o caso dela: custo 36x a venda */
+  await store.nfs.salvar(nota(9001, 1897, 1550));
+  await store.pedidos.salvar(pedido(1897, 56000, 1550));
+  await item(9001, 1550);
+  /* um pedido saudável, que tem de continuar contando */
+  await store.nfs.salvar(nota(9002, 1900, 10000));
+  await store.pedidos.salvar(pedido(1900, 6000, 10000));
+  await item(9002, 10000);
+  /* e um apertado, mas plausível: 1,4x NÃO pode ser descartado */
+  await store.nfs.salvar(nota(9003, 1901, 1000));
+  await store.pedidos.salvar(pedido(1901, 1400, 1000));
+  await item(9003, 1000);
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+
+  igual('o pedido absurdo é descartado', r.custoSuspeito.quantidade, 1);
+  igual('e é o certo', r.custoSuspeito.notas[0].pedido, '1897');
+  igual('com a venda dele fora da margem', r.custoSuspeito.venda, 1550);
+  igual('e o custo que foi recusado', r.custoSuspeito.custo, 56000);
+  ok('a razão é mostrada para ela entender', r.custoSuspeito.notas[0].razao > 36, String(r.custoSuspeito.notas[0].razao));
+
+  /**
+   * O NÚMERO QUE IMPORTA: a margem deixa de ser negativa, e passa a valer para
+   * o pedaço que tem custo bom.
+   */
+  const v = r.vendedores.find((x) => x.nome === 'VENDEDOR A')
+    || { nome: '(não achou)', custo: null, margem: null, vendaSemCusto: null };
+  ok('o vendedor aparece na margem', v.nome === 'VENDEDOR A',
+    JSON.stringify(r.vendedores.map((x) => `${x.nome}:${x.venda}`)));
+  igual('o custo do pedido absurdo não entra', v.custo, 7400);
+  ok('e a margem deixa de ser negativa', v.margem > 0, String(v.margem));
+  igual('a venda sem custo confiável aparece em reais', v.vendaSemCusto, 1550);
+
+  /* o apertado continua dentro: a régua é 1,5x, não "qualquer custo alto" */
+  ok('pedido com custo 1,4x a venda continua contando',
+    r.custoSuspeito.notas.every((x) => x.pedido !== '1901'),
+    JSON.stringify(r.custoSuspeito.notas.map((x) => x.pedido)));
+
+  for (const n of ['nfm_9001', 'nfm_9002', 'nfm_9003']) await store.nfs.remover(n);
+  for (const n of ['pedm_1897', 'pedm_1900', 'pedm_1901']) await store.pedidos.remover(n);
+  for (const n of ['itm_9001', 'itm_9002', 'itm_9003']) await store.nfItens.remover(n);
+  for (const x of guardadosItens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+}
+
 console.log('\n▶ O que o arquivo afirma vence o que uma data sugere');
 {
   /**

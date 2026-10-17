@@ -33,6 +33,16 @@ import * as store from '../core/store.js';
 import { cents, sum, normalize } from '../core/util.js';
 import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
+/**
+ * A RÉGUA DO CUSTO, UMA SÓ PARA TODAS AS FONTES.
+ *
+ * Custo acima de 1,5× a venda não é margem apertada: é custo em outra unidade,
+ * ou venda com prejuízo. Nos dois casos o número não serve para calcular margem.
+ * Estava aplicada ao cadastro de produtos e faltava no custo do pedido, que vem
+ * antes dele — e era por ali que o erro entrava.
+ */
+const RAZAO_MAXIMA = 1.5;
+
 /** Margem do período, por vendedor e total. */
 export async function margem({ de, ate }) {
   const [linhas, vendedores, nfs, itens, produtos, pedidos] = await Promise.all([
@@ -216,7 +226,6 @@ export async function margem({ de, ate }) {
    * serve também, porque todas saem do mesmo cadastro. O produto fica sem custo
    * confiável e aparece na lista — que é melhor do que um prejuízo inventado.
    */
-  const RAZAO_MAXIMA = 1.5;
   const razaoDoCadastro = new Map();
   const custoNaoConfiavel = new Set();
   for (const p of produtos) {
@@ -577,6 +586,21 @@ export async function margem({ de, ate }) {
     // a margem é confiável quando quase toda a venda tem custo de origem verificada
     margemConfiavel: conferencia.coberturaDeCusto.suficiente,
     /**
+     * OS PEDIDOS CUJO CUSTO FOI DESCARTADO POR SER MAIOR QUE A VENDA.
+     *
+     * Não somem: aparecem com número, cliente e os dois valores, porque é a
+     * lista que ela leva para corrigir na origem. Enquanto não for corrigida, a
+     * margem vale para o resto — e a cobertura diz de quanto é esse resto.
+     */
+    custoSuspeito: {
+      quantidade: (custoPorNota.descartados || []).length,
+      venda: cents(sum(custoPorNota.descartados || [], (d) => d.venda)),
+      custo: cents(sum(custoPorNota.descartados || [], (d) => d.custo)),
+      notas: (custoPorNota.descartados || [])
+        .map((d) => ({ ...d, vendedor: d.vendedorId ? (nomeVendedor.get(d.vendedorId) || null) : null }))
+        .sort((a, b) => b.razao - a.razao),
+    },
+    /**
      * Os produtos cujo preço não bate entre o relatório e a nota. Não é erro do
      * app nem dela: é o mesmo produto contado em unidades diferentes nos dois
      * lugares. Fica à vista para poder ser corrigido na origem.
@@ -633,6 +657,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
   const porNumero = new Map(pedidos.filter((p) => p.numero).map((p) => [String(p.numero), p]));
   const pedidoDa = (nf) => porId.get(nf.pedidoId)
     || (nf.pedidoNumero ? porNumero.get(String(nf.pedidoNumero)) : null);
+  const descartados = [];
 
   const quantasNotas = new Map();
   for (const nf of notas) {
@@ -647,8 +672,52 @@ function custoDasNotasPeloPedido(notas, pedidos) {
     const varias = (quantasNotas.get(pedido.id) || 1) > 1;
     if (varias && !pedido.valorTotal) continue;
     const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;
-    custo.set(nf.id, cents(pedido.valorCusto * parte));
+    const doPedido = cents(pedido.valorCusto * parte);
+
+    /**
+     * A MESMA RÉGUA DAS OUTRAS DUAS FONTES, QUE AQUI FALTAVA.
+     *
+     * "Mandei os arquivos, tudo certinho, mas mantém o custo. Eu queria ter o
+     *  valor real."
+     *
+     * O cadastro de produtos é descartado quando o custo passa de 1,5× o preço
+     * de venda; o relatório de produtos vendidos, quando a razão passa de 5. Mas
+     * o custo do PEDIDO — que vem antes dos dois — entrava sem conferência
+     * nenhuma. Um pedido com custo 36 VEZES a venda passava direto, e sozinho
+     * derrubava a margem do vendedor inteiro para o negativo.
+     *
+     * Foi o que aconteceu em outubro: 28 pedidos com custo acima da venda, por
+     * um produto cadastrado em unidade errada (tijolo comum com custo de
+     * milheiro e venda por pacote de 10). Corrigir o cadastro na origem não
+     * reescreve pedido já emitido: o custo fica congelado no pedido para sempre.
+     *
+     * Custo acima da venda é uma de duas coisas: venda com prejuízo de verdade
+     * (raro, e o app não deve presumir) ou custo registrado em outra unidade
+     * (comum). Nos dois casos ele não serve para calcular margem — e inventar
+     * um prejuízo é pior do que dizer "deste pedaço eu não sei".
+     *
+     * Então o custo suspeito sai da conta e a venda dele vai para "sem custo
+     * confiável", em reais e à vista, que é como o app já trata as outras duas
+     * fontes. A margem passa a valer para o pedaço que tem custo bom, e a
+     * cobertura diz de quanto é esse pedaço.
+     */
+    const venda = Math.abs(valorFaturado(nf));
+    if (venda > 0 && doPedido / venda > RAZAO_MAXIMA) {
+      descartados.push({
+        nfId: nf.id,
+        numero: nf.numero || null,
+        pedido: pedido.numero || null,
+        vendedorId: nf.vendedorId || null,
+        venda: cents(venda),
+        custo: doPedido,
+        razao: doPedido / venda,
+      });
+      continue;
+    }
+    custo.set(nf.id, doPedido);
   }
+  /* a lista do que foi descartado volta junto: a tela tem de poder dizer */
+  custo.descartados = descartados;
   return custo;
 }
 

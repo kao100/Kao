@@ -198,6 +198,47 @@ export async function telaMargem({ query }) {
       botao('Mandar relatório de vendas', { pequeno: true, onClick: () => navigate('/arquivos/pedidos') })),
 
     /**
+     * OS PEDIDOS COM CUSTO MAIOR QUE A VENDA.
+     *
+     * "Mandei os arquivos, tudo certinho, mas mantém o custo. Eu queria ter o
+     *  valor real."
+     *
+     * Corrigir o cadastro do produto na origem não reescreve pedido já emitido:
+     * o custo fica congelado nele. Então estes pedidos continuariam derrubando a
+     * margem para sempre, e sozinhos — 28 deles levaram dois vendedores dela
+     * para o negativo em outubro.
+     *
+     * O custo deles sai da conta, mas eles NÃO somem da tela: ficam aqui, com
+     * número, cliente e os dois valores, porque é esta a lista que ela leva para
+     * corrigir na origem. Esconder seria trocar um número errado por um número
+     * sem explicação.
+     */
+    r.custoSuspeito?.quantidade > 0 && card(
+      `${r.custoSuspeito.quantidade} ${r.custoSuspeito.quantidade === 1 ? 'nota teve' : 'notas tiveram'} o custo do pedido descartado`,
+      h('span.mini.muted', `${money(r.custoSuspeito.venda)} de venda fora da margem`),
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+        'O pedido registrou um custo MAIOR que a própria venda — quase sempre produto cadastrado '
+        + 'em unidade diferente da que é vendida (custo do milheiro, venda por pacote). O app não '
+        + 'inventa prejuízo com isso: tira esse custo da conta e mostra aqui. Corrigir o cadastro '
+        + 'não conserta pedido já emitido, então estes só saem da lista quando o PEDIDO for '
+        + 'corrigido na origem.'),
+      tabela({
+        colunas: [
+          { header: 'Pedido', key: 'pedido' },
+          { header: 'NF', key: 'numero' },
+          { header: 'Vendedor', key: 'vendedor' },
+          { header: 'Venda', key: 'venda', tipo: 'money', alinhar: 'direita' },
+          { header: 'Custo do pedido', key: 'custo', tipo: 'money', alinhar: 'direita' },
+          { header: 'Custo/venda', key: 'vezes', alinhar: 'direita' },
+        ],
+        linhas: r.custoSuspeito.notas.map((x) => ({
+          ...x,
+          vendedor: x.vendedor || 'sem vendedor',
+          vezes: `${x.razao.toFixed(1)}x`,
+        })),
+      })),
+
+    /**
      * AS LINHAS FURADAS DO RELATÓRIO.
      *
      * Custo maior que a venda do produto no mês inteiro não é prejuízo: é unidade
