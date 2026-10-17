@@ -399,6 +399,33 @@ function conferirAproveitamento(preparo, fonte, linhasDoArquivo) {
   );
 }
 
+/**
+ * Tira do mês as linhas que sobraram do arquivo anterior.
+ *
+ * O que veio agora já está gravado com o id desta importação; o que ficou no
+ * mesmo mês, do mesmo relatório, com id de outra importação, é sobra.
+ */
+async function substituirMesDoRelatorio(preparo, lote) {
+  const fonte = FONTES[preparo.fonteId];
+  const novas = lote.vendasProduto || [];
+  if (!fonte?.mesObrigatorio || !novas.length) return null;
+
+  const meses = new Set(novas.map((l) => l.mes).filter(Boolean));
+  if (!meses.size) return null;
+
+  const existentes = await db.getAll('vendasProduto');
+  const sobras = existentes.filter((l) => meses.has(l.mes)
+    && l.origemRelatorio === preparo.fonteId
+    && l.importacaoId !== preparo.id);
+  if (!sobras.length) return null;
+
+  await store.vendasProduto.removerMuitos(sobras.map((l) => l.id));
+  return {
+    linhas: sobras.length,
+    valor: cents(sobras.reduce((a, l) => a + (l.valorTotal || 0), 0)),
+  };
+}
+
 async function conferirMesOcupado(preparo, fonte) {
   if (!fonte.mesObrigatorio || !preparo.porStore.vendasProduto) return;
   const novas = [...preparo.porStore.vendasProduto.values()];
@@ -414,8 +441,10 @@ async function conferirMesOcupado(preparo, fonte) {
   const total = cents(deOutroArquivo.reduce((a, l) => a + (l.valorTotal || 0), 0));
   preparo.avisos.push(
     `${alvo} já tem ${deOutroArquivo.length} linha(s) deste mesmo relatório, vindas de um arquivo `
-    + `anterior e somando ${money(total)}. Elas serão SUBSTITUÍDAS pelas deste arquivo. Se este `
-    + 'relatório for de outro mês, volte e escolha o mês certo — senão um mês some.',
+    + `anterior e somando ${money(total)}. Elas serão SUBSTITUÍDAS pelas deste arquivo: o mês fica `
+    + 'valendo só o que vier aqui. Se este relatório for de outro mês, volte e escolha o mês certo '
+    + '— senão um mês some. E se você manda o mês em mais de um arquivo, junte-os em um só antes '
+    + 'de importar.',
   );
 }
 
@@ -1670,6 +1699,36 @@ export async function confirmar(preparo, { observacao = null } = {}) {
   if (canceladas.length) lote.nfs = [...(lote.nfs || []), ...canceladas];
 
   await store.salvarLote(lote);
+
+  /**
+   * O MÊS DO RELATÓRIO MENSAL É SUBSTITUÍDO DE VERDADE.
+   *
+   * "Eu reenviei o relatório que você pediu, no período que você pediu, só que
+   *  agora aparece isso."
+   *
+   * Aparecia R$ 1.096.656,33 onde o arquivo dela soma R$ 653.592,84. O app
+   * AVISAVA, na hora de importar, que as linhas do arquivo anterior "serão
+   * SUBSTITUÍDAS" — e não substituía nada. Cada linha nova sobrescrevia a do
+   * mesmo produto, e todo produto que existia no arquivo velho e não existia no
+   * novo ficava lá, de outro mês, somando no total daquele.
+   *
+   * Prometer na tela e não fazer é pior do que não prometer: ela reenviou o
+   * arquivo certo, no período certo, e o número continuou errado — e não tinha
+   * como saber por quê.
+   *
+   * Vem DEPOIS de gravar, e é por isso que funciona sem comparar lista nenhuma:
+   * o que veio neste arquivo acabou de receber o id DESTA importação. O que
+   * ficou no mês com id de outra importação é sobra do arquivo anterior.
+   */
+  const substituicao = await substituirMesDoRelatorio(preparo, lote);
+  if (substituicao) {
+    preparo.avisos.push(
+      `${substituicao.linhas} linha(s) deste mesmo relatório, vindas de um arquivo anterior e `
+      + `somando ${money(substituicao.valor)}, foram REMOVIDAS do mês: o arquivo de agora passa a `
+      + 'ser a única verdade do período. Se você manda o relatório do mês em mais de um arquivo, '
+      + 'junte-os em um só antes de importar.',
+    );
+  }
 
   /**
    * A FOTOGRAFIA: o que sumiu do relatório foi baixado.

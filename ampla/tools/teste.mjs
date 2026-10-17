@@ -822,6 +822,61 @@ console.log('\n▶ Sem XML, a margem sai dos PEDIDOS — e o custo informado mud
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
 }
 
+console.log('\n▶ Reenviar o relatório do mês SUBSTITUI o mês, como o aviso promete');
+{
+  /**
+   * "Eu reenviei o relatório que você pediu, no período que você pediu, só que
+   *  agora aparece isso."
+   *
+   * Aparecia R$ 1.096.656,33 onde o arquivo dela soma R$ 653.592,84. O app
+   * avisava, antes de importar, que as linhas do arquivo anterior "serão
+   * SUBSTITUÍDAS" — e não substituía nada: cada linha nova sobrescrevia a do
+   * mesmo produto, e todo produto que existia só no arquivo velho ficava ali,
+   * somando no mês.
+   *
+   * Prometer na tela e não fazer é pior que não prometer: ela mandou o arquivo
+   * certo, no período certo, e o número continuou errado.
+   */
+  const guardadas = await store.vendasProduto.listar();
+  for (const x of guardadas) await store.vendasProduto.remover(x.id);
+
+  const PVX = 'Produto;Quantidade;Custo médio;Custo total;Valor total;Lucro';
+  /* o arquivo com vários meses dentro, que é o que ela tinha mandado */
+  await importar('produtosVendidos', 'varios.csv', `${PVX}
+TIJOLO X;100;10,00;1.000,00;2.000,00;1.000,00
+AREIA X;100;20,00;2.000,00;3.000,00;1.000,00
+CIMENTO SO DE AGOSTO;100;30,00;3.000,00;5.000,00;2.000,00
+CAL SO DE SETEMBRO;100;40,00;4.000,00;6.000,00;2.000,00`, { mesReferencia: '2026-10-01' });
+
+  const soma = async () => {
+    const linhas = (await store.vendasProduto.listar())
+      .filter((l) => l.origemRelatorio === 'produtosVendidos' && l.mes === '2026-10');
+    return {
+      linhas: linhas.length,
+      valor: Math.round(linhas.reduce((a, l) => a + (l.valorTotal || 0), 0) * 100) / 100,
+    };
+  };
+  igual('o arquivo grande entrou inteiro', (await soma()).linhas, 4);
+  igual('somando tudo', (await soma()).valor, 16000);
+
+  /* agora o relatório só de outubro, como ela reenviou */
+  const r2 = await importar('produtosVendidos', 'outubro.csv', `${PVX}
+TIJOLO X;100;10,00;1.000,00;2.000,00;1.000,00
+AREIA X;100;20,00;2.000,00;3.000,00;1.000,00`, { mesReferencia: '2026-10-01' });
+
+  const depois = await soma();
+  igual('as linhas que só existiam no arquivo velho SOMEM', depois.linhas, 2);
+  igual('e o mês passa a somar exatamente o arquivo novo', depois.valor, 5000);
+  ok('e o app diz quantas tirou e quanto elas somavam',
+    (r2.preparo.avisos || []).some((a) => /foram REMOVIDAS do mês/.test(a)),
+    JSON.stringify(r2.preparo.avisos));
+
+  for (const x of await store.vendasProduto.listar()) {
+    if (/ X$|SO DE /.test(x.descricao || '')) await store.vendasProduto.remover(x.id);
+  }
+  for (const x of guardadas) await store.vendasProduto.salvar(x);
+}
+
 console.log('\n▶ Devolução não empurra a cobertura de custo acima de 100%');
 {
   /**
@@ -2855,8 +2910,18 @@ AREIA MARGEM M3;Nair;100;6.000,00;120,00`, { mesReferencia: '2026-07-01' });
   igual('a soma dos vendedores bate com o total', m.total.venda, 16000);
   igual('e o custo somado também', m.total.custo, 10000);
 
-  // produto vendido por alguém mas fora do relatório de custo: margem incompleta
+  /**
+   * Produto vendido por alguém mas fora do relatório de custo: margem incompleta.
+   *
+   * O arquivo vai INTEIRO, com as linhas de antes mais a nova: relatório mensal
+   * é fotografia do mês, e reimportar o mês substitui o mês. Mandar só a linha
+   * nova apagaria as outras — que é o que o aviso da importação promete e o app
+   * passou a cumprir.
+   */
   await importar('comissaoProduto', 'mc2.csv', `${CP}
+CIMENTO MARGEM 50KG;Nair;150;7.500,00;37,50
+CIMENTO MARGEM 50KG;Otavio;50;2.500,00;12,50
+AREIA MARGEM M3;Nair;100;6.000,00;120,00
 PRODUTO SEM CUSTO;Nair;10;500,00;10,00`, { mesReferencia: '2026-07-01' });
   const m2 = await margemMod.margem({ de: '2026-07-01', ate: '2026-07-31' });
   const nair2 = m2.vendedores.find((v) => v.nome === 'Nair');
