@@ -639,10 +639,10 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
   const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
 
   igual('o pedido absurdo é descartado', r.custoSuspeito.quantidade, 1);
-  igual('e é o certo', r.custoSuspeito.notas[0].pedido, '1897');
+  igual('e é o certo', r.custoSuspeito.linhas[0].pedido, '1897');
   igual('com a venda dele fora da margem', r.custoSuspeito.venda, 1550);
   igual('e o custo que foi recusado', r.custoSuspeito.custo, 56000);
-  ok('a razão é mostrada para ela entender', r.custoSuspeito.notas[0].razao > 36, String(r.custoSuspeito.notas[0].razao));
+  ok('a razão é mostrada para ela entender', r.custoSuspeito.linhas[0].razao > 36, String(r.custoSuspeito.linhas[0].razao));
 
   /**
    * O NÚMERO QUE IMPORTA: a margem deixa de ser negativa, e passa a valer para
@@ -658,8 +658,8 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
 
   /* o apertado continua dentro: a régua é 1,5x, não "qualquer custo alto" */
   ok('pedido com custo 1,4x a venda continua contando',
-    r.custoSuspeito.notas.every((x) => x.pedido !== '1901'),
-    JSON.stringify(r.custoSuspeito.notas.map((x) => x.pedido)));
+    r.custoSuspeito.linhas.every((x) => x.pedido !== '1901'),
+    JSON.stringify(r.custoSuspeito.linhas.map((x) => x.pedido)));
 
   /**
    * ============ O CUSTO QUE ELA DIGITA NO PEDIDO ============
@@ -673,9 +673,9 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
    * pedido já emitido, e ela não vai reemitir 22 pedidos. Então ela digita.
    */
   igual('a linha descartada carrega o pedido, para a tela poder oferecer o acerto',
-    r.custoSuspeito.notas[0].pedidoId, 'pedm_1897');
-  igual('com a venda do pedido inteiro', r.custoSuspeito.notas[0].pedidoValor, 1550);
-  igual('e o custo que o relatório trouxe', r.custoSuspeito.notas[0].pedidoCusto, 56000);
+    r.custoSuspeito.linhas[0].pedidoId, 'pedm_1897');
+  igual('com a venda do pedido inteiro', r.custoSuspeito.linhas[0].pedidoValor, 1550);
+  igual('e o custo que o relatório trouxe', r.custoSuspeito.linhas[0].pedidoCusto, 56000);
 
   const ped1897 = await store.pedidos.obter('pedm_1897');
   await store.pedidos.salvar({ ...ped1897, custoManual: 900, custoManualEm: Date.now() });
@@ -716,6 +716,103 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
   for (const n of ['pedm_1897', 'pedm_1900', 'pedm_1901']) await store.pedidos.remover(n);
   for (const n of ['itm_9001', 'itm_9002', 'itm_9003']) await store.nfItens.remover(n);
   for (const x of guardadosItens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+}
+
+console.log('\n▶ Sem XML, a margem sai dos PEDIDOS — e o custo informado muda o número');
+{
+  /**
+   * O ERRO QUE ME CUSTOU UMA RODADA INTEIRA DELA.
+   *
+   * "Eu tava colocando, ajustando, e eu via que o número de margem, da
+   *  porcentagem, e o custo e o lucro não mudaram."
+   *
+   * O custo do pedido só entrava na conta pelo caminho dos ITENS DAS NOTAS, que
+   * existe só com o XML das NF-e. A base dela não tem XML: a tela mostrava custo,
+   * lucro e margem copiados das colunas do relatório de produtos vendidos —
+   * números de arquivo, que não mudam porque alguém corrigiu um pedido.
+   *
+   * E a tela ainda OFERECIA a correção, com botão, em cima de um cálculo que não
+   * estava sendo usado. Pedir trabalho e jogar o resultado fora.
+   *
+   * Este teste é a base dela: pedidos com custo e vendedor, relatório de produtos
+   * vendidos, e NENHUM item de nota.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    itens: await store.nfItens.listar(),
+    produto: await store.vendasProduto.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.produto) await store.vendasProduto.remover(x.id);
+  await store.vendedores.salvar({ id: 'vSX', nome: 'VENDEDOR SEM XML' });
+
+  const ped = (n, total, custo, extra = {}) => store.pedidos.salvar({
+    id: `pedsx_${n}`, numero: String(n), data: '2026-10-07', mes: '2026-10',
+    valorTotal: total, valorCusto: custo, vendedorId: 'vSX',
+    concretizado: true, statusArquivo: 'Concretizada', ...extra,
+  });
+  /* o são */
+  await ped(7001, 10000, 6000);
+  /* o do tijolo: custo 36× a venda */
+  await ped(7002, 1550, 56000);
+  /* e um cancelado, que não é venda e não pode entrar em lugar nenhum */
+  await ped(7003, 5000, 3000, { concretizado: false, statusArquivo: 'Cancelada' });
+  /* o relatório de produtos vendidos existe, como no aparelho dela */
+  await store.vendasProduto.salvar({
+    id: 'pvsx_1', origemRelatorio: 'produtosVendidos', mes: '2026-10', data: '2026-10-15',
+    descricao: 'PRODUTO QUALQUER', produtoId: 'psx1', quantidade: 100,
+    custoTotal: 50000, valorTotal: 11550, lucro: -38450,
+  });
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+
+  igual('a margem passa a sair dos pedidos', r.fonte, 'pedidos-do-periodo');
+  igual('o pedido cancelado fica fora', r.pedidosDoPeriodo.quantidade, 2);
+  igual('e é contado à parte, para a diferença não parecer erro', r.pedidosDoPeriodo.cancelados, 1);
+  igual('com o valor que ele tinha', r.pedidosDoPeriodo.vendaCancelada, 5000);
+
+  igual('a venda é a soma dos pedidos concretizados', r.total.venda, 11550);
+  igual('o custo é o do pedido que passou na régua', r.total.custo, 6000);
+  igual('o custo absurdo fica de fora', r.custoSuspeito.quantidade, 1);
+  igual('e a lista é de PEDIDOS, não de notas', r.custoSuspeito.unidade, 'pedidos');
+  igual('com o pedido certo', r.custoSuspeito.linhas[0].pedido, '7002');
+  igual('e com o id, para o botão de informar funcionar', r.custoSuspeito.linhas[0].pedidoId, 'pedsx_7002');
+
+  const vSem = r.vendedores.find((x) => x.nome === 'VENDEDOR SEM XML') || {};
+  igual('o vendedor aparece, sem precisar de comissão por produto', vSem.venda, 11550);
+  igual('com a venda que ficou sem custo confiável', vSem.vendaSemCusto, 1550);
+
+  /**
+   * O NÚMERO QUE ELA ESTAVA OLHANDO. Antes vinha do arquivo (50.000 de custo
+   * sobre 11.550 de venda, margem negativa) e não se mexia.
+   */
+  igual('o custo que a tela mostra é o calculado, não o do arquivo', r.total.custo, 6000);
+  ok('e a margem é a calculada', Math.abs(r.total.margem - 48.05) < 0.1, String(r.total.margem));
+
+  /* ---------------------------------------- e agora o que ela faz: informa o custo */
+  const alvo = await store.pedidos.obter('pedsx_7002');
+  await store.pedidos.salvar({ ...alvo, custoManual: 900, custoManualEm: Date.now() });
+  const r2 = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+
+  igual('informado o custo, o custo total MUDA', r2.total.custo, 6900);
+  igual('o lucro muda', r2.total.lucro, 4650);
+  ok('e a margem muda', Math.abs(r2.total.margem - 40.26) < 0.1, String(r2.total.margem));
+  igual('a venda continua a mesma, como ela mesma esperava', r2.total.venda, 11550);
+  igual('não sobra pedido descartado', r2.custoSuspeito.quantidade, 0);
+  igual('e o pedido corrigido aparece na lista dela', r2.custoInformado.quantidade, 1);
+  igual('a cobertura de custo fecha', r2.conferencia.coberturaDeCusto.percentual, 100);
+  igual('e a conferência não acusa divergência inventada', r2.conferencia.ok, true);
+  igual('dizendo de que base ela é', r2.conferencia.base, 'pedidos do relatório de vendas');
+
+  for (const n of ['pedsx_7001', 'pedsx_7002', 'pedsx_7003']) await store.pedidos.remover(n);
+  await store.vendasProduto.remover('pvsx_1');
+  for (const x of guardadas.produto) await store.vendasProduto.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
 }

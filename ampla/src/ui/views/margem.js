@@ -153,6 +153,28 @@ async function semPerderOLugar() {
   window.scrollTo({ top: y });
 }
 
+/**
+ * "22 pedidos tiveram" ou "22 notas tiveram" — a lista é de uma coisa ou de
+ * outra conforme a base que está valendo, e chamar pedido de nota faz ela
+ * procurar no lugar errado.
+ */
+function umOuMuitos(suspeito) {
+  const um = suspeito.quantidade === 1;
+  if (suspeito.unidade === 'pedidos') return um ? 'pedido teve' : 'pedidos tiveram';
+  return um ? 'nota teve' : 'notas tiveram';
+}
+
+/** Quanto da venda entrou com o custo do sistema dela, dito na língua da base. */
+function custoDoProprioSistema(r) {
+  const c = r.conferencia.coberturaDeCusto;
+  const quantos = r.fonte === 'pedidos-do-periodo' ? c.pedidosComCusto : c.notasComPedido;
+  if (!quantos) return '.';
+  const quem = r.fonte === 'pedidos-do-periodo'
+    ? `${num(quantos, 0)} pedidos entraram com o "Valor custo" do próprio pedido`
+    : `${num(quantos, 0)} notas pegaram o custo do PEDIDO que as gerou`;
+  return `. ${quem} (${pct(c.percentualDoPedido, 1)} da venda), que é o custo do seu próprio sistema.`;
+}
+
 /** "36,1×" — com vírgula, que é como ela lê número. */
 function vezes(razao) {
   return `${num(razao, 1)}×`;
@@ -182,7 +204,7 @@ export async function telaMargem({ query }) {
   });
 
   /* o que falta para o número existir — dito antes de qualquer número */
-  if (!r.temProdutosVendidos && r.fonte !== 'itens-da-nota') {
+  if (r.fonte === 'relatorio-por-produto' && !r.temProdutosVendidos) {
     return h('div.empilha', { style: { gap: '14px' } },
       painel,
       vazio('📐', 'Falta o relatório de produtos vendidos',
@@ -192,8 +214,18 @@ export async function telaMargem({ query }) {
         botao('Mandar produtos vendidos', { tipo: 'primario', onClick: () => navigate('/arquivos/produtosVendidos') })));
   }
 
-  /* o faturamento é a nota fiscal; sem XML, o que houver */
-  const topo = r.fonte === 'itens-da-nota' ? r.total : r.totalRelatorio;
+  /**
+   * O NÚMERO GRANDE É O QUE O APP CALCULOU, e só é o do arquivo quando o app não
+   * tem nada melhor.
+   *
+   * "Eu tava ajustando e via que a margem, o custo e o lucro não mudaram."
+   *
+   * Não mudavam porque aqui estava `r.totalRelatorio`: as colunas de custo e
+   * lucro somadas do relatório de produtos vendidos. Número de arquivo não se
+   * mexe — nem pelo custo que ela acabou de informar, nem pela régua que
+   * descartou um custo absurdo. Era um número que não respondia a nada.
+   */
+  const topo = r.fonte === 'relatorio-por-produto' ? r.totalRelatorio : r.total;
 
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
@@ -248,7 +280,13 @@ export async function telaMargem({ query }) {
       h('p.mini.muted', { style: { marginTop: '8px' } },
         (r.fonte === 'itens-da-nota'
           ? `${num(r.totalDasNotas ? r.totalDasNotas.produtos : 0, 0)} itens de nota no período. `
-          : `${num(r.totalRelatorio.produtos, 0)} produtos no relatório. `)
+          : (r.fonte === 'pedidos-do-periodo'
+            ? `${num(r.pedidosDoPeriodo.quantidade, 0)} pedidos do relatório de vendas no período`
+              + (r.pedidosDoPeriodo.cancelados > 0
+                ? ` (${num(r.pedidosDoPeriodo.cancelados, 0)} cancelados ficaram fora, `
+                  + `${money(r.pedidosDoPeriodo.vendaCancelada)}). `
+                : '. ')
+            : `${num(r.totalRelatorio.produtos, 0)} produtos no relatório. `))
         + 'A margem é sobre a VENDA ("de 100, quantos por cento sobram"), não sobre o custo — são '
         + 'números diferentes e misturá-los é a confusão mais comum deste assunto.'),
       r.conferencia.coberturaDeCusto.percentual != null && h('p.mini.muted',
@@ -256,11 +294,7 @@ export async function telaMargem({ query }) {
         + (r.conferencia.coberturaDeCusto.semCusto > 0
           ? ` — faltam ${money(r.conferencia.coberturaDeCusto.semCusto)}`
           : ' — nada de fora')
-        + (r.conferencia.coberturaDeCusto.notasComPedido > 0
-          ? `. ${num(r.conferencia.coberturaDeCusto.notasComPedido, 0)} notas pegaram o custo do `
-            + `PEDIDO que as gerou (${pct(r.conferencia.coberturaDeCusto.percentualDoPedido, 1)} `
-            + 'da venda), que é o custo do seu próprio sistema.'
-          : '.'))),
+        + custoDoProprioSistema(r))),
 
     /**
      * A conferência vem ANTES da tabela, porque é ela que decide se a tabela
@@ -303,7 +337,7 @@ export async function telaMargem({ query }) {
      * sem explicação.
      */
     r.custoSuspeito?.quantidade > 0 && card(
-      `${r.custoSuspeito.quantidade} ${r.custoSuspeito.quantidade === 1 ? 'nota teve' : 'notas tiveram'} o custo do pedido descartado`,
+      `${r.custoSuspeito.quantidade} ${umOuMuitos(r.custoSuspeito)} o custo do pedido descartado`,
       h('span.mini.muted', `${money(r.custoSuspeito.venda)} de venda fora da margem`),
       h('p.pequeno.muted', { style: { marginBottom: '10px' } },
         'O pedido registrou um custo MAIOR que a própria venda — quase sempre produto cadastrado '
@@ -329,7 +363,7 @@ export async function telaMargem({ query }) {
               : h('span.mini.muted', 'sem pedido')),
           },
         ],
-        linhas: r.custoSuspeito.notas.map((x) => ({
+        linhas: r.custoSuspeito.linhas.map((x) => ({
           ...x,
           vendedor: x.vendedor || 'sem vendedor',
           vezes: vezes(x.razao),
@@ -404,11 +438,16 @@ export async function telaMargem({ query }) {
       + '. As duas não precisam ser iguais: são conjuntos diferentes de venda. A desta tela é a '
       + 'que vale, porque é a da nota fiscal.', 'info'),
 
+    r.fonte === 'pedidos-do-periodo' && aviso('Estes números vêm dos PEDIDOS do relatório de '
+      + 'vendas: cada pedido traz o valor vendido e o "Valor custo" na mesma linha — a mesma venda, '
+      + 'a mesma unidade, o custo que o seu sistema registrou — e o relatório de comissão por venda '
+      + 'diz de quem é o pedido. É aqui que o custo que você informa entra na conta.', 'ok'),
+
     r.fonte === 'itens-da-nota' && aviso('Estes números vêm dos ITENS DAS NOTAS (o XML das NF-e): '
       + 'cada item traz produto, quantidade e valor, e a nota traz o vendedor e a data. É o recorte '
       + 'exato do período que você escolheu — e inclui as devoluções, com sinal negativo.', 'ok'),
 
-    (r.temComissaoPorProduto || r.fonte === 'itens-da-nota') && (r.conferencia.ok
+    (r.temComissaoPorProduto || r.fonte !== 'relatorio-por-produto') && (r.conferencia.ok
       ? aviso(`✅ A soma dos vendedores bate com o ${r.conferencia.base}: `
         + `${money(r.conferencia.vendaSomada)} vendidos. Cada venda foi atribuída a alguém — a `
         + 'margem de cada um é comparável.', 'ok')
@@ -419,7 +458,7 @@ export async function telaMargem({ query }) {
         + 'estar inteiro em um deles.', 'ruim')),
 
     /* por vendedor, que é o que ela pediu, e que depende da segunda ponte */
-    !r.temComissaoPorProduto
+    r.fonte === 'relatorio-por-produto' && !r.temComissaoPorProduto
       ? aviso('Para abrir a margem POR VENDEDOR falta o relatório de comissão por produto — é ele '
         + 'que diz quanto cada vendedor vendeu de cada produto. Com os dois, o app cruza: custo do '
         + 'vendedor = o que ele vendeu de cada produto × o custo médio daquele produto.', 'atencao',
@@ -439,7 +478,12 @@ export async function telaMargem({ query }) {
           total: { nome: 'TOTAL', venda: r.total.venda, custo: r.total.custo, lucro: r.total.lucro, margem: r.total.margem },
         }),
         h('p.mini.muted', { style: { marginTop: '8px' } },
-          'Custo do vendedor: quando a nota tem PEDIDO, é o "Valor custo" daquele pedido — o custo '
+          r.fonte === 'pedidos-do-periodo'
+          ? 'Custo do vendedor: o "Valor custo" de cada pedido dele, somado — o custo que o seu '
+            + 'próprio sistema registrou para aquela venda, sem média de período e sem conversão '
+            + 'de unidade. Pedido com custo maior que a venda fica de fora até você informar o '
+            + 'custo real, e o que ficou de fora aparece em reais logo acima.'
+          : 'Custo do vendedor: quando a nota tem PEDIDO, é o "Valor custo" daquele pedido — o custo '
           + 'que o seu próprio sistema registrou para aquela venda, sem média e sem conversão de '
           + 'unidade. Quando não tem, é o custo do cadastro do produto, e em último caso a '
           + 'proporção custo/venda do relatório de produtos vendidos. O que não teve nenhuma das '

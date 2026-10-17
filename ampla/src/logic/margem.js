@@ -295,6 +295,77 @@ export async function margem({ de, ate }) {
   const custoPorNota = custoDasNotasPeloPedido(doPeriodo, pedidos);
   let vendaComCustoDoPedido = 0;
 
+  /**
+   * ============ O CAMINHO DE QUEM NÃO TEM XML DE NOTA ============
+   *
+   * "Eu tava colocando, ajustando, e eu via que o número de margem, da
+   *  porcentagem, e o custo e o lucro não mudaram."
+   *
+   * E não mudavam. O custo do pedido — e junto com ele TODO custo que ela
+   * digitasse — só entrava na conta pelo caminho dos ITENS DAS NOTAS, que existe
+   * só com o XML das NF-e. Sem XML, a tela mostrava o custo, o lucro e a margem
+   * copiados do relatório de produtos vendidos: as três colunas que o arquivo já
+   * traz somadas. Números do arquivo não mudam porque ela corrigiu um pedido
+   * aqui — por mais certo que seja o valor que ela digitou.
+   *
+   * Pior: a tela OFERECIA a correção, com botão e tudo, num caminho que não era
+   * usado para nada. Pedir trabalho a alguém e jogar o resultado fora é a pior
+   * coisa que este app pode fazer.
+   *
+   * O relatório de vendas dá a conta inteira sem XML nenhum: cada pedido traz
+   * valor total e "Valor custo" — a mesma venda, a mesma unidade, o CMV do
+   * sistema dela — e o relatório de comissão por venda diz de quem é o pedido.
+   * Uma base só, dois números da mesma linha, e é nela que o custo informado por
+   * ela entra.
+   *
+   * Pedido CANCELADO fica fora: venda cancelada não é venda. Fica contado à
+   * parte, para a diferença contra o relatório não parecer erro.
+   */
+  const pedidosDoPeriodo = pedidos.filter((p) => p.data && p.data >= de && p.data <= ate);
+  const pedidosValidos = pedidosDoPeriodo.filter((p) => p.concretizado !== false && p.valorTotal);
+  const pedidosCancelados = pedidosDoPeriodo.filter((p) => p.concretizado === false);
+  const temCustoDePedido = pedidosValidos.some((p) => p.custoManual != null || p.valorCusto != null);
+
+  /**
+   * A ORDEM DAS FONTES, da melhor para a pior:
+   *
+   *  1. ITENS DAS NOTAS (XML): recorte exato do período, com devolução e produto;
+   *  2. PEDIDOS do relatório de vendas: venda e custo da mesma linha, por
+   *     vendedor, e é onde o custo informado por ela vale;
+   *  3. relatório de comissão por produto, que é um total do período do arquivo.
+   */
+  const fonteDosNumeros = temItensDeNota ? 'itens-da-nota'
+    : (temCustoDePedido ? 'pedidos-do-periodo' : 'relatorio-por-produto');
+
+  if (fonteDosNumeros === 'pedidos-do-periodo') {
+    for (const p of pedidosValidos) {
+      const vid = p.vendedorId || null;
+      const chave = vid || `nome:${normalize(p.vendedorNome) || 'sem'}`;
+      if (!porVendedor.has(chave)) {
+        porVendedor.set(chave, {
+          vendedorId: vid,
+          nome: vid ? (nomeVendedor.get(vid) || p.vendedorNome) : (p.vendedorNome || 'sem vendedor'),
+          venda: 0, custo: 0, quantidade: 0, produtos: 0, produtosSemCusto: 0,
+          vendaSemCusto: 0, custoDoPedido: 0,
+        });
+      }
+      const v = porVendedor.get(chave);
+      const vendaDele = Math.abs(cents(p.valorTotal));
+      v.venda += vendaDele;
+      v.produtos += 1;
+      const regua = custoConfiavelDoPedido(p);
+      if (regua.custo == null) {
+        v.produtosSemCusto += 1;
+        v.vendaSemCusto += vendaDele;
+        semCusto += 1;
+      } else {
+        v.custo += regua.custo;
+        v.custoDoPedido += regua.custo;
+        vendaComCustoDoPedido += vendaDele;
+      }
+    }
+  }
+
   if (temItensDeNota) {
     const nfPorId = new Map(nfs.map((n) => [n.id, n]));
     const itensPorNota = new Map();
@@ -347,7 +418,7 @@ export async function margem({ de, ate }) {
     }
   }
 
-  for (const l of temItensDeNota ? [] : noPeriodo) {
+  for (const l of fonteDosNumeros === 'relatorio-por-produto' ? noPeriodo : []) {
     if (l.origemRelatorio !== 'comissaoProduto') continue;
     const vid = vendedorDa(l);
     const chave = vid || `nome:${normalize(l.vendedorNome) || 'sem'}`;
@@ -459,15 +530,31 @@ export async function margem({ de, ate }) {
    * é a resposta à pergunta dela: a margem é sobre a mercadoria, e o frete é
    * receita à parte.
    */
+  /**
+   * Pelo caminho dos PEDIDOS não há contra o que conferir a venda: ela É a soma
+   * dos pedidos, do mesmo arquivo de onde sai o custo. Comparar com o relatório
+   * de produtos vendidos seria tentador, mas exigiria eu adivinhar se aquele
+   * arquivo conta as vendas canceladas — e uma conferência que depende de um
+   * palpite meu sobre o arquivo dela acusa divergência onde não há. A conferência
+   * que vale aqui é a COBERTURA DE CUSTO, que vem logo abaixo.
+   */
+  const vendaCancelada = cents(sum(pedidosCancelados, (p) => Math.abs(p.valorTotal || 0)));
   const alvo = temItensDeNota
     ? {
       venda: cents(sum(doPeriodo, (n) => (n.devolucao ? -1 : 1)
         * Math.abs(n.valorProdutos ?? ((n.valorTotal || 0) - (n.valorFrete || 0))))),
       custo: null,
     }
-    : { venda: totalRelatorio.venda, custo: totalRelatorio.custo };
+    : (fonteDosNumeros === 'pedidos-do-periodo'
+      ? { venda, custo: null }
+      : { venda: totalRelatorio.venda, custo: totalRelatorio.custo });
+  const BASE = {
+    'itens-da-nota': 'faturamento do período',
+    'pedidos-do-periodo': 'pedidos do relatório de vendas',
+    'relatorio-por-produto': 'relatório de produtos vendidos',
+  };
   const conferencia = {
-    base: temItensDeNota ? 'faturamento do período' : 'relatório de produtos vendidos',
+    base: BASE[fonteDosNumeros],
     vendaSomada: venda,
     vendaRelatorio: alvo.venda,
     custoSomado: custo,
@@ -564,6 +651,9 @@ export async function margem({ de, ate }) {
     doPedido: cents(vendaComCustoDoPedido),
     percentualDoPedido: venda ? (cents(vendaComCustoDoPedido) / venda) * 100 : null,
     notasComPedido: custoPorNota.size,
+    /* quantos pedidos entraram com o custo do próprio sistema, pelo caminho dos pedidos */
+    pedidosComCusto: fonteDosNumeros === 'pedidos-do-periodo'
+      ? pedidosValidos.filter((x) => custoConfiavelDoPedido(x).custo != null).length : 0,
   };
   /**
    * NOVENTA E OITO POR CENTO.
@@ -576,13 +666,52 @@ export async function margem({ de, ate }) {
   conferencia.coberturaDeCusto.suficiente = conferencia.coberturaDeCusto.percentual != null
     && conferencia.coberturaDeCusto.percentual >= 98;
 
+  /**
+   * A LISTA DO QUE FOI DESCARTADO SAI DA MESMA BASE QUE ESTÁ VALENDO.
+   *
+   * Era daí que vinha o estrago: a tela listava pedidos descartados pelo caminho
+   * das NOTAS e oferecia o botão de corrigir, enquanto a margem vinha do
+   * relatório de produtos vendidos. Ela corrigia, e nada mudava — porque a
+   * correção caía num cálculo que a tela não estava usando.
+   */
+  let descartados = custoPorNota.descartados || [];
+  let informados = custoPorNota.informados || [];
+  if (fonteDosNumeros === 'pedidos-do-periodo') {
+    descartados = [];
+    informados = [];
+    for (const p of pedidosValidos) {
+      const regua = custoConfiavelDoPedido(p);
+      if (regua.informado) { informados.push(linhaDeCustoInformado(p)); continue; }
+      if (!regua.suspeito) continue;
+      descartados.push({
+        nfId: null,
+        numero: p.nfNumero || null,
+        pedido: p.numero || null,
+        pedidoId: p.id,
+        vendedorId: p.vendedorId || null,
+        venda: cents(Math.abs(p.valorTotal)),
+        custo: cents(p.valorCusto),
+        pedidoValor: cents(p.valorTotal),
+        pedidoCusto: cents(p.valorCusto),
+        notasDoPedido: 1,
+        razao: regua.razao,
+      });
+    }
+  }
+
   return {
     periodo: { de, ate },
     vendedores: lista,
     total: { venda, custo, lucro, margem: venda ? (lucro / venda) * 100 : null },
     totalRelatorio,
     // de onde vieram os números por vendedor, para a tela poder dizer
-    fonte: temItensDeNota ? 'itens-da-nota' : 'relatorio-por-produto',
+    fonte: fonteDosNumeros,
+    /* os pedidos do período, para a tela poder dizer quantos entraram e quantos não */
+    pedidosDoPeriodo: {
+      quantidade: pedidosValidos.length,
+      cancelados: pedidosCancelados.length,
+      vendaCancelada,
+    },
     // a margem é confiável quando quase toda a venda tem custo de origem verificada
     margemConfiavel: conferencia.coberturaDeCusto.suficiente,
     /**
@@ -593,10 +722,12 @@ export async function margem({ de, ate }) {
      * margem vale para o resto — e a cobertura diz de quanto é esse resto.
      */
     custoSuspeito: {
-      quantidade: (custoPorNota.descartados || []).length,
-      venda: cents(sum(custoPorNota.descartados || [], (d) => d.venda)),
-      custo: cents(sum(custoPorNota.descartados || [], (d) => d.custo)),
-      notas: (custoPorNota.descartados || [])
+      quantidade: descartados.length,
+      venda: cents(sum(descartados, (d) => d.venda)),
+      custo: cents(sum(descartados, (d) => d.custo)),
+      /* a tela precisa saber se cada linha é uma nota ou um pedido, para falar certo */
+      unidade: fonteDosNumeros === 'pedidos-do-periodo' ? 'pedidos' : 'notas',
+      linhas: descartados
         .map((d) => ({ ...d, vendedor: d.vendedorId ? (nomeVendedor.get(d.vendedorId) || null) : null }))
         .sort((a, b) => b.razao - a.razao),
     },
@@ -606,10 +737,10 @@ export async function margem({ de, ate }) {
      * importado, sem dizer onde, é como se perde a confiança numa base.
      */
     custoInformado: {
-      quantidade: (custoPorNota.informados || []).length,
-      custo: cents(sum(custoPorNota.informados || [], (d) => d.custo)),
-      custoRelatorio: cents(sum(custoPorNota.informados || [], (d) => d.custoRelatorio || 0)),
-      pedidos: (custoPorNota.informados || []).sort((a, b) => (b.custo || 0) - (a.custo || 0)),
+      quantidade: informados.length,
+      custo: cents(sum(informados, (d) => d.custo)),
+      custoRelatorio: cents(sum(informados, (d) => d.custoRelatorio || 0)),
+      pedidos: informados.slice().sort((a, b) => (b.custo || 0) - (a.custo || 0)),
     },
     /**
      * Os produtos cujo preço não bate entre o relatório e a nota. Não é erro do
@@ -663,6 +794,39 @@ export async function margem({ de, ate }) {
  * agosto só ganha custo se os pedidos de agosto estiverem na base. É por isso
  * que o relatório de vendas vale mandar com folga de um mês para trás.
  */
+/**
+ * O CUSTO DE UM PEDIDO, PELA RÉGUA, NUM LUGAR SÓ.
+ *
+ * Três telas precisam da mesma decisão: vale o custo que ela digitou, vale o que
+ * o relatório trouxe, ou não vale nenhum. Tendo a decisão em duas cópias, uma
+ * delas fica para trás — foi exatamente o que aconteceu: a régua entrou no
+ * caminho das notas e o custo informado por ela só valia ali, num aparelho que
+ * não tem XML de nota nenhum.
+ */
+function linhaDeCustoInformado(pedido) {
+  return {
+    pedidoId: pedido.id,
+    pedido: pedido.numero || null,
+    valor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
+    custo: cents(pedido.custoManual),
+    custoRelatorio: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
+    em: pedido.custoManualEm || null,
+  };
+}
+
+function custoConfiavelDoPedido(pedido) {
+  if (pedido.custoManual != null) {
+    return { custo: cents(pedido.custoManual), informado: true };
+  }
+  if (pedido.valorCusto == null) return { custo: null, semCusto: true };
+  const venda = Math.abs(pedido.valorTotal || 0);
+  const razao = venda > 0 ? pedido.valorCusto / venda : null;
+  if (razao != null && razao > RAZAO_MAXIMA) {
+    return { custo: null, suspeito: true, razao };
+  }
+  return { custo: cents(pedido.valorCusto), razao };
+}
+
 function custoDasNotasPeloPedido(notas, pedidos) {
   const porId = new Map(pedidos.map((p) => [p.id, p]));
   const porNumero = new Map(pedidos.filter((p) => p.numero).map((p) => [String(p.numero), p]));
@@ -701,28 +865,20 @@ function custoDasNotasPeloPedido(notas, pedidos) {
      * O que o app não faz é esconder: todo pedido com custo informado aparece
      * na tela, com o valor que o relatório trazia ao lado do que ela digitou.
      */
-    const informado = pedido.custoManual != null;
-    const custoBase = informado ? pedido.custoManual : pedido.valorCusto;
-    if (custoBase == null) continue;
+    const regua = custoConfiavelDoPedido(pedido);
     const varias = (quantasNotas.get(pedido.id) || 1) > 1;
     if (varias && !pedido.valorTotal) continue;
     const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;
-    const doPedido = cents(custoBase * parte);
-    if (informado) {
-      custo.set(nf.id, doPedido);
+    if (regua.informado) {
+      custo.set(nf.id, cents(pedido.custoManual * parte));
       if (!jaListado.has(pedido.id)) {
         jaListado.add(pedido.id);
-        informados.push({
-          pedidoId: pedido.id,
-          pedido: pedido.numero || null,
-          valor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
-          custo: cents(pedido.custoManual),
-          custoRelatorio: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
-          em: pedido.custoManualEm || null,
-        });
+        informados.push(linhaDeCustoInformado(pedido));
       }
       continue;
     }
+    if (regua.semCusto) continue;
+    const doPedido = cents(pedido.valorCusto * parte);
 
     /**
      * A MESMA RÉGUA DAS OUTRAS DUAS FONTES, QUE AQUI FALTAVA.
@@ -752,7 +908,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
      * cobertura diz de quanto é esse pedaço.
      */
     const venda = Math.abs(valorFaturado(nf));
-    if (venda > 0 && doPedido / venda > RAZAO_MAXIMA) {
+    if (regua.suspeito) {
       descartados.push({
         nfId: nf.id,
         numero: nf.numero || null,
@@ -765,7 +921,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
         pedidoValor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
         pedidoCusto: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
         notasDoPedido: quantasNotas.get(pedido.id) || 1,
-        razao: doPedido / venda,
+        razao: regua.razao,
       });
       continue;
     }
