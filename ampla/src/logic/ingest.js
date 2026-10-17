@@ -303,6 +303,7 @@ export async function prepararTabular({ fonteId, leitura, planilhaIndex = 0, hea
    */
   await conferirMesOcupado(saida, fonte);
   conferirAproveitamento(saida, fonte, registros.length);
+  conferirTotalDeclarado(saida, fonte, planilha.linhas, headerRow, mapeamento);
   conferirSituacoes(saida, fonte, mapeamento);
   await classificar(saida, contexto);
   conferirCoberturaDoReceber(saida);
@@ -425,6 +426,82 @@ async function substituirMesDoRelatorio(preparo, lote) {
     linhas: sobras.length,
     valor: cents(sobras.reduce((a, l) => a + (l.valorTotal || 0), 0)),
   };
+}
+
+/**
+ * O ARQUIVO DIZ QUANTO ELE SOMA. O APP PASSA A CONFERIR.
+ *
+ * "Eu reenviei o relatório que você pediu, no período que você pediu, só que
+ *  agora aparece isso."
+ *
+ * Foram cinco rodadas atrás de R$ 16.546,54 de diferença entre o que o arquivo
+ * dela soma e o que o app montou dele. Cinco rodadas em que ela mandava o
+ * arquivo certo e descobria dias depois, por um número estranho numa tela, que
+ * faltava coisa — sem nunca saber o quê.
+ *
+ * E a resposta estava impressa no próprio arquivo o tempo todo. O relatório do
+ * GestãoClick abre com um painel: uma linha de rótulos ("Valor total") e a linha
+ * de baixo com o número. É o total que o SISTEMA DELA calculou, antes de
+ * qualquer leitura minha.
+ *
+ * Então o app monta as linhas, soma, e compara com o que o arquivo declara. Se
+ * bate, silêncio. Se não bate, ele diz na hora quanto faltou e por quê — que é o
+ * único momento em que ela ainda tem o arquivo na mão e pode resolver.
+ *
+ * Um leitor de PDF que perde linha não é consertável de uma vez por todas:
+ * sempre haverá um nome comprido, uma quebra de página, um caractere estranho.
+ * O que é consertável é ele perder linha EM SILÊNCIO.
+ */
+function conferirTotalDeclarado(preparo, fonte, linhas, headerRow, mapeamento) {
+  const coluna = mapeamento?.valorTotal;
+  if (!coluna || !headerRow) return;
+
+  const declarado = totalNoPainel(linhas, headerRow, coluna);
+  if (declarado == null || declarado <= 0) return;
+
+  const montados = [...(preparo.porStore[fonte.store]?.values() || [])];
+  if (!montados.length) return;
+  const somado = cents(montados.reduce((a, r) => a + (r.valorTotal || 0), 0));
+
+  const falta = cents(declarado - somado);
+  /* um centavo de arredondamento do PDF não é notícia; meio por cento já é */
+  if (Math.abs(falta) < 1 || Math.abs(falta) / declarado < 0.005) return;
+
+  preparo.avisos.push(
+    `O PRÓPRIO ARQUIVO diz que "${coluna}" soma ${money(declarado)}, e o app conseguiu montar `
+    + `${money(somado)} a partir das linhas: ${falta > 0 ? 'faltam' : 'sobram'} `
+    + `${money(Math.abs(falta))} (${(Math.abs(falta) / declarado * 100).toFixed(1).replace('.', ',')}%). `
+    + (falta > 0
+      ? 'São linhas que o leitor não conseguiu montar — nome muito comprido quebrado em duas '
+        + 'linhas, quebra de página no meio do produto. Confira se a linha de cabeçalho escolhida '
+        + 'é a certa; se for, exporte o relatório em EXCEL em vez de PDF, que é lido sem perder '
+        + 'linha nenhuma.'
+      : 'O app montou MAIS do que o arquivo declara — quase sempre uma linha de total do relatório '
+        + 'lida como se fosse produto. Confira a linha de cabeçalho escolhida.'),
+  );
+}
+
+/**
+ * O total que o painel do topo declara para uma coluna.
+ *
+ * O painel vem antes do cabeçalho da tabela: uma linha com os rótulos, a de
+ * baixo com os números. Acha o rótulo igual ao nome da coluna e desce até achar
+ * número na mesma posição.
+ */
+function totalNoPainel(linhas, headerRow, nomeColuna) {
+  const alvo = normalize(nomeColuna);
+  if (!alvo) return null;
+  for (let i = 0; i < headerRow; i += 1) {
+    const linha = linhas[i] || [];
+    for (let c = 0; c < linha.length; c += 1) {
+      if (normalize(linha[c]) !== alvo) continue;
+      for (let j = i + 1; j < headerRow; j += 1) {
+        const valor = parseNumber((linhas[j] || [])[c]);
+        if (valor != null && valor > 0) return cents(valor);
+      }
+    }
+  }
+  return null;
 }
 
 async function conferirMesOcupado(preparo, fonte) {

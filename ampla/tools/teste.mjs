@@ -822,6 +822,77 @@ console.log('\n▶ Sem XML, a margem sai dos PEDIDOS — e o custo informado mud
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
 }
 
+console.log('\n▶ O app confere o que montou contra o total que o arquivo declara');
+{
+  /**
+   * "Eu reenviei o relatório que você pediu, no período que você pediu, só que
+   *  agora aparece isso."
+   *
+   * Foram cinco rodadas atrás de R$ 16.546,54 de diferença entre o que o arquivo
+   * dela soma e o que o app montou dele. E a resposta estava impressa no próprio
+   * arquivo o tempo todo: o relatório abre com um painel que declara "Valor
+   * total: R$ 653.592,84".
+   *
+   * Um leitor de PDF que perde uma linha não é consertável de uma vez por todas
+   * — sempre haverá um nome comprido, uma quebra de página. O que é consertável
+   * é ele perder linha EM SILÊNCIO.
+   */
+  const guardadas = await store.vendasProduto.listar();
+  for (const x of guardadas) await store.vendasProduto.remover(x.id);
+
+  const PAINEL = [
+    'Quantidade;Relatório de produtos vendidos;Custo total;Valor total;;Lucro',
+    '200,00;;3.000,00;653.592,84;;650.592,84',
+    'Produtos vendidos no período;;Custo dos produtos vendidos;Valor total das vendas;;Valores já confirmados',
+    'Produto;Quantidade;Custo médio;Custo total;Valor total;Lucro',
+  ].join('\n');
+
+  const preparar = async (linhasDeProduto) => {
+    const conteudo = `${PAINEL}\n${linhasDeProduto.join('\n')}`;
+    const leitura = await readFile(new File([conteudo], 'pv.csv', { type: 'text/csv' }));
+    const cabecalho = leitura.planilhas[0].linhas[3].map(String);
+    return ingest.prepararTabular({
+      fonteId: 'produtosVendidos',
+      leitura,
+      planilhaIndex: 0,
+      headerRow: 3,
+      mapeamento: ingest.sugerirMapeamento('produtosVendidos', cabecalho),
+      mesReferencia: '2026-10-01',
+    });
+  };
+  const reclamou = (p) => (p.avisos || []).find((a) => /O PRÓPRIO ARQUIVO diz/.test(a));
+
+  /* o leitor perdeu uma linha: o arquivo declara mais do que o app montou */
+  const faltando = await preparar([
+    'PRODUTO A;100;10,00;1.000,00;600.000,00;599.000,00',
+    'PRODUTO B;100;20,00;2.000,00;37.046,30;35.046,30',
+  ]);
+  const aviso = reclamou(faltando);
+  ok('o app percebe que montou menos do que o arquivo declara', !!aviso,
+    JSON.stringify(faltando.avisos));
+  ok('dizendo quanto faltou, em reais', /16\.546,54/.test(aviso || ''), aviso);
+  ok('e em porcentagem, com vírgula', /2,5%/.test(aviso || ''), aviso);
+  ok('com o caminho: exportar em Excel em vez de PDF', /EXCEL/i.test(aviso || ''), aviso);
+
+  /* e quando fecha, ele não diz nada: aviso que aparece sempre ninguém lê */
+  const fechando = await preparar([
+    'PRODUTO A;100;10,00;1.000,00;600.000,00;599.000,00',
+    'PRODUTO B;100;20,00;2.000,00;53.592,84;51.592,84',
+  ]);
+  ok('quando bate, o app fica calado', !reclamou(fechando), JSON.stringify(fechando.avisos));
+
+  /* centavo de arredondamento do PDF não vira alarme */
+  const centavos = await preparar([
+    'PRODUTO A;100;10,00;1.000,00;600.000,00;599.000,00',
+    'PRODUTO B;100;20,00;2.000,00;53.592,80;51.592,80',
+  ]);
+  ok('e quatro centavos de arredondamento também não', !reclamou(centavos),
+    JSON.stringify(centavos.avisos));
+
+  for (const x of await store.vendasProduto.listar()) await store.vendasProduto.remover(x.id);
+  for (const x of guardadas) await store.vendasProduto.salvar(x);
+}
+
 console.log('\n▶ Reenviar o relatório do mês SUBSTITUI o mês, como o aviso promete');
 {
   /**
