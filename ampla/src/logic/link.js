@@ -59,6 +59,7 @@
 import * as store from '../core/store.js';
 import { today, monthKey, money, formatDate } from '../core/format.js';
 import { normalize, docNumber, sameMoney, cents, sum, key as chaveTexto } from '../core/util.js';
+import { interpretarStatusDoArquivo } from './ingest.js';
 
 export const TIPOS_PENDENCIA = {
   nf_sem_vendedor: {
@@ -1030,8 +1031,38 @@ export async function vendasSemVendedor() {
  * título manda: se veio "Recebido", está recebido — mesmo sem data de
  * recebimento na planilha, que é o normal em vários exports.
  */
+/**
+ * A SITUAÇÃO DO TÍTULO — E O ARQUIVO VENCE A DATA.
+ *
+ * "O app releu a situação: 565 voltaram para em aberto. (...) em aberto: 0"
+ *
+ * O log da importação dela mostrava a releitura ABRINDO os 565 títulos, e o
+ * diagnóstico, feito em seguida, mostrava os mesmos 565 fechados. Alguma coisa
+ * os fechava depois — e era esta função, chamada por `recalcular()` ao fim de
+ * TODA importação:
+ *
+ *     if (titulo.dataRecebimento || ...) return 'pago';
+ *
+ * O relatório dela traz uma coluna de data de recebimento preenchida mesmo em
+ * título que a coluna Situação chama de "Em aberto" — previsão, não baixa. A
+ * data sugeria pago, e sugestão vencia o que o arquivo AFIRMA.
+ *
+ * E foi por isso que o contas a pagar sempre funcionou e o a receber nunca:
+ * contas a pagar grava `dataPagamento`, que esta linha não olha. A mesma
+ * pergunta tinha três leituras diferentes no app, e esta era a última — eu
+ * tinha consertado as duas primeiras e deixado esta para trás.
+ *
+ * Agora o que o ARQUIVO ESCREVEU vence o que uma data sugere, que é a mesma
+ * regra da importação. Decisão tomada aqui dentro — baixa à mão, baixa por
+ * ausência no relatório seguinte — continua vencendo as duas, porque é
+ * informação que o arquivo não tem.
+ */
 export function statusTitulo(titulo) {
   if (titulo.status === 'cancelado') return 'cancelado';
+  if (titulo.baixaManual || titulo.baixadoPorAusencia) {
+    return titulo.status === 'pago' ? 'pago' : 'aberto';
+  }
+  if (titulo.statusArquivo) return interpretarStatusDoArquivo(titulo.statusArquivo);
   if (titulo.status === 'pago') return 'pago';
   if (titulo.dataRecebimento || (titulo.saldo != null && titulo.saldo <= 0)) return 'pago';
   return 'aberto';

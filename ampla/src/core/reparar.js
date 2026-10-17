@@ -47,8 +47,11 @@ import { openDB } from './db.js';
  *     conserto v3 rodou no aparelho dela COM A REGRA ERRADA e se deu por feito.
  *     Com o código certo chegando agora, ele precisa passar outra vez — senão
  *     os 1.234 títulos dela continuam fechados até ela reimportar.
+ * v5: o `recalcular()` desfazia o conserto logo depois, porque uma data de
+ *     recebimento preenchida vencia o que a coluna Situação afirmava. Agora que
+ *     o arquivo manda, o conserto precisa passar de novo e ficar.
  */
-const MARCA = 'reparo_situacao_v4';
+const MARCA = 'reparo_situacao_v5';
 const LOJAS = ['receber', 'pagar'];
 
 /**

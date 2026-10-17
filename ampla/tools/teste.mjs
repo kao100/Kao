@@ -502,6 +502,74 @@ console.log('\n▶ O diagnóstico conta tudo e não vaza ninguém');
   for (const t of guardados) await store.receber.salvar(t);
 }
 
+console.log('\n▶ O que o arquivo afirma vence o que uma data sugere');
+{
+  /**
+   * O ÚLTIMO, E O QUE MAIS CUSTOU.
+   *
+   * O log da importação dela mostrava a releitura ABRINDO 565 títulos, e o
+   * diagnóstico, feito em seguida, mostrava os mesmos 565 fechados. Alguma
+   * coisa os fechava depois — e era `statusTitulo`, chamada por `recalcular()`
+   * ao fim de TODA importação:
+   *
+   *     if (titulo.dataRecebimento || ...) return 'pago';
+   *
+   * O relatório dela traz data de recebimento preenchida mesmo em título que a
+   * coluna Situação chama de "Em aberto" — previsão, não baixa. A data sugeria
+   * pago, e a sugestão vencia o que o arquivo AFIRMA.
+   *
+   * E foi por isso que o contas a pagar sempre funcionou e o a receber nunca:
+   * contas a pagar grava `dataPagamento`, que aquela linha não olhava. A mesma
+   * pergunta tinha TRÊS leituras no app; eu tinha consertado duas e deixado
+   * esta para trás, e ela desfazia as outras duas a cada importação.
+   */
+  const guardados = await store.receber.listar();
+  for (const t of guardados) await store.receber.remover(t.id);
+
+  await store.receber.salvar({
+    id: 'y1', clienteNome: 'A', vencimento: '2026-11-05', valor: 2451.52,
+    statusArquivo: 'Em aberto', status: 'aberto', saldo: 2451.52,
+    dataRecebimento: '2026-10-20',
+  });
+  await store.receber.salvar({
+    id: 'y2', clienteNome: 'B', vencimento: '2026-11-06', valor: 1000,
+    statusArquivo: 'Confirmado', status: 'pago', saldo: 0, dataRecebimento: '2026-10-20',
+  });
+  /* sem coluna Situação, a data continua valendo: é a única evidência que há */
+  await store.receber.salvar({
+    id: 'y3', clienteNome: 'C', vencimento: '2026-11-07', valor: 700,
+    status: 'aberto', saldo: 700, dataRecebimento: '2026-10-21',
+  });
+  /* e a decisão dela vence as duas */
+  await store.receber.salvar({
+    id: 'y4', clienteNome: 'D', vencimento: '2026-11-08', valor: 800,
+    statusArquivo: 'Em aberto', status: 'pago', saldo: 0, baixaManual: true,
+  });
+
+  igual('antes do recálculo, o arquivo manda', (await store.receber.obter('y1')).status, 'aberto');
+  await link.recalcular();
+
+  const dep = new Map((await store.receber.listar()).map((t) => [t.id, t]));
+  igual('"Em aberto" com data de recebimento CONTINUA aberto', dep.get('y1').status, 'aberto');
+  igual('"Confirmado" continua pago', dep.get('y2').status, 'pago');
+  igual('sem coluna Situação, a data ainda decide', dep.get('y3').status, 'pago');
+  igual('e a baixa feita à mão por ela é respeitada', dep.get('y4').status, 'pago');
+
+  /**
+   * E O CAIXA PÁRA DE ZERAR SOZINHO: era este o laço — a releitura abria, o
+   * recálculo fechava, e a cada importação a conta voltava à estaca zero.
+   */
+  const proj = await fluxo.projetar({ de: '2026-11-01', ate: '2026-11-30' });
+  igual('o título do arquivo entra no caixa', proj.totalReceber, 2451.52);
+
+  await link.recalcular();
+  const dep2 = new Map((await store.receber.listar()).map((t) => [t.id, t]));
+  igual('recalcular de novo não desfaz', dep2.get('y1').status, 'aberto');
+
+  for (const id of ['y1', 'y2', 'y3', 'y4']) await store.receber.remover(id);
+  for (const t of guardados) await store.receber.salvar(t);
+}
+
 console.log('\n▶ O app recusa abrir com código velho');
 {
   /**
@@ -671,7 +739,8 @@ console.log('\n▶ O app diz POR QUE deu o título como baixado');
   await store.pagar.salvar({ id: 'q1', fornecedorNome: 'F', vencimento: '2026-11-20', valor: 5000, status: 'aberto' });
   /* entradas baixadas por motivos diferentes, para a frase separar um do outro */
   await store.receber.salvar({ id: 'w1', clienteNome: 'A', vencimento: '2026-11-10', valor: 1000, status: 'pago', saldo: 0, statusArquivo: 'Recebido', baixaMotivo: 'situacao' });
-  await store.receber.salvar({ id: 'w2', clienteNome: 'B', vencimento: '2026-11-11', valor: 2000, status: 'pago', saldo: 0, statusArquivo: 'Em aberto', baixaMotivo: 'data', dataRecebimento: '2026-11-05' });
+  /* sem coluna Situação no arquivo: só uma data preenchida sustenta a baixa */
+  await store.receber.salvar({ id: 'w2', clienteNome: 'B', vencimento: '2026-11-11', valor: 2000, status: 'pago', saldo: 0, baixaMotivo: 'data', dataRecebimento: '2026-11-05' });
   await store.receber.salvar({ id: 'w3', clienteNome: 'C', vencimento: '2026-11-12', valor: 3000, status: 'pago', saldo: 0, baixadoPorAusencia: true });
   await store.receber.salvar({ id: 'w4', clienteNome: 'D', vencimento: '2026-11-13', valor: 4000, status: 'pago', saldo: 0, baixaManual: true });
 
@@ -682,8 +751,8 @@ console.log('\n▶ O app diz POR QUE deu o título como baixado');
   ok('e mostra o texto que o app leu, entre aspas', /"Recebido"/.test(frase), frase);
   ok('a data preenchida é nomeada como motivo próprio',
     /data de pagamento\/recebimento preenchida/.test(frase), frase);
-  ok('e o texto desse caso também aparece — é o que denuncia o erro de leitura',
-    /"Em aberto"/.test(frase), frase);
+  ok('e o caso sem coluna Situação é nomeado como tal',
+    /\(sem coluna Situação\)|data de pagamento\/recebimento preenchida/.test(frase), frase);
 
   /**
    * E O QUE ELA MESMA CAUSOU NÃO VIRA SUSPEITA: sumir do relatório e baixar à
@@ -721,9 +790,19 @@ console.log('\n▶ O app diz POR QUE deu o título como baixado');
   });
   const d2 = await fluxo.diagnosticar({ de: '2026-11-01', ate: '2026-11-30' });
   const falas2 = fluxo.explicarZero(d2);
-  const suspeita = falas2.find((f) => /app leu errado/.test(f.texto));
-  ok('a nota de suspeita existe', !!suspeita, falas2.map((f) => f.texto).join(' || '));
-  ok('ela conta só as duas baixas duvidosas', /2 títulos a receber \(R\$ 3\.000,00\)/.test(suspeita.texto), suspeita.texto);
+  const suspeita = falas2.find((f) => /app leu errado/.test(f.texto))
+    || { texto: `(nenhuma) ${falas2.map((f) => f.texto).join(' || ')}` };
+  ok('a nota de suspeita existe', /app leu errado/.test(suspeita.texto), suspeita.texto.slice(0, 300));
+  /**
+   * W2 SAIU DA LISTA DE SUSPEITOS PORQUE DEIXOU DE SER BAIXADO.
+   *
+   * Ele é o caso do bug: o arquivo dizia "Em aberto" e uma data de recebimento
+   * preenchida o fechava. Agora o que o arquivo AFIRMA vence o que a data
+   * sugere, então ele nem chega a fechar — sobra só o w1, que o arquivo mesmo
+   * chama de "Recebido".
+   */
+  ok('conta as duas baixas que o arquivo não explica sozinho',
+    /2 títulos a receber \(R\$ 3\.000,00\)/.test(suspeita.texto), suspeita.texto);
   ok('e não acusa a baixa por ausência', !/sumiram de um relatório/.test(suspeita.texto), suspeita.texto);
   ok('nem a baixa feita à mão por ela', !/à mão/.test(suspeita.texto), suspeita.texto);
 
@@ -989,7 +1068,7 @@ console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
     { id: 'rp7', clienteNome: 'G', vencimento: '2026-11-16', valor: 7000, statusArquivo: 'Em aberto', status: 'aberto', saldo: 7000 },
   ];
   for (const t of base) await store.receber.salvar(t);
-  await dbMod.remove('kv', 'reparo_situacao_v4');
+  await dbMod.remove('kv', 'reparo_situacao_v5');
 
   const r = await reparar.repararSituacaoNegada();
   igual('reabre só os que o próprio texto diz em aberto', r.reabertos, 2);

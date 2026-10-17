@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 700 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 707 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -233,6 +233,19 @@ app não conseguiu identificar sozinho.
   financeiro fica vazio e parece "não tem movimento", a mentira mais cara que
   aquela tela pode contar. Agora um aproveitamento abaixo da metade vira aviso,
   dizendo onde procurar a linha certa.
+- **O que o arquivo AFIRMA vence o que uma data SUGERE.** Este foi o último, e o
+  que mais custou. O log da importação mostrava a releitura abrindo 565 títulos
+  e o diagnóstico, logo em seguida, mostrava os mesmos 565 fechados: quem
+  fechava era `statusTitulo`, chamada por `recalcular()` ao fim de TODA
+  importação, com `if (titulo.dataRecebimento) return 'pago'`. O relatório traz
+  data de recebimento preenchida até em título que a coluna Situação chama de
+  "Em aberto" — previsão, não baixa. E foi por isso que o contas a PAGAR sempre
+  funcionou e o a RECEBER nunca: contas a pagar grava `dataPagamento`, que
+  aquela linha não olhava. A mesma pergunta tinha **três leituras** no app;
+  consertar duas e deixar a terceira foi o que fez dez rodadas não fecharem,
+  porque ela desfazia as outras duas a cada importação. Sem coluna Situação a
+  data continua decidindo — é a única evidência que existe; e baixa feita à mão
+  ou por ausência vence as duas, porque é informação que o arquivo não tem.
 - **A negação é lida antes da palavra.** "NÃO PAGO" contém "PAGO". "NÃO
   RECEBIDO" contém "RECEBID". A leitura da coluna Situação procurava esses
   pedaços no texto sem olhar a negação na frente, e todo título em aberto do
