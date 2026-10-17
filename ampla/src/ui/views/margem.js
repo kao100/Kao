@@ -605,6 +605,28 @@ export async function telaMargem({ query }) {
           'VENDEU e MARGEM são só a mercadoria. O FRETE é cobrado à parte, e "COM FRETE" é a '
           + 'margem quando ele entra na conta — é aí que uma margem apertada em material pesado '
           + 'pode virar resultado.'),
+        /**
+         * "COM FRETE" É ANTES DE PAGAR A ENTREGA — E ESTE É O NÚMERO QUE VAI
+         * PARA O PAI DELA.
+         *
+         * No mês dela o frete cobrado foi R$ 60.743,48 e a entrega custou
+         * R$ 53.523,25: o frete acrescentou R$ 7.220,23, não R$ 60 mil. Lido
+         * sozinho, "39,9% com frete" conta a empresa seis pontos melhor do que
+         * ela foi — e é justamente o número com cara de resultado final, logo
+         * abaixo da linha do TOTAL.
+         *
+         * O custo da entrega já está na tela, duas seções abaixo. Mas quem lê a
+         * tabela de margem pode nunca chegar lá, e não é obrigação de ninguém
+         * juntar dois números de lugares diferentes para não se enganar.
+         */
+        r.frete?.custo?.temDado && r.total.venda > 0 && h('p.mini.muted',
+          `Antes de levar o "com frete" adiante: ele soma o frete COBRADO `
+          + `(${money(r.frete.total)}) e ainda NÃO desconta o que a entrega custou `
+          + `(${money(r.frete.custo.total)}). A sobra do frete no período foi `
+          + `${money(r.frete.custo.resultado)} — com ela, o resultado do período é `
+          + `${money(cents(r.total.lucro + r.frete.custo.resultado))}, `
+          + `${pct(((r.total.lucro + r.frete.custo.resultado) / r.total.venda) * 100, 1)} sobre a `
+          + 'venda. É este o número do mês.'),
         r.produtosSemCusto > 0 && aviso(`${r.produtosSemCusto} linha(s) de venda ficaram sem custo: `
           + 'o produto não apareceu no relatório de produtos vendidos deste período. A margem '
           + 'desses vendedores sai maior do que a real — a linha fica marcada abaixo.', 'atencao'),
