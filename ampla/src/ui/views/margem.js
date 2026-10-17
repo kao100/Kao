@@ -165,6 +165,32 @@ async function semPerderOLugar() {
 }
 
 /**
+ * PARA QUE ESTE RELATÓRIO ESTÁ SERVINDO, DE VERDADE, NESTE MÊS.
+ *
+ * "E você acha que só esse mesmo já vai alterar tudo? Sobre a margem, custo,
+ *  lucro. Não tenho que mandar mais nenhum outro relatório?"
+ *
+ * Ela passou um dia reexportando o relatório de produtos vendidos por causa
+ * desta faixa — um relatório que, no mês dela, não encosta na margem: o custo
+ * veio inteiro do "Valor custo" dos pedidos. A frase dizia "o relatório entra
+ * aqui só como fonte de CUSTO", verdade em geral e mentira no caso dela, e foi
+ * ela que a mandou atrás do arquivo errado.
+ *
+ * Uma explicação genérica numa tela que tem os dados para ser específica é uma
+ * explicação errada.
+ */
+function paraQueServeORelatorio(r) {
+  if (r.conferencia.coberturaDeCusto.soDoPedido) {
+    return 'E neste mês ele NÃO entra na conta da margem: todo o custo veio do "Valor custo" dos '
+      + 'seus pedidos, que é a melhor fonte que existe. O relatório fica aqui como referência e '
+      + 'para apontar produtos com unidade trocada no cadastro — a margem, o custo e o lucro '
+      + 'acima não mudam por causa dele.';
+  }
+  return 'O relatório entra aqui como fonte de CUSTO para a parte da venda que não pegou custo '
+    + 'do pedido.';
+}
+
+/**
  * O QUE FALTA PARA A MARGEM SAIR DOS PEDIDOS, campo por campo.
  *
  * Para o custo vir do pedido — que é onde o custo informado por ela entra — o
@@ -337,8 +363,8 @@ export async function telaMargem({ query }) {
           + `neste período e as notas somam ${money(r.conferencia.vendaDasNotas)} — `
           + `${money(r.conferencia.diferencaDeBase)} de diferença. Isso é NORMAL, não é erro: o `
           + 'relatório conta as VENDAS do mês e esta tela conta as NOTAS do mês, e nem toda venda '
-          + 'sai em nota no mesmo mês. O faturamento é a nota fiscal; o relatório entra aqui só '
-          + 'como fonte de CUSTO.', 'info')),
+          + 'sai em nota no mesmo mês. O faturamento é a nota fiscal. '
+          + paraQueServeORelatorio(r), 'info')),
 
     secao('A margem do período',
       exportadores(() => ({

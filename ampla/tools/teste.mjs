@@ -695,6 +695,20 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
   igual('o custo digitado entra na margem', vInf.custo, 8300);
   ok('e a linha do TOTAL leva o frete junto, como a de cada vendedor',
     'frete' in rInf.total && 'margemComFrete' in rInf.total, JSON.stringify(Object.keys(rInf.total)));
+
+  /**
+   * E A TELA SABE DIZER QUE O RELATÓRIO DE PRODUTOS VENDIDOS NÃO ESTÁ ENTRANDO.
+   *
+   * "E você acha que só esse mesmo já vai alterar tudo? Sobre a margem, custo,
+   *  lucro. Não tenho que mandar mais nenhum outro relatório?"
+   *
+   * Ela passou um dia reexportando um relatório que, no mês dela, não encosta na
+   * margem — porque a tela dizia que ele era "a fonte de CUSTO", verdade em
+   * geral e mentira no caso dela.
+   */
+  ok('com todo o custo vindo do pedido, a tela sabe que o relatório não entra',
+    rInf.conferencia.coberturaDeCusto.soDoPedido === true,
+    JSON.stringify(rInf.conferencia.coberturaDeCusto));
   igual('e não sobra mais venda sem custo confiável', vInf.vendaSemCusto, 0);
   ok('a margem passa a valer para a venda inteira', vInf.margem > 0, String(vInf.margem));
 
@@ -3145,6 +3159,10 @@ AREIA MARGEM M3;Nair;100;6.000,00;120,00`, { mesReferencia: '2026-07-01' });
 
   igual('a soma dos vendedores bate com o total', m.total.venda, 16000);
   igual('e o custo somado também', m.total.custo, 10000);
+  /* aqui o custo VEM do relatório: a tela não pode dizer que ele é dispensável */
+  ok('quando o custo vem do relatório, a tela não diz que ele é só referência',
+    !m.conferencia.coberturaDeCusto.soDoPedido,
+    JSON.stringify(m.conferencia.coberturaDeCusto));
 
   /**
    * Produto vendido por alguém mas fora do relatório de custo: margem incompleta.

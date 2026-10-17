@@ -688,6 +688,23 @@ export async function margem({ de, ate }) {
       ? pedidosValidos.filter((x) => custoConfiavelDoPedido(x).custo != null).length : 0,
   };
   /**
+   * O RELATÓRIO DE PRODUTOS VENDIDOS ESTÁ ENTRANDO NA CONTA, OU NÃO?
+   *
+   * "E você acha que só esse mesmo já vai alterar tudo? Sobre a margem, custo,
+   *  lucro. Não tenho que mandar mais nenhum outro relatório?"
+   *
+   * Ela passou um dia inteiro reexportando o relatório de produtos vendidos por
+   * causa de uma faixa na tela — um relatório que, no mês dela, não encosta na
+   * margem: o custo veio inteiro do "Valor custo" dos pedidos. A tela dizia "o
+   * relatório entra aqui só como fonte de CUSTO", o que era verdade em geral e
+   * mentira no caso dela, e foi isso que a mandou atrás do arquivo errado.
+   *
+   * Quando praticamente toda a venda já pegou custo do pedido, o relatório é
+   * referência e lista de conferência — e a tela passa a dizer isso.
+   */
+  conferencia.coberturaDeCusto.soDoPedido = conferencia.coberturaDeCusto.percentualDoPedido != null
+    && conferencia.coberturaDeCusto.percentualDoPedido >= 99.5;
+  /**
    * NOVENTA E OITO POR CENTO.
    *
    * Abaixo disso a margem não é margem, é média de uma parte — e a tela diz isso
