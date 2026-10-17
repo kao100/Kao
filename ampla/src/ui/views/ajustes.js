@@ -261,7 +261,23 @@ export async function telaAjustes() {
         + 'Se ainda for o antigo, o conserto não chegou no seu aparelho — e aí não adianta '
         + 'reimportar nem apagar nada.'),
       h('div.btn-linha', { style: { marginTop: '10px' } },
-        botao('⬇️ Buscar versão nova', { tipo: 'primario', onClick: () => buscarAtualizacao() })))),
+        botao('⬇️ Buscar versão nova', { tipo: 'primario', onClick: () => buscarAtualizacao() })),
+      /**
+       * O DIAGNÓSTICO QUE ELA ME MANDA.
+       *
+       * "Eu não sei nem o que te falar (...) parece que não sei o que tá
+       *  acontecendo."
+       *
+       * Eu também não sabia: o mesmo arquivo, no mesmo app, funciona aqui e não
+       * funciona no aparelho dela, e as últimas rodadas foram eu adivinhando
+       * por print. Print mostra o fim da história. Isto mostra o começo — o que
+       * entrou, com que situação, vencendo em que mês — e acaba com o palpite.
+       */
+      h('p.pequeno.muted', { style: { marginTop: '14px' } },
+        'Se algum número estiver errado, copie o diagnóstico e me mande. Ele conta o que entrou e '
+        + 'o que o app entendeu, sem nome, CPF, CNPJ nem número de nota de ninguém.'),
+      h('div.btn-linha', { style: { marginTop: '8px' } },
+        botao('📋 Copiar diagnóstico', { onClick: () => copiarDiagnostico() })))),
 
     /* o rodapé não pode mentir: com a nuvem ligada, os dados não são só locais */
     h('p.mini.muted.centro', { style: { padding: '10px 0 20px' } },
@@ -407,6 +423,29 @@ async function editarVendedor(vendedor) {
  * nova. Este botão faz os dois — manda o service worker reconferir, apaga o que
  * está guardado e recarrega buscando da rede.
  */
+async function copiarDiagnostico() {
+  const { montar } = await import('../../logic/diagnostico.js');
+  const texto = await montar();
+  let copiou = false;
+  try {
+    await navigator.clipboard.writeText(texto);
+    copiou = true;
+  } catch { /* sem permissão de área de transferência: mostra para copiar à mão */ }
+
+  /* mesmo copiando, o texto aparece: ela precisa ver que não vai nome de ninguém */
+  const area = h('textarea.entrada', {
+    style: { height: '260px', fontFamily: 'monospace', fontSize: '11px' },
+    readonly: true,
+  });
+  area.value = texto;
+  detalhe('Diagnóstico',
+    h('p.pequeno.muted', copiou
+      ? 'Já está copiado — é só colar na conversa. Sem nome, CPF, CNPJ ou número de nota.'
+      : 'Selecione tudo e copie. Sem nome, CPF, CNPJ ou número de nota.'),
+    area);
+  if (copiou) ok('Diagnóstico copiado.');
+}
+
 async function buscarAtualizacao() {
   try {
     if ('serviceWorker' in navigator) {

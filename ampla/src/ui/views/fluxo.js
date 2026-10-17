@@ -14,7 +14,7 @@ import { kpi, card, secao, botao, chips, aviso, vazio, selo } from '../component
 import { grafLinha } from '../components/chart.js';
 import { tabela, exportadores } from '../components/table.js';
 import {
-  formulario, confirmar, abrirFolha, fechar, linhas as linhasDetalhe,
+  formulario, confirmar, detalhe, abrirFolha, fechar, linhas as linhasDetalhe,
 } from '../components/sheet.js';
 import * as store from '../../core/store.js';
 import { ok } from '../components/toast.js';
@@ -126,7 +126,9 @@ export async function telaFluxo({ query }) {
        * aplicar sozinha, olhando o número errado.
        */
       porQueZero.length > 0 && h('div.btn-linha', { style: { marginBottom: '10px' } },
-        botao('🔁 Reler as situações do arquivo', { tipo: 'primario', onClick: relerSituacoes })),
+        botao('🔁 Reler as situações do arquivo', { tipo: 'primario', onClick: relerSituacoes }),
+        /* e, se nem isso resolver, o retrato da base para ela me mandar */
+        botao('📋 Copiar diagnóstico', { onClick: copiarDiagnostico })),
       h('div.grade.grade--2',
         kpi({ label: 'A receber', valor: money(r.totalReceber), icone: '↗', cor: 'ok' }),
         kpi({ label: 'A pagar', valor: money(r.totalPagar), icone: '↘', cor: 'laranja' }),
@@ -308,6 +310,32 @@ function abrirVencidos(titulo, grupo, explicacao) {
  * texto com a regra de hoje, o estado guardado volta a concordar com o arquivo —
  * sem apagar nada, sem reimportar, e quantas vezes ela quiser.
  */
+/**
+ * O retrato da base, em texto, para ela me mandar quando o número continuar
+ * errado. Sem nome, CPF, CNPJ ou número de nota: só contagens, somas e as
+ * palavras da coluna Situação.
+ */
+async function copiarDiagnostico() {
+  const { montar } = await import('../../logic/diagnostico.js');
+  const texto = await montar();
+  let copiou = false;
+  try {
+    await navigator.clipboard.writeText(texto);
+    copiou = true;
+  } catch { /* sem permissão: mostra para copiar à mão */ }
+  const area = h('textarea.entrada', {
+    style: { height: '260px', fontFamily: 'monospace', fontSize: '11px' },
+    readonly: true,
+  });
+  area.value = texto;
+  detalhe('Diagnóstico',
+    h('p.pequeno.muted', copiou
+      ? 'Já está copiado — é só colar na conversa. Sem nome, CPF, CNPJ ou número de nota.'
+      : 'Selecione tudo e copie. Sem nome, CPF, CNPJ ou número de nota.'),
+    area);
+  if (copiou) ok('Diagnóstico copiado.');
+}
+
 async function relerSituacoes() {
   const [{ relerSituacoes: reler }, link] = await Promise.all([
     import('../../core/reparar.js'),

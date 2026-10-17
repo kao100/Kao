@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 677 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 690 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -291,6 +291,16 @@ app não conseguiu identificar sozinho.
   importação seguinte, e apagar a base não o alcança: o relatório entra torto de
   novo, igual, para sempre — que é exatamente o que "está dando sempre a mesma
   coisa" produz.
+- **Um diagnóstico que ela copia e manda.** O mesmo arquivo, no mesmo app, pela
+  mesma tela, funcionava aqui e não funcionava no aparelho dela — e as rodadas
+  viravam adivinhação por print. Print mostra o fim da história; o diagnóstico
+  mostra o começo: o que entrou, com que palavra na coluna Situação, o que o app
+  entendeu de cada uma, em que mês vencem os que ficaram em aberto, e o que a
+  tela do Caixa calculou a partir disso. Um toque em Ajustes ou no Caixa, cola
+  na conversa, acabou o palpite. **Não vai nome, CPF, CNPJ nem número de nota** —
+  o texto vai parar numa mensagem, e dado de cliente não tem por que viajar para
+  explicar por que um número deu zero. O teste cobra as duas metades: que ele
+  conte o que precisa, e que não vaze ninguém.
 - **A versão fica à vista, e não pode mentir.** "Não apareceu o botão" tem duas
   causas possíveis — o conserto não funcionou, ou o conserto ainda não chegou no
   aparelho — e elas levam a conversas opostas. Sem o número da versão, não há

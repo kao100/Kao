@@ -455,6 +455,53 @@ console.log('\n▶ Gráfico sem número não finge desenho');
   ok('o gráfico descarta ponto sem número', /Number\.isFinite/.test(chart), '');
 }
 
+console.log('\n▶ O diagnóstico conta tudo e não vaza ninguém');
+{
+  /**
+   * "Eu não sei nem o que te falar (...) os recebimentos continuam zerados
+   *  aqui. Parece que não sei o que tá acontecendo."
+   *
+   * Eu também não sabia: o mesmo arquivo, no mesmo app, funciona aqui e não
+   * funciona no aparelho dela. Print mostra o fim da história; este texto mostra
+   * o começo — o que entrou, com que situação, vencendo em que mês.
+   *
+   * E ele vai parar numa conversa. Então dado de cliente não pode ir junto: não
+   * há razão para nome, CPF, CNPJ ou número de nota viajarem para contar por que
+   * um número deu zero.
+   */
+  const diagnostico = await import('../src/logic/diagnostico.js');
+  const guardados = await store.receber.listar();
+  for (const t of guardados) await store.receber.remover(t.id);
+
+  const CAB = 'Destinado à;CPF;CNPJ;Vencimento;Situação;Valor total;NF-e';
+  await importar('receber', 'diag.csv', [CAB,
+    'JOSE DA SILVA SAURO;123.456.789-00;;10/11/2026;Em aberto;1.000,00;9001',
+    'CONSTRUTORA XYZ LTDA;;12.345.678/0001-99;11/11/2026;Em aberto;2.000,00;9002',
+    'MARIA DE SOUZA PRADO;987.654.321-00;;01/09/2026;Confirmado;5.000,00;9003',
+  ].join('\n'), { fotografiaCompleta: false });
+
+  const texto = await diagnostico.montar({ de: '2026-11-01', dias: 30 });
+
+  /* conta o que eu preciso saber */
+  ok('diz quantos títulos existem', /CONTAS A RECEBER — 3 título/.test(texto), texto.slice(0, 400));
+  ok('diz quantos estão em aberto', /em aberto: 2/.test(texto), '');
+  ok('mostra a palavra do arquivo e o que o app fez com ela',
+    /"Em aberto": 2 aberto, 0 pago/.test(texto) && /"Confirmado": 0 aberto, 1 pago/.test(texto), texto);
+  ok('mostra em que mês os abertos vencem', /2026-11: 2 título/.test(texto), '');
+  ok('e o que a tela do caixa calculou', /a receber no período/.test(texto), '');
+
+  /* e não vaza ninguém */
+  for (const segredo of ['JOSE DA SILVA SAURO', 'CONSTRUTORA XYZ LTDA', 'MARIA DE SOUZA PRADO',
+    '123.456.789-00', '12.345.678/0001-99', '987.654.321-00', '9001', '9002']) {
+    ok(`não vaza ${segredo}`, !texto.includes(segredo), texto);
+  }
+
+  for (const t of await store.receber.listar()) {
+    if (/SAURO|XYZ|PRADO/.test(t.clienteNome || '')) await store.receber.remover(t.id);
+  }
+  for (const t of guardados) await store.receber.salvar(t);
+}
+
 console.log('\n▶ A versão do app não pode mentir');
 {
   /**
