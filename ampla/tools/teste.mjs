@@ -661,6 +661,57 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
     r.custoSuspeito.notas.every((x) => x.pedido !== '1901'),
     JSON.stringify(r.custoSuspeito.notas.map((x) => x.pedido)));
 
+  /**
+   * ============ O CUSTO QUE ELA DIGITA NO PEDIDO ============
+   *
+   * "Não tem como eu ajustar ou te passar por aqui os custos desses pedidos em
+   *  específico pra ficar certinho?"
+   *
+   * Descartar o custo absurdo tira o prejuízo inventado, mas deixa a venda sem
+   * custo nenhum — e a margem de outubro fica valendo só para um pedaço. O
+   * custo fica congelado no pedido na emissão: corrigir o cadastro não alcança
+   * pedido já emitido, e ela não vai reemitir 22 pedidos. Então ela digita.
+   */
+  igual('a linha descartada carrega o pedido, para a tela poder oferecer o acerto',
+    r.custoSuspeito.notas[0].pedidoId, 'pedm_1897');
+  igual('com a venda do pedido inteiro', r.custoSuspeito.notas[0].pedidoValor, 1550);
+  igual('e o custo que o relatório trouxe', r.custoSuspeito.notas[0].pedidoCusto, 56000);
+
+  const ped1897 = await store.pedidos.obter('pedm_1897');
+  await store.pedidos.salvar({ ...ped1897, custoManual: 900, custoManualEm: Date.now() });
+  const rInf = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+
+  igual('informado o custo real, o pedido sai da lista de descartados', rInf.custoSuspeito.quantidade, 0);
+  igual('e aparece na lista do que ela corrigiu', rInf.custoInformado.quantidade, 1);
+  igual('com o número do pedido', rInf.custoInformado.pedidos[0].pedido, '1897');
+  igual('o custo que ela digitou', rInf.custoInformado.pedidos[0].custo, 900);
+  igual('e o do relatório ao lado, para dar para conferir',
+    rInf.custoInformado.pedidos[0].custoRelatorio, 56000);
+
+  const vInf = rInf.vendedores.find((x) => x.nome === 'VENDEDOR A') || {};
+  igual('o custo digitado entra na margem', vInf.custo, 8300);
+  igual('e não sobra mais venda sem custo confiável', vInf.vendaSemCusto, 0);
+  ok('a margem passa a valer para a venda inteira', vInf.margem > 0, String(vInf.margem));
+
+  /**
+   * A RÉGUA NÃO VALE PARA O QUE ELA DIGITOU.
+   *
+   * A régua existe para desconfiar de dado automático de origem desconhecida.
+   * Se a dona da empresa olha o pedido e diz que custou mais do que vendeu, foi
+   * isso que aconteceu — e discordar dela seria o app inventar de novo.
+   */
+  await store.pedidos.salvar({ ...ped1897, custoManual: 5000, custoManualEm: Date.now() });
+  const rAcima = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('custo informado acima da venda NÃO é descartado', rAcima.custoSuspeito.quantidade, 0);
+  igual('vale inteiro, do jeito que ela digitou',
+    (rAcima.vendedores.find((x) => x.nome === 'VENDEDOR A') || {}).custo, 12400);
+
+  /* apagar o valor desfaz: volta a valer o relatório, e a régua volta a pegar */
+  await store.pedidos.salvar({ ...ped1897, custoManual: null, custoManualEm: null });
+  const rVolta = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('apagando o valor, o pedido volta a ser descartado', rVolta.custoSuspeito.quantidade, 1);
+  igual('e some da lista dos informados', rVolta.custoInformado.quantidade, 0);
+
   for (const n of ['nfm_9001', 'nfm_9002', 'nfm_9003']) await store.nfs.remover(n);
   for (const n of ['pedm_1897', 'pedm_1900', 'pedm_1901']) await store.pedidos.remover(n);
   for (const n of ['itm_9001', 'itm_9002', 'itm_9003']) await store.nfItens.remover(n);
@@ -1355,6 +1406,25 @@ igual('continuam 5 notas', (await store.nfs.listar()).length, 5);
 igual('continuam 4 títulos', (await store.receber.listar()).length, 4);
 igual('o vendedor definido por você continua lá',
   (await store.nfs.listar()).find((n) => n.numero === '3001').vendedorId, carlos.id);
+
+/**
+ * O CUSTO QUE ELA DIGITOU NO PEDIDO SOBREVIVE AO ARQUIVO NOVO.
+ *
+ * Senão o acerto de outubro se perderia no primeiro relatório de novembro — e
+ * ela só descobriria pela margem, meses depois, sem ter como saber por quê. O
+ * relatório não traz esse campo: ele é só dela, e reimportar não é motivo para
+ * apagar decisão de ninguém.
+ */
+{
+  const alvo = (await store.pedidos.listar()).find((x) => x.numero === '1001');
+  await store.pedidos.salvar({ ...alvo, custoManual: 1234.56, custoManualEm: 1760000000000 });
+  await importar('pedidos', 'vendas.csv', VENDAS);
+  const depois = (await store.pedidos.listar()).find((x) => x.numero === '1001');
+  igual('o custo informado por você continua lá depois de reimportar', depois.custoManual, 1234.56);
+  igual('com a data em que você informou', depois.custoManualEm, 1760000000000);
+  igual('e o custo do relatório continua ao lado, intacto', depois.valorCusto, alvo.valorCusto);
+  await store.pedidos.salvar({ ...depois, custoManual: null, custoManualEm: null });
+}
 
 console.log('\n▶ Rotina');
 const r = await routine.rotina('2026-09-14');

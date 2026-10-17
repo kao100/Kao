@@ -601,6 +601,17 @@ export async function margem({ de, ate }) {
         .sort((a, b) => b.razao - a.razao),
     },
     /**
+     * Os pedidos cujo custo ela mesma informou. Ficam à vista, com o valor que
+     * o relatório trazia ao lado — porque número digitado por cima de número
+     * importado, sem dizer onde, é como se perde a confiança numa base.
+     */
+    custoInformado: {
+      quantidade: (custoPorNota.informados || []).length,
+      custo: cents(sum(custoPorNota.informados || [], (d) => d.custo)),
+      custoRelatorio: cents(sum(custoPorNota.informados || [], (d) => d.custoRelatorio || 0)),
+      pedidos: (custoPorNota.informados || []).sort((a, b) => (b.custo || 0) - (a.custo || 0)),
+    },
+    /**
      * Os produtos cujo preço não bate entre o relatório e a nota. Não é erro do
      * app nem dela: é o mesmo produto contado em unidades diferentes nos dois
      * lugares. Fica à vista para poder ser corrigido na origem.
@@ -658,6 +669,8 @@ function custoDasNotasPeloPedido(notas, pedidos) {
   const pedidoDa = (nf) => porId.get(nf.pedidoId)
     || (nf.pedidoNumero ? porNumero.get(String(nf.pedidoNumero)) : null);
   const descartados = [];
+  const informados = [];
+  const jaListado = new Set();
 
   const quantasNotas = new Map();
   for (const nf of notas) {
@@ -668,11 +681,48 @@ function custoDasNotasPeloPedido(notas, pedidos) {
   const custo = new Map();
   for (const nf of notas) {
     const pedido = pedidoDa(nf);
-    if (!pedido || pedido.valorCusto == null) continue;
+    if (!pedido) continue;
+    /**
+     * O CUSTO QUE ELA DIGITOU VENCE O QUE O PEDIDO REGISTROU.
+     *
+     * "Não tem como eu ajustar ou te passar por aqui os custos desses pedidos
+     *  em específico pra ficar certinho?"
+     *
+     * O custo fica congelado no pedido no momento da emissão: corrigir o
+     * cadastro na origem não reescreve pedido já emitido, e ela não vai
+     * reemitir 22 pedidos de outubro para acertar um número. Então ela informa
+     * o custo real aqui, uma vez por pedido, e ele passa a valer.
+     *
+     * Vale INTEIRO, sem passar pela régua: a régua existe para desconfiar de
+     * dado automático de origem desconhecida, não da dona da empresa olhando o
+     * pedido. Se ela disser que aquele pedido custou mais do que vendeu, foi
+     * isso mesmo que aconteceu — e o app não tem por que discordar.
+     *
+     * O que o app não faz é esconder: todo pedido com custo informado aparece
+     * na tela, com o valor que o relatório trazia ao lado do que ela digitou.
+     */
+    const informado = pedido.custoManual != null;
+    const custoBase = informado ? pedido.custoManual : pedido.valorCusto;
+    if (custoBase == null) continue;
     const varias = (quantasNotas.get(pedido.id) || 1) > 1;
     if (varias && !pedido.valorTotal) continue;
     const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;
-    const doPedido = cents(pedido.valorCusto * parte);
+    const doPedido = cents(custoBase * parte);
+    if (informado) {
+      custo.set(nf.id, doPedido);
+      if (!jaListado.has(pedido.id)) {
+        jaListado.add(pedido.id);
+        informados.push({
+          pedidoId: pedido.id,
+          pedido: pedido.numero || null,
+          valor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
+          custo: cents(pedido.custoManual),
+          custoRelatorio: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
+          em: pedido.custoManualEm || null,
+        });
+      }
+      continue;
+    }
 
     /**
      * A MESMA RÉGUA DAS OUTRAS DUAS FONTES, QUE AQUI FALTAVA.
@@ -707,9 +757,14 @@ function custoDasNotasPeloPedido(notas, pedidos) {
         nfId: nf.id,
         numero: nf.numero || null,
         pedido: pedido.numero || null,
+        pedidoId: pedido.id,
         vendedorId: nf.vendedorId || null,
         venda: cents(venda),
         custo: doPedido,
+        /* o pedido inteiro, que é o que ela vai olhar para digitar o custo certo */
+        pedidoValor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
+        pedidoCusto: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
+        notasDoPedido: quantasNotas.get(pedido.id) || 1,
         razao: doPedido / venda,
       });
       continue;
@@ -718,6 +773,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
   }
   /* a lista do que foi descartado volta junto: a tela tem de poder dizer */
   custo.descartados = descartados;
+  custo.informados = informados;
   return custo;
 }
 

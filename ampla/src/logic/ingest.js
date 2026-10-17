@@ -27,6 +27,12 @@ const PRESERVAR = {
   receber: ['vendedorId', 'nfId', 'observacao', 'contatoPreferido'],
   pagar: ['prorrogadoPara', 'prorrogacaoMotivo', 'observacaoInterna'],
   extrato: ['conciliacaoStatus', 'conciliadoCom', 'conciliadoEm', 'conciliadoPor'],
+  /**
+   * O custo que ela digitou no pedido sobrevive à reimportação do relatório de
+   * vendas — senão o acerto de outubro se perderia no primeiro arquivo novo de
+   * novembro, que é exatamente quando ela não estaria olhando.
+   */
+  pedidos: ['custoManual', 'custoManualEm', 'custoManualPor'],
   produtos: ['comissaoRegraId', 'categoriaManual'],
   clientes: ['contato', 'telefone', 'email', 'observacao'],
   vendedores: ['apelidos', 'meta', 'ativo'],

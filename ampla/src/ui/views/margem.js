@@ -21,7 +21,8 @@ import { kpi, card, secao, botao, vazio, aviso, selo } from '../components/ui.js
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { money, pct, num, formatDate } from '../../core/format.js';
 import { cents, normalize } from '../../core/util.js';
-import { ok } from '../components/toast.js';
+import { ok, erro } from '../components/toast.js';
+import { formulario } from '../components/sheet.js';
 
 const COLUNAS = [
   { header: 'Vendedor', key: 'nome' },
@@ -67,6 +68,94 @@ async function classificarEntregador(nome, tipo) {
   await store.entregadores.salvar({ ...(achado || {}), id: achado?.id, nome, tipo });
   ok(tipo === 'propria' ? `${nome}: nosso carro.` : `${nome}: freteiro.`);
   refresh();
+}
+
+/**
+ * O CUSTO REAL DE UM PEDIDO, DIGITADO POR ELA.
+ *
+ * "Não tem como eu ajustar ou te passar por aqui os custos desses pedidos em
+ *  específico pra ficar certinho? Eu já mudei e já alterei, aí a gente, como é
+ *  pouca coisa, a gente alterando agora dá."
+ *
+ * O custo do pedido é congelado na emissão: o acerto que ela fez no cadastro de
+ * produtos vale dos pedidos NOVOS em diante, e os de outubro ficariam errados
+ * para sempre. Aqui ela digita o custo certo uma vez, por pedido, e acabou.
+ *
+ * Fica GRAVADO NO PEDIDO, não na nota, por dois motivos: é do pedido que o custo
+ * vem, e um pedido que rendeu várias notas divide o custo entre elas na mesma
+ * proporção de antes, sem ela ter de digitar duas vezes e sem o app ter de
+ * inventar um rateio diferente.
+ *
+ * Campo em branco desfaz: volta a valer o que o relatório trouxe. Desfazer tem
+ * de ser tão fácil quanto fazer, senão um dedo errado vira número errado
+ * permanente — e este número entra direto na margem que ela mostra ao pai.
+ */
+async function informarCusto(linha) {
+  const pedido = await store.pedidos.obter(linha.pedidoId);
+  if (!pedido) { erro('Pedido não encontrado na base.'); return; }
+
+  const atual = pedido.custoManual ?? null;
+  const doRelatorio = linha.pedidoCusto ?? pedido.valorCusto ?? null;
+  const venda = linha.pedidoValor ?? pedido.valorTotal ?? null;
+  const varias = linha.notasDoPedido > 1;
+
+  const resposta = await formulario({
+    titulo: `Custo real do pedido ${linha.pedido || pedido.numero || ''}`.trim(),
+    descricao: `Venda do pedido: ${venda == null ? 'não informada' : money(venda)}\n`
+      + `Custo no relatório: ${doRelatorio == null ? 'não informado' : money(doRelatorio)}`
+      + `${venda && doRelatorio ? ` (${vezes(doRelatorio / venda)} a venda)` : ''}\n\n`
+      + 'Digite o que este pedido custou de verdade, somando todos os itens. O valor vale '
+      + 'inteiro, do jeito que você digitar, e continua valendo quando você reenviar o relatório '
+      + 'de vendas.'
+      + (varias ? `\n\nEste pedido gerou ${linha.notasDoPedido} notas: o custo se divide entre elas na proporção do valor de cada uma.` : ''),
+    campos: [{
+      chave: 'custo',
+      label: 'Custo real do pedido',
+      tipo: 'dinheiro',
+      valor: atual ?? '',
+      ajuda: atual == null
+        ? 'deixe em branco para não mexer'
+        : 'apague o valor para voltar ao custo do relatório',
+    }],
+    confirmar: 'Salvar',
+  });
+  if (!resposta) return;
+
+  const qual = pedido.numero ? `Pedido ${pedido.numero}` : 'O pedido';
+  const texto = String(resposta.custo ?? '').trim();
+  if (!texto) {
+    if (atual == null) return;
+    await store.pedidos.salvar({ ...pedido, custoManual: null, custoManualEm: null });
+    ok(`${qual} voltou ao custo do relatório.`);
+    await semPerderOLugar();
+    return;
+  }
+
+  const valor = Number(texto);
+  if (!Number.isFinite(valor) || valor < 0) { erro('Custo inválido.'); return; }
+  await store.pedidos.salvar({
+    ...pedido,
+    custoManual: cents(valor),
+    custoManualEm: Date.now(),
+  });
+  ok(`${qual}: custo real de ${money(cents(valor))}.`);
+  await semPerderOLugar();
+}
+
+/**
+ * Redesenhar a tela joga ela para o topo — e são 22 pedidos para acertar. Vinte
+ * e duas rolagens de volta até a tabela é o tipo de atrito que faz uma tarefa
+ * curta ser abandonada no meio. A lista fica onde estava.
+ */
+async function semPerderOLugar() {
+  const y = window.scrollY;
+  await refresh();
+  window.scrollTo({ top: y });
+}
+
+/** "36,1×" — com vírgula, que é como ela lê número. */
+function vezes(razao) {
+  return `${num(razao, 1)}×`;
 }
 
 export async function telaMargem({ query }) {
@@ -220,8 +309,9 @@ export async function telaMargem({ query }) {
         'O pedido registrou um custo MAIOR que a própria venda — quase sempre produto cadastrado '
         + 'em unidade diferente da que é vendida (custo do milheiro, venda por pacote). O app não '
         + 'inventa prejuízo com isso: tira esse custo da conta e mostra aqui. Corrigir o cadastro '
-        + 'não conserta pedido já emitido, então estes só saem da lista quando o PEDIDO for '
-        + 'corrigido na origem.'),
+        + 'não conserta pedido já emitido — o custo fica congelado nele. Por isso: toque em '
+        + 'INFORMAR e digite o custo real do pedido. Ele passa a valer na margem na hora, e fica '
+        + 'guardado mesmo quando você reenviar o relatório.'),
       tabela({
         colunas: [
           { header: 'Pedido', key: 'pedido' },
@@ -230,12 +320,56 @@ export async function telaMargem({ query }) {
           { header: 'Venda', key: 'venda', tipo: 'money', alinhar: 'direita' },
           { header: 'Custo do pedido', key: 'custo', tipo: 'money', alinhar: 'direita' },
           { header: 'Custo/venda', key: 'vezes', alinhar: 'direita' },
+          {
+            header: 'Custo real',
+            key: 'acao',
+            alinhar: 'direita',
+            formatar: (_v, linha) => (linha.pedidoId
+              ? botao('Informar', { pequeno: true, onClick: () => informarCusto(linha) })
+              : h('span.mini.muted', 'sem pedido')),
+          },
         ],
         linhas: r.custoSuspeito.notas.map((x) => ({
           ...x,
           vendedor: x.vendedor || 'sem vendedor',
-          vezes: `${x.razao.toFixed(1)}x`,
+          vezes: vezes(x.razao),
         })),
+      })),
+
+    /**
+     * O QUE ELA JÁ CORRIGIU À MÃO, À VISTA.
+     *
+     * Número digitado por cima de número importado tem de aparecer em algum
+     * lugar com o original do lado — senão, daqui a três meses, ninguém sabe
+     * mais por que a margem daquele pedido é aquela. Dá para rever e desfazer
+     * cada um, a qualquer hora.
+     */
+    r.custoInformado?.quantidade > 0 && card(
+      `${r.custoInformado.quantidade} ${r.custoInformado.quantidade === 1 ? 'pedido com custo' : 'pedidos com custo'} informado por você`,
+      h('span.mini.muted', `${money(r.custoInformado.custo)} de custo real no lugar de ${money(r.custoInformado.custoRelatorio)} do relatório`),
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+        'Estes entram na margem com o valor que VOCÊ informou, inteiro, sem conferência do app — '
+        + 'e continuam valendo quando o relatório for reenviado. Toque em qualquer linha para '
+        + 'corrigir ou voltar ao valor do relatório.'),
+      tabela({
+        colunas: [
+          { header: 'Pedido', key: 'pedido' },
+          { header: 'Venda do pedido', key: 'valor', tipo: 'money', alinhar: 'direita' },
+          { header: 'Custo no relatório', key: 'custoRelatorio', tipo: 'money', alinhar: 'direita' },
+          { header: 'Custo real', key: 'custo', tipo: 'money', alinhar: 'direita' },
+          { header: 'Informado em', key: 'quando' },
+        ],
+        linhas: r.custoInformado.pedidos.map((x) => ({
+          ...x,
+          quando: x.em ? formatDate(new Date(x.em).toISOString().slice(0, 10)) : '—',
+        })),
+        aoClicar: (linha) => informarCusto({
+          pedidoId: linha.pedidoId,
+          pedido: linha.pedido,
+          pedidoValor: linha.valor,
+          pedidoCusto: linha.custoRelatorio,
+          custoInformado: linha.custo,
+        }),
       })),
 
     /**
