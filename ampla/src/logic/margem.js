@@ -31,6 +31,7 @@
 
 import * as store from '../core/store.js';
 import { cents, sum, normalize } from '../core/util.js';
+import { monthKey } from '../core/format.js';
 import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
 /**
@@ -321,7 +322,15 @@ export async function margem({ de, ate }) {
    * Pedido CANCELADO fica fora: venda cancelada não é venda. Fica contado à
    * parte, para a diferença contra o relatório não parecer erro.
    */
-  const pedidosDoPeriodo = pedidos.filter((p) => p.data && p.data >= de && p.data <= ate);
+  const mesDe = monthKey(de);
+  const mesAte = monthKey(ate);
+  const noPeriodoOPedido = (ped) => {
+    if (ped.data) return ped.data >= de && ped.data <= ate;
+    // sem data na linha, o mês escolhido na importação já diz a que período ela pertence
+    if (ped.mes) return ped.mes >= mesDe && ped.mes <= mesAte;
+    return false;
+  };
+  const pedidosDoPeriodo = pedidos.filter(noPeriodoOPedido);
   const pedidosValidos = pedidosDoPeriodo.filter((p) => p.concretizado !== false && p.valorTotal);
   const pedidosCancelados = pedidosDoPeriodo.filter((p) => p.concretizado === false);
   const temCustoDePedido = pedidosValidos.some((p) => p.custoManual != null || p.valorCusto != null);
@@ -712,6 +721,35 @@ export async function margem({ de, ate }) {
       cancelados: pedidosCancelados.length,
       vendaCancelada,
     },
+    /**
+     * POR QUE OS NÚMEROS VÊM DAQUI, EM CONTAGENS.
+     *
+     * "Eu já vi aqui e eu tô na versão certa, versão 59, mas não mudou nada no
+     *  que eu preciso."
+     *
+     * Quando a fonte boa não está disponível, o app cai na pior sem dizer uma
+     * palavra — e aí a tela fica idêntica à de antes do conserto, e nem ela nem
+     * eu temos como saber por quê. Já me custou duas rodadas adivinhando por
+     * print o que estava faltando na base dela.
+     *
+     * Estas contagens dizem exatamente qual campo faltou. Não é diagnóstico para
+     * programador: é a diferença entre "reenvie o relatório com a coluna X" e
+     * mais uma semana de palpite.
+     */
+    origemDosNumeros: {
+      fonte: fonteDosNumeros,
+      pedidosNaBase: pedidos.length,
+      noPeriodo: pedidosDoPeriodo.length,
+      semDataNenhuma: pedidos.filter((x) => !x.data && !x.mes).length,
+      comValorTotal: pedidosDoPeriodo.filter((x) => x.valorTotal).length,
+      comCusto: pedidosDoPeriodo.filter((x) => x.valorCusto != null || x.custoManual != null).length,
+      concretizados: pedidosValidos.length,
+      cancelados: pedidosCancelados.length,
+      comVendedor: pedidosValidos.filter((x) => x.vendedorId).length,
+      itensDeNota: itensDoPeriodo.length,
+      linhasComissaoProduto: noPeriodo.filter((l) => l.origemRelatorio === 'comissaoProduto').length,
+      linhasProdutosVendidos: doRelatorio.length,
+    },
     // a margem é confiável quando quase toda a venda tem custo de origem verificada
     margemConfiavel: conferencia.coberturaDeCusto.suficiente,
     /**
@@ -814,12 +852,20 @@ function linhaDeCustoInformado(pedido) {
   };
 }
 
-function custoConfiavelDoPedido(pedido) {
+function custoConfiavelDoPedido(pedido, vendaDeReferencia = null) {
   if (pedido.custoManual != null) {
     return { custo: cents(pedido.custoManual), informado: true };
   }
   if (pedido.valorCusto == null) return { custo: null, semCusto: true };
-  const venda = Math.abs(pedido.valorTotal || 0);
+  /**
+   * A régua mede contra a venda do PEDIDO. Quando o pedido não trouxe valor
+   * total — coluna não mapeada na importação, e acontece — mede contra a venda
+   * que o chamador conhece (a da nota), que é o que ela media antes.
+   *
+   * Sem essa volta, pedido sem valor total faz a régua parar de funcionar em
+   * silêncio: o custo absurdo voltaria para dentro da margem sem ninguém ver.
+   */
+  const venda = Math.abs(pedido.valorTotal || 0) || Math.abs(vendaDeReferencia || 0);
   const razao = venda > 0 ? pedido.valorCusto / venda : null;
   if (razao != null && razao > RAZAO_MAXIMA) {
     return { custo: null, suspeito: true, razao };
@@ -865,7 +911,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
      * O que o app não faz é esconder: todo pedido com custo informado aparece
      * na tela, com o valor que o relatório trazia ao lado do que ela digitou.
      */
-    const regua = custoConfiavelDoPedido(pedido);
+    const regua = custoConfiavelDoPedido(pedido, Math.abs(valorFaturado(nf)));
     const varias = (quantasNotas.get(pedido.id) || 1) > 1;
     if (varias && !pedido.valorTotal) continue;
     const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;

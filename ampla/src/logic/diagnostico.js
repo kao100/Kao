@@ -110,7 +110,34 @@ export async function montar({ de = today(), ate = null, dias = 30 } = {}) {
   p(`   sem vencimento: receber ${proj.semVencimento.receber}, pagar ${proj.semVencimento.pagar}`);
   p('');
 
-  /* 4. as últimas importações, com os avisos que elas deram */
+  /**
+   * 4. DE ONDE A MARGEM ESTÁ SAINDO — e, quando não é dos pedidos, qual campo
+   * faltou. Duas rodadas inteiras se foram porque a tela caía na fonte pior em
+   * silêncio e nem ela nem eu sabíamos qual coluna não tinha sido reconhecida.
+   */
+  const mesAtual = monthKey(de);
+  const { margem } = await import('./margem.js');
+  const m = await margem({ de: `${mesAtual}-01`, ate: ate || `${mesAtual}-31` });
+  const o = m.origemDosNumeros || {};
+  p(`MARGEM (${m.periodo.de} a ${m.periodo.ate})`);
+  p(`   fonte dos números: ${o.fonte}`);
+  p(`   pedidos guardados: ${o.pedidosNaBase}`);
+  p(`   com data no período: ${o.noPeriodo}   (sem data nenhuma: ${o.semDataNenhuma})`);
+  p(`   com valor total: ${o.comValorTotal}   com custo: ${o.comCusto}`);
+  p(`   concretizados: ${o.concretizados}   cancelados: ${o.cancelados}   com vendedor: ${o.comVendedor}`);
+  p(`   itens de nota (XML): ${o.itensDeNota}`);
+  p(`   linhas de comissão por produto: ${o.linhasComissaoProduto}`);
+  p(`   linhas de produtos vendidos: ${o.linhasProdutosVendidos}`);
+  p(`   venda: ${money(m.total.venda)}   custo: ${money(m.total.custo)}`);
+  p(`   margem: ${m.total.margem == null ? 'sem custo' : `${m.total.margem.toFixed(2)}%`}`);
+  p(`   cobertura de custo: ${m.conferencia.coberturaDeCusto.percentual == null ? '—'
+    : `${m.conferencia.coberturaDeCusto.percentual.toFixed(1)}%`}`
+    + `   sem custo: ${money(m.conferencia.coberturaDeCusto.semCusto)}`);
+  p(`   custo descartado pela régua: ${m.custoSuspeito.quantidade} ${m.custoSuspeito.unidade}`);
+  p(`   custo informado por você: ${m.custoInformado.quantidade} pedido(s)`);
+  p('');
+
+  /* 5. as últimas importações, com os avisos que elas deram */
   const imports = (await store.importacoes.listar())
     .sort((a, b) => (b.momento || 0) - (a.momento || 0))
     .slice(0, 5);

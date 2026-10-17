@@ -154,6 +154,43 @@ async function semPerderOLugar() {
 }
 
 /**
+ * O QUE FALTA PARA A MARGEM SAIR DOS PEDIDOS, campo por campo.
+ *
+ * Para o custo vir do pedido — que é onde o custo informado por ela entra — o
+ * app precisa de três coisas na mesma linha: data no período, valor total e
+ * custo. Qualquer uma que falte derruba a fonte inteira, e é sempre uma coluna
+ * que não foi mapeada na importação. Então a frase diz qual.
+ */
+function faltouParaOsPedidos(o) {
+  if (!o) return '';
+  if (!o.pedidosNaBase) {
+    return 'Não há nenhum pedido guardado: mande o relatório de vendas do mês, que é ele que traz '
+      + 'o "Valor custo" de cada pedido.';
+  }
+  const partes = [`${num(o.pedidosNaBase, 0)} pedidos guardados`,
+    `${num(o.noPeriodo, 0)} com data neste período`,
+    `${num(o.comValorTotal, 0)} com valor total`,
+    `${num(o.comCusto, 0)} com custo`];
+  const base = `Na sua base: ${partes.join(', ')}.`;
+  if (!o.noPeriodo) {
+    return `${base} Nenhum pedido caiu dentro do período — é a coluna DATA DA VENDA que não foi `
+      + 'reconhecida na importação. Reenvie o relatório de vendas conferindo essa coluna.';
+  }
+  if (!o.comValorTotal) {
+    return `${base} Nenhum pedido tem valor total — é a coluna VALOR TOTAL que não foi reconhecida. `
+      + 'Reenvie o relatório de vendas conferindo essa coluna.';
+  }
+  if (!o.comCusto) {
+    return `${base} Nenhum pedido tem custo — é a coluna VALOR DO CUSTO que não foi reconhecida. `
+      + 'Reenvie o relatório de vendas conferindo essa coluna.';
+  }
+  if (!o.concretizados) {
+    return `${base} Todos estão como cancelados neste período, então nenhum entra como venda.`;
+  }
+  return base;
+}
+
+/**
  * "22 pedidos tiveram" ou "22 notas tiveram" — a lista é de uma coisa ou de
  * outra conforme a base que está valendo, e chamar pedido de nota faz ela
  * procurar no lugar errado.
@@ -437,6 +474,27 @@ export async function telaMargem({ query }) {
         : '')
       + '. As duas não precisam ser iguais: são conjuntos diferentes de venda. A desta tela é a '
       + 'que vale, porque é a da nota fiscal.', 'info'),
+
+    /**
+     * QUANDO A MARGEM NÃO VEM DOS PEDIDOS, A TELA DIZ O QUE FALTOU — COM NÚMERO.
+     *
+     * "Eu já vi aqui e eu tô na versão certa, versão 59, mas não mudou nada no
+     *  que eu preciso."
+     *
+     * O app caía na fonte pior em silêncio. A tela ficava igual à de antes do
+     * conserto, e nem ela nem eu tínhamos como saber qual campo faltava na base.
+     * Duas rodadas foram embora assim, adivinhando por print.
+     *
+     * Agora a contagem está na tela: qual campo faltou, em quantos pedidos. É a
+     * diferença entre "reenvie o relatório com a coluna X mapeada" e mais uma
+     * semana de palpite.
+     */
+    r.fonte === 'relatorio-por-produto' && aviso(
+      'ATENÇÃO: estes números são as colunas CUSTO TOTAL e LUCRO do seu relatório de produtos '
+      + 'vendidos, somadas. São números do arquivo — eles não mudam quando você informa o custo '
+      + 'de um pedido, nem quando o app descarta um custo absurdo. '
+      + faltouParaOsPedidos(r.origemDosNumeros), 'atencao',
+      botao('Reenviar relatório de vendas', { pequeno: true, onClick: () => navigate('/arquivos/pedidos') })),
 
     r.fonte === 'pedidos-do-periodo' && aviso('Estes números vêm dos PEDIDOS do relatório de '
       + 'vendas: cada pedido traz o valor vendido e o "Valor custo" na mesma linha — a mesma venda, '

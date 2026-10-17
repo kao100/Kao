@@ -489,6 +489,9 @@ console.log('\n▶ O diagnóstico conta tudo e não vaza ninguém');
     /"Em aberto": 2 aberto, 0 pago/.test(texto) && /"Confirmado": 0 aberto, 1 pago/.test(texto), texto);
   ok('mostra em que mês os abertos vencem', /2026-11: 2 título/.test(texto), '');
   ok('e o que a tela do caixa calculou', /a receber no período/.test(texto), '');
+  ok('e de onde a MARGEM está saindo, que é o que faltava para parar de adivinhar',
+    /fonte dos números:/.test(texto) && /pedidos guardados:/.test(texto)
+    && /com valor total:/.test(texto) && /itens de nota \(XML\):/.test(texto), texto.slice(-700));
 
   /* e não vaza ninguém */
   for (const segredo of ['JOSE DA SILVA SAURO', 'CONSTRUTORA XYZ LTDA', 'MARIA DE SOUZA PRADO',
@@ -812,6 +815,104 @@ console.log('\n▶ Sem XML, a margem sai dos PEDIDOS — e o custo informado mud
   for (const n of ['pedsx_7001', 'pedsx_7002', 'pedsx_7003']) await store.pedidos.remover(n);
   await store.vendasProduto.remover('pvsx_1');
   for (const x of guardadas.produto) await store.vendasProduto.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+}
+
+console.log('\n▶ Quando a margem NÃO sai dos pedidos, a tela diz qual coluna faltou');
+{
+  /**
+   * "Eu já vi aqui e eu tô na versão certa, versão 59, mas não mudou nada no que
+   *  eu preciso."
+   *
+   * O app caía na fonte pior em silêncio: a tela ficava idêntica à de antes do
+   * conserto, e nem ela nem eu tínhamos como saber qual campo faltava na base
+   * dela. Duas rodadas se foram adivinhando por print.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    itens: await store.nfItens.listar(),
+    produto: await store.vendasProduto.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.produto) await store.vendasProduto.remover(x.id);
+  await store.vendasProduto.salvar({
+    id: 'pvq_1', origemRelatorio: 'produtosVendidos', mes: '2026-10', data: '2026-10-15',
+    descricao: 'PRODUTO', produtoId: 'pq1', quantidade: 10, custoTotal: 900, valorTotal: 1000, lucro: 100,
+  });
+
+  /* pedido com custo, mas SEM valor total: a coluna não foi reconhecida */
+  await store.pedidos.salvar({
+    id: 'pq_1', numero: '8001', data: '2026-10-05', mes: '2026-10',
+    valorTotal: null, valorCusto: 700, concretizado: true,
+  });
+  const semValor = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('sem valor total no pedido, a margem não sai dos pedidos', semValor.fonte, 'relatorio-por-produto');
+  igual('e a tela sabe quantos pedidos existem', semValor.origemDosNumeros.pedidosNaBase, 1);
+  igual('quantos caíram no período', semValor.origemDosNumeros.noPeriodo, 1);
+  igual('e que o que falta é o valor total', semValor.origemDosNumeros.comValorTotal, 0);
+  igual('tendo custo', semValor.origemDosNumeros.comCusto, 1);
+
+  /* pedido SEM DATA na linha, mas com o mês escolhido na importação: entra */
+  await store.pedidos.salvar({
+    id: 'pq_2', numero: '8002', data: null, mes: '2026-10',
+    valorTotal: 1000, valorCusto: 600, concretizado: true,
+  });
+  const porMes = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('pedido sem data entra pelo mês da importação', porMes.fonte, 'pedidos-do-periodo');
+  igual('com a venda dele', porMes.total.venda, 1000);
+  igual('e o custo dele', porMes.total.custo, 600);
+
+  for (const n of ['pq_1', 'pq_2']) await store.pedidos.remover(n);
+  await store.vendasProduto.remover('pvq_1');
+  for (const x of guardadas.produto) await store.vendasProduto.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+}
+
+console.log('\n▶ Pedido sem valor total não desliga a régua do custo');
+{
+  /**
+   * A régua media contra a venda do PEDIDO. Pedido sem valor total faria ela
+   * parar de funcionar em silêncio, e o custo absurdo voltaria para dentro da
+   * margem sem ninguém ver. Ela volta a medir contra a venda da NOTA.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    itens: await store.nfItens.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  await store.vendedores.salvar({ id: 'vRG', nome: 'VENDEDOR REGUA' });
+
+  await store.nfs.salvar({
+    id: 'nfrg_1', numero: '9100', serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: 1550, valorProdutos: 1550, vendedorId: 'vRG', pedidoNumero: '8100',
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  await store.nfItens.salvar({
+    id: 'itrg_1', nfId: 'nfrg_1', data: '2026-10-10', nfStatus: 'autorizada',
+    vendedorId: 'vRG', produtoId: 'prg', descricao: 'TIJOLO', quantidade: 1, valorTotal: 1550,
+  });
+  /* custo de 56 mil, e o pedido sem valor total: a régua tem de pegar pela nota */
+  await store.pedidos.salvar({
+    id: 'ped_8100', numero: '8100', data: '2026-10-09', valorTotal: null, valorCusto: 56000,
+  });
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('a régua pega mesmo sem valor total no pedido', r.custoSuspeito.quantidade, 1);
+  igual('e o custo absurdo não entra na margem', r.total.custo, 0);
+
+  await store.nfs.remover('nfrg_1');
+  await store.nfItens.remover('itrg_1');
+  await store.pedidos.remover('ped_8100');
   for (const x of guardadas.itens) await store.nfItens.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
