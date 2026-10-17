@@ -223,6 +223,17 @@ function custoDoProprioSistema(r) {
   return `. ${quem} (${pct(c.percentualDoPedido, 1)} da venda), que é o custo do seu próprio sistema.`;
 }
 
+/**
+ * Meio a mais o relatório pode somar, e sobra folga: venda do fim do mês que só
+ * vira nota no mês seguinte raramente passa de uns poucos por cento. Metade já é
+ * grande demais para ser isso.
+ */
+function relatorioGrandeDemais(r) {
+  const doRelatorio = r.conferencia.vendaDoRelatorio;
+  const dasNotas = r.conferencia.vendaDasNotas;
+  return !!dasNotas && doRelatorio / dasNotas > 1.5;
+}
+
 /** "36,1×" — com vírgula, que é como ela lê número. */
 function vezes(razao) {
   return `${num(razao, 1)}×`;
@@ -293,13 +304,41 @@ export async function telaMargem({ query }) {
      * nota do mês vem de venda deste mês — então é normal o relatório somar mais.
      * Chamar isso de divergência mandava ela caçar um erro que não existe.
      */
+    /**
+     * DIFERENÇA DE BASE TEM TAMANHO — E ACIMA DE CERTO PONTO NÃO É DIFERENÇA DE
+     * BASE, É ARQUIVO DE OUTRO PERÍODO.
+     *
+     * "O seu relatório de produtos vendidos soma R$ 2.758.143,98 neste período e
+     *  as notas somam R$ 609.296,35. Isso é NORMAL, não é erro."
+     *
+     * Não era normal: o arquivo dela tinha quatro meses dentro, importado como
+     * se fosse outubro. Venda do mês que ainda não virou nota explica uns 10%,
+     * 20% — não explica quatro vezes e meia. Chamar isso de normal foi o app
+     * tranquilizando ela sobre a única coisa na tela que estava realmente
+     * errada.
+     *
+     * O relatório não traz data por linha: o app não tem como saber o período
+     * dele. O que ele sabe é o tamanho da diferença — e aí é honesto dizer "isto
+     * é grande demais para ser só diferença de base" em vez de explicar como
+     * normal uma coisa que não é.
+     */
     r.fonte === 'itens-da-nota' && r.temProdutosVendidos && r.conferencia.diferencaDeBase > 1
-      && aviso(`O seu relatório de produtos vendidos soma ${money(r.conferencia.vendaDoRelatorio)} `
-        + `neste período e as notas somam ${money(r.conferencia.vendaDasNotas)} — `
-        + `${money(r.conferencia.diferencaDeBase)} de diferença. Isso é NORMAL, não é erro: o `
-        + 'relatório conta as VENDAS do mês e esta tela conta as NOTAS do mês, e nem toda venda '
-        + 'sai em nota no mesmo mês. O faturamento é a nota fiscal; o relatório entra aqui só '
-        + 'como fonte de CUSTO.', 'info'),
+      && (relatorioGrandeDemais(r)
+        ? aviso(`O seu relatório de produtos vendidos soma ${money(r.conferencia.vendaDoRelatorio)} `
+          + `neste período — ${vezes(r.conferencia.vendaDoRelatorio / r.conferencia.vendaDasNotas)} `
+          + `o que as notas do mês somam (${money(r.conferencia.vendaDasNotas)}). Diferença de base `
+          + 'existe (nem toda venda do mês sai em nota no mesmo mês), mas ela é de alguns por cento '
+          + '— não disso. Quase certo que o arquivo de produtos vendidos cobre MAIS DE UM MÊS e foi '
+          + 'importado como se fosse só este. Isso NÃO afeta a margem acima, que vem do custo do '
+          + 'pedido. Afeta a lista de produtos com unidade trocada e esta comparação. Para resolver: '
+          + 'exporte o relatório de produtos vendidos só do mês e reenvie.', 'atencao',
+        botao('Reenviar produtos vendidos', { pequeno: true, onClick: () => navigate('/arquivos/produtosVendidos') }))
+        : aviso(`O seu relatório de produtos vendidos soma ${money(r.conferencia.vendaDoRelatorio)} `
+          + `neste período e as notas somam ${money(r.conferencia.vendaDasNotas)} — `
+          + `${money(r.conferencia.diferencaDeBase)} de diferença. Isso é NORMAL, não é erro: o `
+          + 'relatório conta as VENDAS do mês e esta tela conta as NOTAS do mês, e nem toda venda '
+          + 'sai em nota no mesmo mês. O faturamento é a nota fiscal; o relatório entra aqui só '
+          + 'como fonte de CUSTO.', 'info')),
 
     secao('A margem do período',
       exportadores(() => ({

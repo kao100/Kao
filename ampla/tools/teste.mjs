@@ -866,6 +866,14 @@ console.log('\n▶ Devolução não empurra a cobertura de custo acima de 100%')
   /* e a venda do período continua com o sinal certo: devolução é menos faturamento */
   igual('a venda continua descontando a devolução', r.total.venda, 9500);
 
+  /**
+   * A tela compara o relatório de produtos vendidos com as notas do mês para
+   * dizer se o arquivo é do mês ou de vários. Os dois lados têm de existir.
+   */
+  ok('a conferência traz os dois lados da comparação de base',
+    r.conferencia.vendaDasNotas != null && r.conferencia.vendaDoRelatorio != null,
+    JSON.stringify({ notas: r.conferencia.vendaDasNotas, rel: r.conferencia.vendaDoRelatorio }));
+
   for (const n of ['nfd_6001', 'nfd_6002']) await store.nfs.remover(n);
   for (const n of ['itd_6001', 'itd_6002']) await store.nfItens.remover(n);
   await store.pedidos.remover('ped_4000');
