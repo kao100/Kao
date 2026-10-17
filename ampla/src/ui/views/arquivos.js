@@ -363,6 +363,11 @@ async function carregar(arquivos, estado, ctx) {
   }
 }
 
+/** O nome do campo como ela o lê na tela, não a chave interna. */
+function rotuloCampo(fonte, chave) {
+  return fonte.campos.find((c) => c.chave === chave)?.label || chave;
+}
+
 function assinatura(cabecalho) {
   return cabecalho.join('|').slice(0, 400);
 }
@@ -389,6 +394,20 @@ function passoMapear(estado, ctx) {
       botao('Trocar arquivo', { pequeno: true, onClick: () => { estado.passo = 'arquivo'; estado.leitura = null; desenhar(); } })),
 
     estado.aviso && aviso(estado.aviso, 'atencao'),
+    /**
+     * DUAS COLUNAS CRUZADAS É SEMPRE ERRO, E PRECISA APARECER.
+     *
+     * No print dela: "Data do recebimento → Vencimento". Os dois campos na
+     * mesma coluna do arquivo. Todo título ganhava uma data de recebimento
+     * igual ao vencimento, e era ela que o recálculo lia como prova de baixa.
+     *
+     * O app agora desfaz isso sozinho, mas desfazer calado seria trocar um erro
+     * silencioso por outro: ela precisa ver o que foi desligado e por quê.
+     */
+    ...ingest.colunasRepetidas(estado.mapeamento).map(({ coluna, campos }) => aviso(
+      `Os campos ${campos.map((c) => `"${rotuloCampo(fonte, c)}"`).join(' e ')} estão ligados à MESMA `
+      + `coluna "${coluna}". Isso sempre dá número errado — o app vai usar só o primeiro e deixar o `
+      + 'resto em branco. Se algum deles tiver coluna própria no arquivo, escolha aqui.', 'atencao')),
     /**
      * O MAPEAMENTO SALVO SOBREVIVE A TUDO — inclusive a apagar os títulos.
      *

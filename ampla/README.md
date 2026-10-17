@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 707 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 716 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -233,6 +233,19 @@ app não conseguiu identificar sozinho.
   financeiro fica vazio e parece "não tem movimento", a mentira mais cara que
   aquela tela pode contar. Agora um aproveitamento abaixo da metade vira aviso,
   dizendo onde procurar a linha certa.
+- **Dois campos na mesma coluna é sempre erro — e o perfil salvo não manda
+  nisso.** A origem de tudo, e ela a encontrou mandando um print da tela de
+  ligação: *"Data do recebimento → Vencimento"*. Os dois campos apontando para a
+  MESMA coluna do arquivo, então todo título ganhava uma data de recebimento
+  igual ao próprio vencimento — sempre preenchida — e era essa data que o
+  recálculo lia como prova de baixa. A ligação vinha de um perfil salvo, e o app
+  reaplicava o perfil sem nunca conferir se ele próprio era coerente: por isso
+  sobreviveu a apagar a base, a recomeçar do zero e a todas as reimportações. O
+  estrago não estava nos dados, estava na memória de como lê-los. Agora a coluna
+  fica com o campo declarado primeiro na fonte (`vencimento` vem antes de
+  `dataRecebimento`, e é o que o nome da coluna diz), o outro perde a ligação e
+  fica em branco — campo que o arquivo não tem nunca é preenchido por suposição —
+  e a tela avisa quando ela mesma cruzar duas colunas à mão.
 - **O que o arquivo AFIRMA vence o que uma data SUGERE.** Este foi o último, e o
   que mais custou. O log da importação mostrava a releitura abrindo 565 títulos
   e o diagnóstico, logo em seguida, mostrava os mesmos 565 fechados: quem

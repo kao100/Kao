@@ -127,11 +127,12 @@ function temConteudo(valor) {
  */
 export function completarMapeamento(fonteId, cabecalho, mapa) {
   const base = sugerirMapeamento(fonteId, cabecalho);
+  const limpo = semColunaRepetida(fonteId, mapa);
   const ocupadas = new Set();
-  for (const valor of Object.values(mapa || {})) {
+  for (const valor of Object.values(limpo)) {
     for (const col of Array.isArray(valor) ? valor : [valor]) if (col) ocupadas.add(col);
   }
-  const completo = { ...mapa };
+  const completo = { ...limpo };
   for (const [campo, coluna] of Object.entries(base)) {
     if (completo[campo] != null) continue;
     if (ocupadas.has(coluna)) continue;
@@ -139,6 +140,59 @@ export function completarMapeamento(fonteId, cabecalho, mapa) {
     ocupadas.add(coluna);
   }
   return completo;
+}
+
+/**
+ * DOIS CAMPOS NA MESMA COLUNA É SEMPRE ERRO — E ERA O ERRO DELA.
+ *
+ * "Tô mandando também a forma que as colunas estão se ligando."
+ *
+ * No print, lá embaixo: "Data do recebimento → Vencimento". Os dois campos
+ * apontando para a MESMA coluna do arquivo. Todo título ganhava uma data de
+ * recebimento igual ao próprio vencimento — sempre preenchida — e era essa data
+ * que o recálculo lia como prova de que o título fora pago.
+ *
+ * A ligação vinha de um PERFIL SALVO, e `completarMapeamento` reaplicava o
+ * perfil sem nunca conferir se ele próprio era coerente. Por isso sobreviveu a
+ * apagar a base, a recomeçar do zero e a todas as reimportações: o estrago não
+ * estava nos dados, estava na memória de como lê-los.
+ *
+ * Quem fica com a coluna é o campo declarado PRIMEIRO na fonte — `vencimento`
+ * vem antes de `dataRecebimento`, e é o que o nome da coluna diz. O outro perde
+ * a ligação e fica em branco, que é o certo: campo que o arquivo não tem fica
+ * vazio, nunca preenchido por suposição.
+ */
+export function semColunaRepetida(fonteId, mapa) {
+  const campos = (FONTES[fonteId]?.campos || []).map((c) => c.chave);
+  const ordem = (chave) => {
+    const i = campos.indexOf(chave);
+    return i < 0 ? campos.length : i;
+  };
+  const dono = new Map();
+  for (const [campo, coluna] of Object.entries(mapa || {})) {
+    if (Array.isArray(coluna) || !coluna) continue;
+    const atual = dono.get(coluna);
+    if (atual == null || ordem(campo) < ordem(atual)) dono.set(coluna, campo);
+  }
+  const saida = {};
+  for (const [campo, coluna] of Object.entries(mapa || {})) {
+    if (Array.isArray(coluna) || !coluna) { saida[campo] = coluna; continue; }
+    if (dono.get(coluna) === campo) saida[campo] = coluna;
+  }
+  return saida;
+}
+
+/** Os campos que ficaram apontando para a mesma coluna, para a tela avisar. */
+export function colunasRepetidas(mapa) {
+  const porColuna = new Map();
+  for (const [campo, coluna] of Object.entries(mapa || {})) {
+    if (Array.isArray(coluna) || !coluna) continue;
+    if (!porColuna.has(coluna)) porColuna.set(coluna, []);
+    porColuna.get(coluna).push(campo);
+  }
+  return [...porColuna.entries()]
+    .filter(([, campos]) => campos.length > 1)
+    .map(([coluna, campos]) => ({ coluna, campos }));
 }
 
 /**

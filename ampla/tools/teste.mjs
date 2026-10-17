@@ -502,6 +502,84 @@ console.log('\n▶ O diagnóstico conta tudo e não vaza ninguém');
   for (const t of guardados) await store.receber.salvar(t);
 }
 
+console.log('\n▶ Dois campos na mesma coluna: o perfil salvo não manda nisso');
+{
+  /**
+   * "Tô mandando também a forma que as colunas estão se ligando."
+   *
+   * O print dela mostrava, no fim da lista:
+   *
+   *     Data do recebimento  →  Vencimento
+   *
+   * Os dois campos na MESMA coluna do arquivo. Todo título ganhava uma data de
+   * recebimento igual ao próprio vencimento — sempre preenchida — e era ela que
+   * o recálculo lia como prova de baixa.
+   *
+   * A ligação vinha de um PERFIL SALVO, e o app reaplicava o perfil sem nunca
+   * conferir se ele próprio era coerente. Foi por isso que sobreviveu a apagar a
+   * base, a recomeçar do zero e a todas as reimportações: o estrago não estava
+   * nos dados, estava na memória de como lê-los.
+   */
+  const CAB = ['Destinado à', 'CPF', 'CNPJ', 'Descrição', 'Forma de pagamento',
+    'Conta bancária', 'Vencimento', 'Situação', 'Valor total', 'NF-e'];
+
+  /* o perfil estragado, igual ao do aparelho dela */
+  const perfilRuim = {
+    clienteNome: 'Destinado à',
+    vencimento: 'Vencimento',
+    status: 'Situação',
+    valor: 'Valor total',
+    dataRecebimento: 'Vencimento',
+  };
+
+  ok('o app enxerga o cruzamento', ingest.colunasRepetidas(perfilRuim)
+    .some((r) => r.coluna === 'Vencimento' && r.campos.length === 2),
+  JSON.stringify(ingest.colunasRepetidas(perfilRuim)));
+
+  const corrigido = ingest.completarMapeamento('receber', CAB, perfilRuim);
+  igual('"Vencimento" fica com o campo Vencimento', corrigido.vencimento, 'Vencimento');
+  igual('e a Data do recebimento perde a ligação', corrigido.dataRecebimento, undefined);
+  igual('o resto do perfil é respeitado', corrigido.status, 'Situação');
+  ok('e nada mais fica cruzado', ingest.colunasRepetidas(corrigido).length === 0,
+    JSON.stringify(ingest.colunasRepetidas(corrigido)));
+
+  /**
+   * E O EFEITO NO NÚMERO, que é o que importa: com a ligação errada, todo
+   * título entrava com data de recebimento preenchida. Agora entra em branco.
+   */
+  const guardados = await store.receber.listar();
+  for (const t of guardados) await store.receber.remover(t.id);
+
+  const linhas = [CAB.join(';'),
+    'CLIENTE UM;;;Venda nº 1;PIX;CONTA;05/11/2026;Em aberto;1.000,00;9001',
+    'CLIENTE DOIS;;;Venda nº 2;PIX;CONTA;06/11/2026;Em aberto;2.000,00;9002'];
+  const leitura = await readFile(new File([linhas.join('\n')], 'perfil.csv', { type: 'text/csv' }));
+  const preparo = await ingest.prepararTabular({
+    fonteId: 'receber',
+    leitura,
+    planilhaIndex: 0,
+    headerRow: 0,
+    mapeamento: ingest.completarMapeamento('receber', CAB, perfilRuim),
+    fotografiaCompleta: false,
+  });
+  await ingest.confirmar(preparo);
+
+  const meus = (await store.receber.listar()).filter((t) => /^CLIENTE (UM|DOIS)$/.test(t.clienteNome || ''));
+  igual('os dois títulos entraram', meus.length, 2);
+  ok('sem data de recebimento inventada', meus.every((t) => !t.dataRecebimento),
+    JSON.stringify(meus.map((t) => t.dataRecebimento)));
+  ok('e em aberto', meus.every((t) => t.status === 'aberto'), '');
+
+  /* e o recálculo não os fecha, que era o fim da linha */
+  await link.recalcular();
+  const depois = (await store.receber.listar()).filter((t) => /^CLIENTE (UM|DOIS)$/.test(t.clienteNome || ''));
+  ok('e continuam em aberto depois do recálculo',
+    depois.every((t) => t.status === 'aberto'), JSON.stringify(depois.map((t) => t.status)));
+
+  for (const t of depois) await store.receber.remover(t.id);
+  for (const t of guardados) await store.receber.salvar(t);
+}
+
 console.log('\n▶ O que o arquivo afirma vence o que uma data sugere');
 {
   /**
