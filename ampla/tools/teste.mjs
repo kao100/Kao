@@ -877,6 +877,99 @@ AREIA X;100;20,00;2.000,00;3.000,00;1.000,00`, { mesReferencia: '2026-10-01' });
   for (const x of guardadas) await store.vendasProduto.salvar(x);
 }
 
+console.log('\n▶ O orçamento guarda o vendedor que veio no arquivo');
+{
+  /**
+   * A aba "Orçamentos não fechados" do fechamento tinha uma coluna Vendedor
+   * apontando para um campo que não existia em lugar nenhum: nem na fonte, nem
+   * no construtor. Ia vazia em todas as linhas, no relatório que vai para o pai
+   * dela — e orçamento em aberto POR VENDEDOR é justamente o que o gerente
+   * comercial precisa ver.
+   */
+  const guardados = await store.orcamentos.listar();
+  for (const x of guardados) await store.orcamentos.remover(x.id);
+
+  const ORC = 'Número;Cliente;Data;Vendedor;Situação;Valor';
+  await importar('orcamentos', 'orc-vend.csv', `${ORC}
+7001;CLIENTE ORC A;05/09/2026;VENDEDOR DOSSIE;Em aberto;10.000,00
+7002;CLIENTE ORC B;06/09/2026;VENDEDOR DOSSIE;Aprovado;5.000,00`);
+
+  const lista = await store.orcamentos.listar();
+  const a = lista.find((x) => x.numero === '7001');
+  igual('a coluna Vendedor é reconhecida sozinha', a?.vendedorNome, 'VENDEDOR DOSSIE');
+
+  const doc = (await dossie.pasta('2026-09')).documentos.find((d) => d.id === 'orcamentos');
+  ok('e a coluna aparece no fechamento quando há vendedor',
+    doc.colunas.some((c) => c.key === 'vendedorNome'),
+    JSON.stringify(doc.colunas.map((c) => c.key)));
+  ok('com o nome na linha, não vazia',
+    doc.linhas.every((l) => l.vendedorNome === 'VENDEDOR DOSSIE'),
+    JSON.stringify(doc.linhas.map((l) => l.vendedorNome)));
+
+  /* e some quando o arquivo não traz, em vez de ir vazia para o relatório */
+  for (const x of await store.orcamentos.listar()) await store.orcamentos.remover(x.id);
+  await store.orcamentos.salvar({
+    id: 'orc_sv', numero: '7003', data: '2026-09-07', mes: '2026-09',
+    clienteNome: 'CLIENTE ORC C', valorTotal: 3000, situacao: 'aberto', vendedorNome: null,
+  });
+  const doc2 = (await dossie.pasta('2026-09')).documentos.find((d) => d.id === 'orcamentos');
+  ok('sem vendedor no arquivo, a coluna nem aparece',
+    !doc2.colunas.some((c) => c.key === 'vendedorNome'),
+    JSON.stringify(doc2.colunas.map((c) => c.key)));
+
+  for (const x of await store.orcamentos.listar()) await store.orcamentos.remover(x.id);
+  for (const x of guardados) await store.orcamentos.salvar(x);
+}
+
+console.log('\n▶ Frete cobrado dá o MESMO número na tabela e no cartão');
+{
+  /**
+   * A tabela de margem somava R$ 60.403,48 de frete e o cartão "Frete cobrado"
+   * dizia R$ 60.743,48, na mesma tela, com o mesmo rótulo. A diferença eram
+   * R$ 340,00: uma devolução de R$ 170,00 de frete, descontada de um lado e
+   * somada do outro.
+   *
+   * Dois números com o mesmo nome, um ao lado do outro, é a tela se
+   * contradizendo — e quem lê não tem como saber qual acreditar.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    pedidos: await store.pedidos.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  await store.vendedores.salvar({ id: 'vFR', nome: 'VENDEDOR FRETE' });
+
+  const nota = (n, valor, frete, dev) => store.nfs.salvar({
+    id: `nffr_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: valor + frete, valorProdutos: valor, valorFrete: frete,
+    vendedorId: 'vFR', pedidoNumero: '7700',
+    status: 'autorizada', operacao: dev ? 'entrada' : 'saida', devolucao: !!dev, devolucaoDeCompra: false,
+  });
+  const item = (n, valor) => store.nfItens.salvar({
+    id: `itfr_${n}`, nfId: `nffr_${n}`, data: '2026-10-10', nfStatus: 'autorizada',
+    vendedorId: 'vFR', produtoId: 'pfr', descricao: 'ITEM', quantidade: 1, valorTotal: valor,
+  });
+  await nota(7001, 10000, 1000, false); await item(7001, 10000);
+  await nota(7002, 500, 170, true); await item(7002, 500);
+  await store.pedidos.salvar({ id: 'ped_7700', numero: '7700', data: '2026-10-05', valorTotal: 11000, valorCusto: 6000 });
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  const naTabela = Math.round(r.vendedores.reduce((a, v) => a + (v.frete || 0), 0) * 100) / 100;
+  igual('o cartão desconta o frete da devolução', r.frete.total, 830);
+  igual('a tabela por vendedor diz o mesmo', naTabela, 830);
+  igual('e o TOTAL da tabela também', r.total.frete, 830);
+
+  for (const n of ['nffr_7001', 'nffr_7002']) await store.nfs.remover(n);
+  for (const n of ['itfr_7001', 'itfr_7002']) await store.nfItens.remover(n);
+  await store.pedidos.remover('ped_7700');
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
 console.log('\n▶ Devolução não empurra a cobertura de custo acima de 100%');
 {
   /**
@@ -1852,6 +1945,78 @@ console.log('\n▶ Pasta do mês');
   const freteDoc = p.documentos.find((d) => d.id === 'frete');
   ok('o frete mostra cobrado e custo na mesma linha',
     freteDoc.colunas.some((c) => c.key === 'cobrado') && freteDoc.colunas.some((c) => c.key === 'custo'), '');
+
+  /**
+   * E AS COLUNAS CHEGAM PREENCHIDAS.
+   *
+   * O documento lia `v.custo`, um campo que o módulo de frete nunca devolveu —
+   * o custo medido por vendedor chama-se `custoReal`. No relatório que vai para
+   * o pai dela, "Custo das entregas" e "Sobra / falta" vinham vazias em TODAS as
+   * linhas, com o TOTAL preenchido embaixo: a tabela parecendo quebrada
+   * justamente no documento que ela não revisa linha a linha antes de mandar.
+   *
+   * Um nome de campo errado não dá erro em lugar nenhum: dá `undefined`, que
+   * vira célula vazia. Só um teste que OLHA o número pega isso.
+   */
+  {
+    const guardados = await store.fretes.listar();
+    for (const x of guardados) await store.fretes.remover(x.id);
+    await store.vendedores.salvar({ id: 'vDOS', nome: 'VENDEDOR DOSSIE' });
+    await store.nfs.salvar({
+      id: 'nfdos', numero: '9500', serie: '1', dataEmissao: '2026-09-10',
+      valorTotal: 1300, valorProdutos: 1000, valorFrete: 300, vendedorId: 'vDOS',
+      status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+    });
+    await store.fretes.salvar({
+      id: 'fr_teste', data: '2026-09-10', responsavel: 'TRANSPORTADORA TESTE',
+      valor: 100, vendedorNome: 'VENDEDOR DOSSIE', mes: '2026-09',
+    });
+
+    const p2 = await dossie.pasta('2026-09');
+    const doc = p2.documentos.find((d) => d.id === 'frete');
+    const linha = doc.linhas.find((l) => l.nome === 'VENDEDOR DOSSIE');
+    ok('a linha do vendedor existe no documento de frete', !!linha,
+      JSON.stringify(doc.linhas.map((l) => l.nome)));
+    igual('o frete cobrado dele chega na linha', linha?.cobrado, 300);
+    igual('o custo da entrega dele também', linha?.custo, 100);
+    igual('e a sobra sai calculada', linha?.resultado, 200);
+    igual('batendo com o total do documento', doc.total.custo, 100);
+
+    /**
+     * NENHUMA COLUNA DO RELATÓRIO DO PAI PODE SER FANTASMA.
+     *
+     * Uma coluna cujo campo não existe em linha nenhuma não dá erro em lugar
+     * nenhum: dá `undefined`, que vira célula vazia no Excel e no PDF. Foi assim
+     * que "Custo das entregas" e "Sobra / falta" foram para o relatório dele
+     * vazias, com o total preenchido embaixo — e assim que a coluna "Vendedor"
+     * dos orçamentos ia vazia desde sempre.
+     *
+     * Vazio PROPOSITAL (null) continua valendo: quer dizer "não sei", e a célula
+     * vazia é melhor que o número inventado. O que isto proíbe é a coluna que
+     * nunca teve campo nenhum por trás.
+     *
+     * Roda aqui, com o frete semeado, porque o guarda só vale pelos documentos
+     * que têm linha — e é justamente o de frete que estava quebrado.
+     */
+    const fantasmas = [];
+    for (const d of p2.documentos) {
+      if (!d.linhas?.length) continue;
+      for (const c of d.colunas) {
+        if (!d.linhas.some((l) => l[c.key] !== undefined)) {
+          fantasmas.push(`${d.id}.${c.key} ("${c.header}")`);
+        }
+      }
+    }
+    ok('nenhuma coluna do fechamento aponta para campo que não existe',
+      fantasmas.length === 0, fantasmas.join(', '));
+    ok('e a conferência alcançou todos os documentos do fechamento',
+      p2.documentos.every((d) => d.linhas?.length),
+      `sem linhas: ${p2.documentos.filter((d) => !d.linhas?.length).map((d) => d.id).join(', ')}`);
+
+    await store.fretes.remover('fr_teste');
+    await store.nfs.remover('nfdos');
+    for (const x of guardados) await store.fretes.salvar(x);
+  }
 
   const caixaDoc = p.documentos.find((d) => d.id === 'caixa');
   ok('o caixa abre pelo saldo informado',

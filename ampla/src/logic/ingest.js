@@ -37,6 +37,7 @@ const PRESERVAR = {
   clientes: ['contato', 'telefone', 'email', 'observacao'],
   vendedores: ['apelidos', 'meta', 'ativo'],
   comissoesRelatorio: ['observacao'],
+  orcamentos: ['vendedorId', 'vendedorNome', 'observacao'],
 };
 
 /* ------------------------------------------------------------- mapeamento */
@@ -952,6 +953,9 @@ function construirOrcamento(d, ctx) {
       valorTotal: d.valorTotal == null ? null : cents(d.valorTotal),
       statusArquivo: d.status || null,
       situacao: situacaoOrcamento(d.status),
+      /* o vendedor quando o arquivo traz; nulo é "não sei", não é vazio bonito */
+      vendedorNome: d.vendedorNome || null,
+      vendedorId: null,
       origem: 'relatorio',
     },
   }];

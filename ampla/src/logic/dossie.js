@@ -205,11 +205,25 @@ function docMargem(m) {
  * importa — se o frete cobrado paga o frete feito.
  */
 function docFrete(f) {
+  /**
+   * O CAMPO TEM DE EXISTIR PARA O NÚMERO APARECER.
+   *
+   * Aqui lia `v.custo`, que o módulo de frete nunca devolveu: o custo medido por
+   * vendedor chama-se `custoReal`, e a sobra dele, `resultado`. Resultado: no
+   * relatório que vai para o pai dela, as colunas "Custo das entregas" e
+   * "Sobra / falta" vinham vazias em TODAS as linhas, com o TOTAL preenchido
+   * embaixo — a tabela parecendo quebrada justamente no documento que ela não
+   * revisa linha a linha antes de mandar.
+   *
+   * Continua nulo quando a planilha de entregas não diz de quem é a entrega:
+   * nesse caso o custo existe só no total, e inventar um rateio numa coluna
+   * chamada "custo" seria pior que a célula vazia.
+   */
   const linhas = f.vendedores.map((v) => ({
     nome: v.nome,
     cobrado: v.frete,
-    custo: v.custo ?? null,
-    resultado: v.custo == null ? null : cents((v.frete || 0) - v.custo),
+    custo: v.custoReal ?? null,
+    resultado: v.resultado ?? null,
     notas: v.notas,
   }));
   return {
@@ -305,7 +319,10 @@ function docOrcamentos(o) {
       { header: 'Orçamento', key: 'numero' },
       { header: 'Data', key: 'data', tipo: 'data' },
       { header: 'Cliente', key: 'clienteNome' },
-      { header: 'Vendedor', key: 'vendedorNome' },
+      /* a coluna só entra quando o relatório traz vendedor: coluna vazia num
+         relatório que vai para outra pessoa parece defeito, e aqui era */
+      ...(o.abertos.some((x) => x.vendedorNome)
+        ? [{ header: 'Vendedor', key: 'vendedorNome' }] : []),
       { header: 'Valor', key: 'valorTotal', tipo: 'money', alinhar: 'direita' },
     ],
     linhas: o.abertos,

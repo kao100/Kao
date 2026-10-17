@@ -158,6 +158,15 @@ export const FONTES = {
       campo('status', 'Situação', 'texto', { sinonimos: SITUACAO }),
       campo('valorTotal', 'Valor', 'dinheiro', { sinonimos: VALOR_TOTAL }),
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
+      /**
+       * O VENDEDOR DO ORÇAMENTO, que o app pedia na tela e nunca lia do arquivo.
+       *
+       * O fechamento do mês tem uma coluna "Vendedor" na aba de orçamentos não
+       * fechados — e ela ia vazia em todas as linhas, porque o campo não existia
+       * em lugar nenhum. Orçamento em aberto por vendedor é exatamente o que o
+       * gerente comercial precisa ver.
+       */
+      campo('vendedorNome', 'Vendedor', 'texto', { sinonimos: ['vendedor', 'representante', 'consultor', 'vendedora', 'responsavel'] }),
     ],
     /**
      * EXPORTE COM TODAS AS SITUAÇÕES.

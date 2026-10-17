@@ -1087,7 +1087,20 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
       });
     }
     const v = porVendedor.get(chave);
-    v.frete += nf.valorFrete || 0;
+    /**
+     * DEVOLUÇÃO TIRA O FRETE DELA JUNTO — E A MESMA REGRA NOS DOIS LUGARES.
+     *
+     * A tabela de margem somava R$ 60.403,48 de frete e o cartão "Frete cobrado"
+     * dizia R$ 60.743,48, na mesma tela, com o mesmo nome. A diferença eram
+     * R$ 340,00: uma devolução de R$ 170,00 de frete, que a tabela descontava
+     * (como desconta a venda) e este lado somava.
+     *
+     * Dois números com o mesmo rótulo, um ao lado do outro, não é detalhe: é a
+     * tela se contradizendo, e quem lê não tem como saber qual acreditar. A nota
+     * devolvida leva o frete dela embora, aqui também.
+     */
+    const sinal = nf.devolucao ? -1 : 1;
+    v.frete += (nf.valorFrete || 0) * sinal;
     v.faturamento += valorFaturado(nf);
     v.notas += 1;
   }
@@ -1115,7 +1128,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
     porTipo[t] = cents((porTipo[t] || 0) + (c.valor || 0));
   }
   const custoTotal = cents(sum(doPeriodoCusto, (c) => c.valor || 0));
-  const cobrado = cents(sum(comFrete, (nf) => nf.valorFrete || 0));
+  const cobrado = cents(sum(comFrete, (nf) => (nf.valorFrete || 0) * (nf.devolucao ? -1 : 1)));
 
   /**
    * O CUSTO DE FRETE DE CADA VENDEDOR, quando a planilha diz de quem é a venda.
