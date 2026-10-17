@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v53';
+const CACHE = 'ampla-v54';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -35,10 +35,32 @@ const APP_SHELL = [
   'src/styles/views.css', 'src/styles/print.css',
 ].map((caminho) => BASE + caminho);
 
+/**
+ * O CACHE DO NAVEGADOR SERVIA CÓDIGO VELHO POR CIMA DO SERVICE WORKER.
+ *
+ * Este foi o erro que fez dez rodadas de conserto não chegarem nela.
+ *
+ * O service worker busca a rede primeiro — mas `fetch()` passa pelo cache HTTP
+ * do navegador, e o GitHub Pages manda guardar os arquivos por alguns minutos.
+ * Resultado: arquivo NOVO (que nunca esteve no cache) vinha fresco; arquivo
+ * ANTIGO, com entrada no cache, vinha velho. O aparelho dela rodava uma MISTURA
+ * de versões — `versao.js` novo dizendo "v53" e `ingest.js` velho lendo "Em
+ * aberto" como pago.
+ *
+ * Foi por isso que o número da versão mentiu sem querer: ele era justamente um
+ * arquivo novo, e novo sempre chegava.
+ *
+ * `cache: 'reload'` na instalação e `cache: 'no-cache'` em cada busca obrigam o
+ * navegador a conferir com o servidor em vez de servir o que tem guardado. É
+ * mais uma viagem de rede por arquivo, e vale cada uma: o app inteiro passa a
+ * ser de uma versão só.
+ */
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    await Promise.allSettled(APP_SHELL.map((url) => cache.add(url)));
+    await Promise.allSettled(APP_SHELL.map(
+      (url) => cache.add(new Request(url, { cache: 'reload' })),
+    ));
     self.skipWaiting();
   })());
 });
@@ -58,7 +80,10 @@ self.addEventListener('fetch', (event) => {
   // rede primeiro para o código do app ficar sempre atualizado; cache é o plano B
   event.respondWith((async () => {
     try {
-      const resposta = await fetch(request);
+      // 'no-cache' = sempre conferir com o servidor, nunca aceitar o que o
+      // navegador guardou sozinho. Sem isto, metade do app fica numa versão e
+      // metade noutra, e nenhum conserto chega inteiro.
+      const resposta = await fetch(request, { cache: 'no-cache' });
       if (resposta.ok) {
         const cache = await caches.open(CACHE);
         cache.put(request, resposta.clone());

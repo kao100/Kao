@@ -43,8 +43,12 @@ import { openDB } from './db.js';
  *     da negação ("NÃO PAGO" contém "PAGO"). As duas passaram a usar a mesma.
  * v3: "Confirmado" passou a ser lido como recebido, e o conserto passou a
  *     fechar, e não só a reabrir.
+ * v4: o cache do navegador servia `ingest.js` velho por cima do novo, então o
+ *     conserto v3 rodou no aparelho dela COM A REGRA ERRADA e se deu por feito.
+ *     Com o código certo chegando agora, ele precisa passar outra vez — senão
+ *     os 1.234 títulos dela continuam fechados até ela reimportar.
  */
-const MARCA = 'reparo_situacao_v3';
+const MARCA = 'reparo_situacao_v4';
 const LOJAS = ['receber', 'pagar'];
 
 /**

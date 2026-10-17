@@ -15,4 +15,4 @@
  * Fica junto do CACHE do service worker, e o teste cobra que os dois andem
  * juntos: versão que não acompanha o cache é pior que nenhuma, porque mente.
  */
-export const VERSAO = 'v53';
+export const VERSAO = 'v54';

@@ -74,9 +74,72 @@ const ROTAS = [
   { path: '/ajustes', view: telaAjustes, titulo: 'Ajustes' },
 ];
 
+/**
+ * O APP CONFERE A PRÓPRIA REGRA DE LEITURA ANTES DE ABRIR.
+ *
+ * O cache do navegador servia arquivo velho por cima do service worker: o que
+ * era novo chegava fresco, o que já estava guardado vinha antigo. O aparelho
+ * dela rodou semanas com `versao.js` novo dizendo "v53" e `ingest.js` velho
+ * lendo "Em aberto" como pago — dez consertos que nunca chegaram inteiros.
+ *
+ * Então o app pergunta a si mesmo três coisas cuja resposta eu conheço. Se
+ * qualquer uma vier errada, o código é velho: ele joga fora o que está guardado
+ * e recarrega uma vez. Uma só, marcada na sessão, para nunca virar um laço.
+ *
+ * É barato, roda em milissegundos, e é a diferença entre ela descobrir sozinha
+ * em dois segundos e perder mais uma semana achando que o erro é dela.
+ */
+const PROVAS = [
+  ['Em aberto', 'aberto'],
+  ['Não pago', 'aberto'],
+  ['Atrasado', 'aberto'],
+  ['Confirmado', 'pago'],
+  ['Recebido', 'pago'],
+];
+
+async function codigoEstaVelho() {
+  try {
+    const { interpretarStatusDoArquivo } = await import('./logic/ingest.js');
+    if (typeof interpretarStatusDoArquivo !== 'function') return true;
+    return PROVAS.some(([texto, esperado]) => interpretarStatusDoArquivo(texto) !== esperado);
+  } catch {
+    return true;
+  }
+}
+
+async function jogarForaORestoEVoltar() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+    }
+    if (typeof caches !== 'undefined') {
+      const nomes = await caches.keys();
+      await Promise.all(nomes.map((n) => caches.delete(n)));
+    }
+  } catch { /* se não der, recarregar já tenta a rede */ }
+  window.location.reload();
+}
+
 async function iniciar() {
   const raiz = document.getElementById('app-root');
   try {
+    /* código velho não pode abrir: ele mostra número errado com cara de certo */
+    if (await codigoEstaVelho()) {
+      if (!sessionStorage.getItem('ampla_recarregou')) {
+        sessionStorage.setItem('ampla_recarregou', '1');
+        raiz.innerHTML = '<p style="padding:24px;font:15px system-ui">Atualizando o aplicativo…</p>';
+        await jogarForaORestoEVoltar();
+        return;
+      }
+      /* já tentou e continua velho: avisar é melhor que mostrar número errado */
+      raiz.innerHTML = '<div style="padding:24px;font:15px system-ui;line-height:1.5">'
+        + '<strong>O aplicativo está desatualizado neste aparelho.</strong><br>'
+        + 'Feche todas as abas do AMPLA e abra de novo. Se continuar assim, abra o site '
+        + 'numa aba anônima uma vez.</div>';
+      return;
+    }
+    sessionStorage.removeItem('ampla_recarregou');
     // recomeço pedido pela empresa: apaga tudo o que já foi importado, uma vez
     // só por marca. Vem antes da migração para o banco antigo não trazer tudo
     // de volta.

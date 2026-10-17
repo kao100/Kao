@@ -502,6 +502,56 @@ console.log('\n▶ O diagnóstico conta tudo e não vaza ninguém');
   for (const t of guardados) await store.receber.salvar(t);
 }
 
+console.log('\n▶ O app recusa abrir com código velho');
+{
+  /**
+   * ESTE FOI O ERRO QUE FEZ DEZ CONSERTOS NÃO CHEGAREM NELA.
+   *
+   * O service worker busca a rede primeiro — mas `fetch()` passa pelo cache HTTP
+   * do navegador. Arquivo NOVO (que nunca esteve no cache) vinha fresco; arquivo
+   * ANTIGO vinha velho. O aparelho dela rodava uma MISTURA: `versao.js` novo
+   * dizendo "v53" e `ingest.js` velho lendo "Em aberto" como pago.
+   *
+   * O número da versão mentiu sem querer, porque ele era justamente um arquivo
+   * novo — e novo sempre chegava.
+   *
+   * Duas travas, e as duas precisam existir:
+   *  1. o service worker não aceita mais nada do cache do navegador;
+   *  2. o app confere a própria regra de leitura antes de abrir, e se estiver
+   *     velha joga fora o que está guardado e recarrega. Mostrar número errado
+   *     com cara de certo é pior que não abrir.
+   */
+  const { readFileSync: ler } = await import('node:fs');
+  const { join: jn, dirname: dn } = await import('node:path');
+  const { fileURLToPath: fu } = await import('node:url');
+  const raiz = jn(dn(fu(import.meta.url)), '..');
+
+  const sw = ler(jn(raiz, 'sw.js'), 'utf8');
+  ok('o service worker instala sem o cache do navegador',
+    /cache: 'reload'/.test(sw), '');
+  ok('e busca sempre conferindo com o servidor',
+    /fetch\(request, \{ cache: 'no-cache' \}\)/.test(sw), '');
+
+  const main = ler(jn(raiz, 'src/main.js'), 'utf8');
+  ok('o app confere a própria leitura antes de abrir', /codigoEstaVelho/.test(main), '');
+  ok('e recarrega uma vez só, sem virar laço', /ampla_recarregou/.test(main), '');
+
+  /**
+   * E AS PROVAS DO AUTOTESTE PRECISAM SER VERDADE.
+   *
+   * Uma prova errada aqui é pior que nenhuma: ou o app se recusa a abrir com o
+   * código certo, ou aceita o errado calado. Então o teste roda as mesmas
+   * perguntas contra o leitor de verdade.
+   */
+  const provas = [...main.matchAll(/\['([^']+)', '(aberto|pago)'\]/g)]
+    .map((m) => [m[1], m[2]]);
+  ok('o autoteste faz pelo menos quatro perguntas', provas.length >= 4, String(provas.length));
+  for (const [texto, esperado] of provas) {
+    igual(`a prova "${texto}" bate com o leitor de verdade`,
+      ingest.interpretarStatusDoArquivo(texto), esperado);
+  }
+}
+
 console.log('\n▶ A versão do app não pode mentir');
 {
   /**
@@ -939,7 +989,7 @@ console.log('\n▶ O conserto reabre o que entrou pago por erro de leitura');
     { id: 'rp7', clienteNome: 'G', vencimento: '2026-11-16', valor: 7000, statusArquivo: 'Em aberto', status: 'aberto', saldo: 7000 },
   ];
   for (const t of base) await store.receber.salvar(t);
-  await dbMod.remove('kv', 'reparo_situacao_v3');
+  await dbMod.remove('kv', 'reparo_situacao_v4');
 
   const r = await reparar.repararSituacaoNegada();
   igual('reabre só os que o próprio texto diz em aberto', r.reabertos, 2);

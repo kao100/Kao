@@ -79,7 +79,7 @@ entregas e R$ 1.178.100,90 de faturamento saem iguais do outro lado.
 ### Conferir se está tudo certo
 
 ```bash
-node ampla/tools/teste.mjs     # 690 verificações da lógica, sem navegador
+node ampla/tools/teste.mjs     # 700 verificações da lógica, sem navegador
 ```
 
 O teste roda o caminho inteiro (arquivo → importação → vínculos → faturamento →
@@ -301,6 +301,25 @@ app não conseguiu identificar sozinho.
   o texto vai parar numa mensagem, e dado de cliente não tem por que viajar para
   explicar por que um número deu zero. O teste cobra as duas metades: que ele
   conte o que precisa, e que não vaze ninguém.
+- **O cache do navegador servia código velho por cima do service worker.** Foi
+  este o erro que fez dez rodadas de conserto não chegarem nela. O service
+  worker busca a rede primeiro — mas `fetch()` passa pelo cache HTTP do
+  navegador, e o GitHub Pages manda guardar os arquivos por alguns minutos.
+  Arquivo NOVO, que nunca esteve no cache, chegava fresco; arquivo ANTIGO vinha
+  velho. O aparelho dela rodava uma **mistura de versões**: `versao.js` novo
+  dizendo "v53" e `ingest.js` velho lendo "Em aberto" como pago. O número da
+  versão mentiu sem querer, porque ele próprio era um arquivo novo — e novo
+  sempre chegava. Agora o service worker instala com `cache: 'reload'` e busca
+  com `cache: 'no-cache'`: uma viagem de rede a mais por arquivo, e o app
+  inteiro passa a ser de uma versão só.
+- **O app confere a própria regra de leitura antes de abrir.** Cinco perguntas
+  cuja resposta é conhecida ("Em aberto" → aberto, "Não pago" → aberto,
+  "Confirmado" → pago…). Se qualquer uma vier errada, o código é velho: ele joga
+  fora o que está guardado e recarrega uma vez, marcada na sessão para nunca
+  virar laço; se ainda assim continuar velho, avisa em vez de abrir. Mostrar
+  número errado com cara de certo é pior que não abrir. O teste roda as mesmas
+  perguntas contra o leitor de verdade, porque prova errada aqui seria pior que
+  prova nenhuma.
 - **A versão fica à vista, e não pode mentir.** "Não apareceu o botão" tem duas
   causas possíveis — o conserto não funcionou, ou o conserto ainda não chegou no
   aparelho — e elas levam a conversas opostas. Sem o número da versão, não há
