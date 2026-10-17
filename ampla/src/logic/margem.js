@@ -295,6 +295,22 @@ export async function margem({ de, ate }) {
    */
   const custoPorNota = custoDasNotasPeloPedido(doPeriodo, pedidos);
   let vendaComCustoDoPedido = 0;
+  /**
+   * A BASE DA COBERTURA DE CUSTO, SEM SINAL.
+   *
+   * "286 notas pegaram o custo do PEDIDO que as gerou (100,6% da venda)."
+   *
+   * Cento e seis décimos por cento. A devolução entra na venda com sinal
+   * negativo — e está certo, é menos faturamento —, mas ela encolhe o
+   * denominador de uma cobertura cujo numerador só cresce. Uma devolução sem
+   * pedido ligado basta para a conta passar de 100%, e cobertura acima de 100%
+   * não é um arredondamento feio: é a tela perdendo a credibilidade justamente
+   * na linha que existe para dizer se dá para confiar no número de cima.
+   *
+   * Então a cobertura mede sobre o valor MOVIMENTADO, sem sinal: é a pergunta
+   * "de tudo que passou, de quanto eu sei o custo?".
+   */
+  let vendaBruta = 0;
 
   /**
    * ============ O CAMINHO DE QUEM NÃO TEM XML DE NOTA ============
@@ -361,6 +377,7 @@ export async function margem({ de, ate }) {
       const v = porVendedor.get(chave);
       const vendaDele = Math.abs(cents(p.valorTotal));
       v.venda += vendaDele;
+      vendaBruta += vendaDele;
       v.produtos += 1;
       const regua = custoConfiavelDoPedido(p);
       if (regua.custo == null) {
@@ -402,6 +419,7 @@ export async function margem({ de, ate }) {
         const quantidade = Math.abs(item.quantidade || 0) * sinal;
         const valor = Math.abs(item.valorTotal || 0) * sinal;
         v.venda += valor;
+        vendaBruta += Math.abs(item.valorTotal || 0);
         v.quantidade += quantidade;
         v.produtos += 1;
         // o custo do pedido já cobre esta nota inteira: o item entra só com venda
@@ -422,7 +440,7 @@ export async function margem({ de, ate }) {
       if (custoDoPedido != null) {
         v.custo += custoDoPedido * sinal;
         v.custoDoPedido += custoDoPedido * sinal;
-        vendaComCustoDoPedido += sum(daNota, (i) => Math.abs(i.valorTotal || 0)) * sinal;
+        vendaComCustoDoPedido += sum(daNota, (i) => Math.abs(i.valorTotal || 0));
       }
     }
   }
@@ -441,6 +459,7 @@ export async function margem({ de, ate }) {
     }
     const v = porVendedor.get(chave);
     v.venda += l.valorTotal || 0;
+    vendaBruta += Math.abs(l.valorTotal || 0);
     v.quantidade += l.quantidade || 0;
     v.produtos += 1;
     const custoDaVenda = custoDaLinha(l.produtoId, l.quantidade, l.valorTotal, null);
@@ -497,6 +516,7 @@ export async function margem({ de, ate }) {
   const venda = cents(sum(lista, (v) => v.venda));
   const custo = cents(sum(lista, (v) => v.custo));
   const lucro = cents(venda - custo);
+  const freteTotal = cents(sum(lista, (v) => v.frete || 0));
 
   /* o total do relatório de produtos vendidos, que não depende do vendedor */
   const doRelatorio = noPeriodo.filter((l) => l.origemRelatorio === 'produtosVendidos');
@@ -652,13 +672,16 @@ export async function margem({ de, ate }) {
     ? cents(totalRelatorio.venda - alvo.venda) : null;
 
   const vendaSemCusto = cents(sum(lista, (v) => v.vendaSemCusto || 0));
+  /* o que passou, sem sinal: devolução não pode encolher o denominador */
+  const baseDaCobertura = cents(vendaBruta) || venda;
   conferencia.coberturaDeCusto = {
-    venda,
+    venda: baseDaCobertura,
     semCusto: vendaSemCusto,
-    comCusto: cents(venda - vendaSemCusto),
-    percentual: venda ? ((venda - vendaSemCusto) / venda) * 100 : null,
+    comCusto: cents(baseDaCobertura - vendaSemCusto),
+    percentual: baseDaCobertura ? ((baseDaCobertura - vendaSemCusto) / baseDaCobertura) * 100 : null,
     doPedido: cents(vendaComCustoDoPedido),
-    percentualDoPedido: venda ? (cents(vendaComCustoDoPedido) / venda) * 100 : null,
+    percentualDoPedido: baseDaCobertura
+      ? (cents(vendaComCustoDoPedido) / baseDaCobertura) * 100 : null,
     notasComPedido: custoPorNota.size,
     /* quantos pedidos entraram com o custo do próprio sistema, pelo caminho dos pedidos */
     pedidosComCusto: fonteDosNumeros === 'pedidos-do-periodo'
@@ -711,7 +734,24 @@ export async function margem({ de, ate }) {
   return {
     periodo: { de, ate },
     vendedores: lista,
-    total: { venda, custo, lucro, margem: venda ? (lucro / venda) * 100 : null },
+    /**
+     * O TOTAL LEVA O FRETE JUNTO.
+     *
+     * Cada vendedor mostra a margem dele e a margem COM FRETE ao lado — material
+     * pesado sai apertado de propósito e o resultado está no frete. Só a linha
+     * do TOTAL vinha sem essas duas colunas, em branco: justamente o número da
+     * empresa inteira, que é o que ela leva para o pai.
+     */
+    total: {
+      venda,
+      custo,
+      lucro,
+      margem: venda ? (lucro / venda) * 100 : null,
+      frete: freteTotal,
+      lucroComFrete: cents(lucro + freteTotal),
+      margemComFrete: venda + freteTotal
+        ? ((lucro + freteTotal) / (venda + freteTotal)) * 100 : null,
+    },
     totalRelatorio,
     // de onde vieram os números por vendedor, para a tela poder dizer
     fonte: fonteDosNumeros,

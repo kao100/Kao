@@ -240,6 +240,15 @@
 .tabela td { padding: 8px 10px 8px 0; border-top: 1px solid var(--line); }
 .tabela tbody tr:hover td { background: var(--card-2); }
 .tabela .dir, .tabela th.dir { text-align: right; padding-right: 0; }
+/**
+ * COLUNA ALINHADA À DIREITA NO MEIO DA TABELA PRECISA DE RESPIRO.
+ *
+ * "CUSTO REALINFORMADO EM" / "R$ 2.455,1917/10/2026" — o número termina colado
+ * na borda da célula (padding-right: 0, para a última coluna ficar rente) e o
+ * texto da seguinte começa colado na dele. Grudados, viram uma palavra só e
+ * ninguém lê nenhum dos dois. Rente só vale para a última.
+ */
+.tabela td.dir:not(:last-child), .tabela th.dir:not(:last-child) { padding-right: 14px; }
 .tabela .num { font-family: var(--fonte-num); font-variant-numeric: tabular-nums; }
 .tabela tr.clicavel { cursor: pointer; }
 .tabela tfoot td { border-top: 2px solid var(--line-forte); font-weight: 800; padding-top: 10px; }

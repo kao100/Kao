@@ -24,6 +24,17 @@ import { cents, normalize } from '../../core/util.js';
 import { ok, erro } from '../components/toast.js';
 import { formulario } from '../components/sheet.js';
 
+/** A linha do TOTAL, com frete e com a margem que o inclui — como cada vendedor. */
+const TOTAL_DA_TABELA = (r) => ({
+  nome: 'TOTAL',
+  venda: r.total.venda,
+  custo: r.total.custo,
+  lucro: r.total.lucro,
+  margem: r.total.margem,
+  frete: r.total.frete,
+  margemComFrete: r.total.margemComFrete,
+});
+
 const COLUNAS = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Vendeu', key: 'venda', tipo: 'dinheiro', alinhar: 'direita' },
@@ -297,7 +308,7 @@ export async function telaMargem({ query }) {
         nomeArquivo: `margem_total_${filtro.de}`,
         colunas: COLUNAS,
         linhas: r.vendedores,
-        total: { nome: 'TOTAL', venda: r.total.venda, custo: r.total.custo, lucro: r.total.lucro, margem: r.total.margem },
+        total: TOTAL_DA_TABELA(r),
       })),
       /**
        * O NÚMERO GRANDE É O DA NOTA FISCAL, sempre que o XML existir.
@@ -528,12 +539,12 @@ export async function telaMargem({ query }) {
           nomeArquivo: `margem_vendedor_${filtro.de}`,
           colunas: COLUNAS,
           linhas: r.vendedores,
-          total: { nome: 'TOTAL', venda: r.total.venda, custo: r.total.custo, lucro: r.total.lucro, margem: r.total.margem },
+          total: TOTAL_DA_TABELA(r),
         })),
         tabela({
           colunas: COLUNAS,
           linhas: r.vendedores,
-          total: { nome: 'TOTAL', venda: r.total.venda, custo: r.total.custo, lucro: r.total.lucro, margem: r.total.margem },
+          total: TOTAL_DA_TABELA(r),
         }),
         h('p.mini.muted', { style: { marginTop: '8px' } },
           r.fonte === 'pedidos-do-periodo'

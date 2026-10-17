@@ -693,6 +693,8 @@ console.log('\n▶ Custo do pedido maior que a venda não é margem, é unidade 
 
   const vInf = rInf.vendedores.find((x) => x.nome === 'VENDEDOR A') || {};
   igual('o custo digitado entra na margem', vInf.custo, 8300);
+  ok('e a linha do TOTAL leva o frete junto, como a de cada vendedor',
+    'frete' in rInf.total && 'margemComFrete' in rInf.total, JSON.stringify(Object.keys(rInf.total)));
   igual('e não sobra mais venda sem custo confiável', vInf.vendaSemCusto, 0);
   ok('a margem passa a valer para a venda inteira', vInf.margem > 0, String(vInf.margem));
 
@@ -815,6 +817,58 @@ console.log('\n▶ Sem XML, a margem sai dos PEDIDOS — e o custo informado mud
   for (const n of ['pedsx_7001', 'pedsx_7002', 'pedsx_7003']) await store.pedidos.remover(n);
   await store.vendasProduto.remover('pvsx_1');
   for (const x of guardadas.produto) await store.vendasProduto.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+}
+
+console.log('\n▶ Devolução não empurra a cobertura de custo acima de 100%');
+{
+  /**
+   * "286 notas pegaram o custo do PEDIDO que as gerou (100,6% da venda)."
+   *
+   * A devolução entra na venda com sinal negativo — está certo, é menos
+   * faturamento — mas encolhia o denominador de uma cobertura cujo numerador só
+   * cresce. Cobertura acima de 100% não é arredondamento feio: é a tela perdendo
+   * a credibilidade na linha que existe para dizer se dá para confiar no número
+   * de cima.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    itens: await store.nfItens.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  await store.vendedores.salvar({ id: 'vDV', nome: 'VENDEDOR DEVOLUCAO' });
+
+  const nota = (n, ped, valor, dev) => store.nfs.salvar({
+    id: `nfd_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: valor, valorProdutos: valor, vendedorId: 'vDV', pedidoNumero: ped ? String(ped) : null,
+    status: 'autorizada', operacao: dev ? 'entrada' : 'saida', devolucao: !!dev, devolucaoDeCompra: false,
+  });
+  const item = (n, valor) => store.nfItens.salvar({
+    id: `itd_${n}`, nfId: `nfd_${n}`, data: '2026-10-10', nfStatus: 'autorizada',
+    vendedorId: 'vDV', produtoId: 'pdv', descricao: 'ITEM', quantidade: 1, valorTotal: valor,
+  });
+  await nota(6001, 4000, 10000, false); await item(6001, 10000);
+  await store.pedidos.salvar({ id: 'ped_4000', numero: '4000', data: '2026-10-05', valorTotal: 10000, valorCusto: 6000 });
+  /* a devolução, SEM pedido ligado: era ela que passava de 100% */
+  await nota(6002, null, 500, true); await item(6002, 500);
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  const c = r.conferencia.coberturaDeCusto;
+  ok('a cobertura não passa de 100%', c.percentual <= 100, String(c.percentual));
+  ok('nem a parcela que veio do pedido', c.percentualDoPedido <= 100, String(c.percentualDoPedido));
+  igual('a base é o que passou, sem sinal', c.venda, 10500);
+  igual('e a devolução sem custo aparece como o que falta', c.semCusto, 500);
+  /* e a venda do período continua com o sinal certo: devolução é menos faturamento */
+  igual('a venda continua descontando a devolução', r.total.venda, 9500);
+
+  for (const n of ['nfd_6001', 'nfd_6002']) await store.nfs.remover(n);
+  for (const n of ['itd_6001', 'itd_6002']) await store.nfItens.remover(n);
+  await store.pedidos.remover('ped_4000');
   for (const x of guardadas.itens) await store.nfItens.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
