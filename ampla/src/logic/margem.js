@@ -1222,8 +1222,24 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
      */
     const sinal = nf.devolucao ? -1 : 1;
     v.frete += (nf.valorFrete || 0) * sinal;
-    v.faturamento += valorFaturado(nf);
     v.notas += 1;
+  }
+
+  /**
+   * O FATURAMENTO DO VENDEDOR AQUI É O MESMO DAS OUTRAS TELAS.
+   *
+   * Ele vinha somando só as notas que TÊM valor de frete — o que fazia a coluna
+   * "frete / faturamento" dividir por uma base menor e inflar a porcentagem, e
+   * punha na tela um "faturamento" diferente do faturamento do mesmo vendedor em
+   * qualquer outro lugar do app.
+   *
+   * Faturamento é uma palavra só: todas as notas do período dele.
+   */
+  for (const nf of doPeriodo) {
+    const chave = nf.vendedorId || 'sem';
+    const v = porVendedor.get(chave);
+    if (!v) continue;
+    v.faturamento += valorFaturado(nf);
   }
 
   /**

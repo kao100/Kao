@@ -1219,6 +1219,42 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
   });
   const r3 = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
   igual('primeiro nome de dois vendedores não escolhe nenhum', r3.frete.custo.semVendedor, 700);
+
+  /**
+   * A SOBRA DA TABELA TEM DE SER A MESMA DO CARTÃO.
+   *
+   * "O frete que sobra agora é 7.370,23. E aqui tá 6.880,23. A sobra tá
+   *  diferente do que tá na sobra do outro."
+   *
+   * O cartão descontava TODO o custo de entrega; a tabela, só o que tinha dono.
+   * A diferença era a entrega sem nome na planilha, invisível — dois números com
+   * o mesmo nome, outra vez.
+   */
+  igual('o cartão desconta todo o custo de entrega', r3.frete.custo.resultado,
+    Math.round((r3.frete.total - r3.frete.custo.total) * 100) / 100);
+  const naTabelaFrete = Math.round((r3.frete.vendedores
+    .reduce((a, v) => a + (v.custoReal || 0), 0) + r3.frete.custo.semVendedor) * 100) / 100;
+  igual('e a coluna de custo da tabela soma o mesmo, com a linha sem dono junto',
+    naTabelaFrete, r3.frete.custo.total);
+
+  /**
+   * E "FRETE / FATURAMENTO" DIVIDE PELO FATURAMENTO DE VERDADE.
+   *
+   * Dividia só pelas notas QUE TÊM frete, o que inflava a porcentagem e punha na
+   * tela um "faturamento" diferente do faturamento do mesmo vendedor em qualquer
+   * outro lugar do app.
+   */
+  await store.nfs.salvar({
+    id: 'nfce2', numero: '4101', serie: '1', dataEmissao: '2026-10-12',
+    valorTotal: 9000, valorProdutos: 9000, vendedorId: 'vCE',
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  const rF = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  const ce = rF.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO');
+  igual('o faturamento da linha conta TODAS as notas do vendedor', ce?.faturamento, 20000);
+  ok('e o peso do frete é sobre esse faturamento',
+    Math.abs(ce.peso - 5) < 0.01, String(ce?.peso));
+  await store.nfs.remover('nfce2');
   ok('e a tela sabe dizer que foi por ambiguidade',
     (r3.frete.custo.primeirosNomesRepetidos || []).includes('zelia'),
     JSON.stringify(r3.frete.custo.primeirosNomesRepetidos));

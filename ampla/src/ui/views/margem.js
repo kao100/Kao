@@ -59,6 +59,20 @@ const COLUNAS = [
   { header: 'Margem', key: 'margem', tipo: 'percentual', alinhar: 'direita' },
 ];
 
+/**
+ * O QUE "FRETE / FATURAMENTO" QUER DIZER.
+ *
+ * "Queria entender como que funciona essas porcentagens. 10, 10, 7, 7. O que
+ *  que ela quer dizer?"
+ *
+ * É quanto do que o vendedor faturou é frete: R$ 16.085,65 de frete sobre
+ * R$ 161.207,98 faturados dá 10%. Não é desempenho, é MIX — quem vende material
+ * pesado e entrega longe carrega mais frete; quem vende no balcão carrega menos.
+ *
+ * Serve para ler a sobra da entrega junto: dez por cento de frete com sobra
+ * negativa é muito volume de entrega cobrado abaixo do custo, e é aí que se
+ * perde dinheiro sem aparecer na margem da mercadoria.
+ */
 const COLUNAS_FRETE = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Frete cobrado', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
@@ -860,18 +874,49 @@ export async function telaMargem({ query }) {
             + 'ela, "fulano cobrou R$ 8 mil de frete" parece resultado, e não é.', 'atencao',
           botao('Mandar custos de frete', { pequeno: true, onClick: () => navigate('/arquivos/fretes') })),
 
+        /**
+         * A COLUNA TEM DE SOMAR O MESMO QUE O CARTÃO.
+         *
+         * "O frete que sobra agora é 7.370,23. E aqui tá 6.880,23. A sobra tá
+         *  diferente do que tá na sobra do outro."
+         *
+         * O cartão "Sobra da entrega" descontava TODO o custo de entrega do
+         * período; a tabela descontava só o que tinha dono. A diferença eram os
+         * R$ 490,00 da entrega sem nome na planilha — e ela ficava invisível,
+         * virando dois números com o mesmo nome, outra vez.
+         *
+         * O custo sem dono é custo igual: ele entra na tabela como uma linha
+         * própria, em vez de sumir do total. Aí a coluna fecha com o cartão, e a
+         * linha diz sozinha o que está faltando resolver.
+         */
         tabela({
           colunas: colunasFrete,
-          linhas: r.frete.vendedores,
+          linhas: r.frete.custo.semVendedor > 0
+            ? [...r.frete.vendedores, {
+              nome: 'sem vendedor na planilha',
+              frete: 0,
+              custoReal: r.frete.custo.semVendedor,
+              custoRateado: null,
+              resultado: cents(-r.frete.custo.semVendedor),
+              faturamento: null,
+              peso: null,
+              notas: null,
+            }]
+            : r.frete.vendedores,
           total: {
             nome: 'TOTAL',
             frete: r.frete.total,
             custoRateado: r.frete.custo.temDado && !r.frete.custo.porVendedor ? r.frete.custo.total : null,
-            custoReal: r.frete.custo.porVendedor ? cents(r.frete.custo.total - r.frete.custo.semVendedor) : null,
-            resultado: r.frete.custo.porVendedor
-              ? cents(r.frete.total - (r.frete.custo.total - r.frete.custo.semVendedor)) : null,
+            custoReal: r.frete.custo.porVendedor ? r.frete.custo.total : null,
+            resultado: r.frete.custo.porVendedor ? r.frete.custo.resultado : null,
           },
         }),
+
+        h('p.mini.muted',
+          'FRETE / FATURAMENTO é quanto do que cada um faturou é frete — não é desempenho, é MIX: '
+          + 'quem vende material pesado e entrega longe carrega mais frete, quem vende no balcão '
+          + 'carrega menos. Vale ler junto com a SOBRA: peso alto com sobra negativa é muita '
+          + 'entrega cobrada abaixo do custo, e esse dinheiro não aparece na margem da mercadoria.'),
 
         /**
          * QUEM FEZ A ENTREGA, E DE QUEM É O CARRO.
