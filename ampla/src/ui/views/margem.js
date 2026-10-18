@@ -213,7 +213,25 @@ function efeitoDoCustoInformado(r) {
  * o vendedor, a outra é um nome escrito diferente numa planilha.
  */
 function quemNaoBateu(custo) {
-  if (!custo.semVendedor) return '';
+  const ligados = (custo.ligadosPorPedaco || [])
+    .map((x) => `${x.escrito} → ${x.vendedor}`).join('; ');
+  /**
+   * O QUE O APP LIGOU SOZINHO, DITO EM VOZ ALTA.
+   *
+   * Ligar "EDUARDO" a "CARLOS EDUARDO APARECIDO DO NASCIMENTO" é leitura, não
+   * adivinhação — o pedaço de nome pertence a um vendedor só na base inteira.
+   * Mas é uma decisão do app sobre o dinheiro de alguém, e decisão calada é como
+   * se perde a confiança numa conta que está certa.
+   */
+  const avisoLigados = ligados
+    ? `O app ligou pelo nome: ${ligados} — um pedaço de nome que pertence a um vendedor só. `
+      + 'Se estiver errado, escreva o nome completo na planilha. '
+    : '';
+  if (!custo.semVendedor) return avisoLigados;
+  return avisoLigados + naoBateuMesmo(custo);
+}
+
+function naoBateuMesmo(custo) {
   const nomes = (custo.nomesSemVendedor || []).slice(0, 4)
     .map((x) => `${x.nome} (${money(x.valor)})`).join(', ');
   const repetidos = custo.primeirosNomesRepetidos || [];

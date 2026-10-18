@@ -1165,6 +1165,36 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
     (r.frete.custo.nomesSemVendedor[0] || {}).nome, 'CADU');
   igual('com o valor dele', (r.frete.custo.nomesSemVendedor[0] || {}).valor, 700);
 
+  /**
+   * O CASO DELA: a planilha escreve o SEGUNDO nome.
+   *
+   * "O que eu acho que é do Eduardo é que as notas estão como Carlos Eduardo e
+   *  na planilha ele deve estar Eduardo."
+   *
+   * R$ 16.107,10 de entrega ficavam órfãos porque o app só olhava o primeiro
+   * nome. O pedaço de nome vale desde que pertença a UM vendedor só.
+   */
+  await store.fretes.salvar({
+    id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
+    valor: 700, vendedorNome: 'EDUARDO', mes: '2026-10',
+  });
+  const rE = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('o segundo nome acha o vendedor', rE.frete.custo.semVendedor, 0);
+  igual('e o custo cai na linha certa',
+    rE.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO')?.custoReal, 700);
+  igual('a tela diz que ligou por pedaço de nome',
+    (rE.frete.custo.ligadosPorPedaco[0] || {}).escrito, 'EDUARDO');
+  igual('e a quem ligou',
+    (rE.frete.custo.ligadosPorPedaco[0] || {}).vendedor, 'CARLOS EDUARDO APARECIDO');
+
+  /* partícula não identifica ninguém: "DO" não pode ligar a ninguém */
+  await store.fretes.salvar({
+    id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
+    valor: 700, vendedorNome: 'DO', mes: '2026-10',
+  });
+  const rP = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('partícula de nome não liga a ninguém', rP.frete.custo.semVendedor, 700);
+
   /* escrito como no cadastro, bate — e some da lista */
   await store.fretes.salvar({
     id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',

@@ -1131,16 +1131,68 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
    * Se dois vendedores começassem com o mesmo nome, nenhum dos dois seria
    * escolhido — é a mesma regra do par único que liga nota a pedido.
    */
+  /**
+   * NA PLANILHA DE ENTREGAS O VENDEDOR VEM PELO NOME QUE A CASA USA — E NEM
+   * SEMPRE É O PRIMEIRO.
+   *
+   * "O que eu acho que é do Eduardo é que as notas estão como Carlos Eduardo e
+   *  na planilha ele deve estar Eduardo."
+   *
+   * Era isso: R$ 16.107,10 de entrega ficavam órfãos porque o app só olhava o
+   * PRIMEIRO nome, e quem preenche a planilha escreve EDUARDO — o segundo. A
+   * linha dele mostrava frete cobrado de R$ 15.349,88 e custo em branco.
+   *
+   * A regra continua sendo a mesma do resto do app, e é ela que torna isto
+   * leitura e não adivinhação: o pedaço de nome tem de pertencer a UM vendedor
+   * só na base inteira. Dois Eduardos e o app não escolhe nenhum.
+   *
+   * Partículas (de, da, dos) e pedaços de duas letras ficam de fora: não
+   * identificam ninguém. E o que foi ligado assim aparece na tela — ligação que
+   * o app faz sozinho e não conta vira número sem dono de outro jeito.
+   */
+  const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'jr', 'junior', 'filho', 'neto', 'sobrinho']);
+  const pedacosDe = (nome) => normalize(nome || '').split(' ')
+    .filter((x) => x.length >= 3 && !PARTICULAS.has(x));
+
   const porPrimeiroNome = new Map();
+  const porPedaco = new Map();
   for (const v of vendedores) {
-    const primeiro = normalize(v.nome).split(' ')[0];
-    if (!primeiro) continue;
-    porPrimeiroNome.set(primeiro, porPrimeiroNome.has(primeiro) ? null : v.id);
+    const partes = pedacosDe(v.nome);
+    const primeiro = partes[0];
+    if (primeiro) porPrimeiroNome.set(primeiro, porPrimeiroNome.has(primeiro) ? null : v.id);
+    for (const parte of new Set(partes)) {
+      porPedaco.set(parte, porPedaco.has(parte) && porPedaco.get(parte) !== v.id ? null : v.id);
+    }
   }
+
+  /* o que o app ligou por pedaço de nome, para a tela poder dizer */
+  const ligadosPorPedaco = new Map();
   const vendedorPeloNome = (texto) => {
     const t = normalize(texto || '');
     if (!t) return null;
-    return idPorNome.get(t) || porPrimeiroNome.get(t.split(' ')[0]) || null;
+    const exato = idPorNome.get(t);
+    if (exato) return exato;
+
+    const achados = new Set();
+    for (const parte of pedacosDe(texto)) {
+      const id = porPedaco.get(parte);
+      if (id) achados.add(id);
+    }
+    // dois vendedores diferentes no mesmo texto: o app não escolhe
+    if (achados.size !== 1) return null;
+    const id = [...achados][0];
+    /**
+     * Só vira notícia o que o PRIMEIRO nome não teria resolvido sozinho.
+     *
+     * "FRANCISCO → FRANCISCO CORREIA DA SILVA JUNIOR" é a regra de sempre, e
+     * anunciar o óbvio junto com o que importa esconde o que importa.
+     */
+    const pedacos = pedacosDe(texto);
+    const peloPrimeiro = pedacos.length === 1 && porPrimeiroNome.get(pedacos[0]) === id;
+    if (!peloPrimeiro && normalize(nomeVendedor.get(id) || '') !== t) {
+      ligadosPorPedaco.set(t, { escrito: String(texto).trim(), vendedor: nomeVendedor.get(id) || id });
+    }
+    return id;
   };
   const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate);
   const comFrete = doPeriodo.filter((nf) => nf.valorFrete != null);
@@ -1307,6 +1359,8 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
         .sort((a, b) => b.valor - a.valor),
       /* e os vendedores que o app não consegue distinguir pelo primeiro nome */
       primeirosNomesRepetidos: primeirosRepetidos,
+      /* os nomes que bateram por um pedaço, e não por igualdade: dito, não escondido */
+      ligadosPorPedaco: [...ligadosPorPedaco.values()],
       entregas: doPeriodoCusto.length,
       /* entrega registrada sem custo lançado não é entrega de graça: é campo em branco */
       semValor: doPeriodoCusto.filter((c) => c.valor == null).length,
