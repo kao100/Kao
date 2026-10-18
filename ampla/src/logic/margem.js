@@ -181,9 +181,35 @@ export async function margem({ de, ate }) {
   // as notas do período, uma vez só: o frete por vendedor e a conferência leem daqui
   const doPeriodo = nfs.filter((n) => valeParaFaturamento(n) && n.dataEmissao >= de && n.dataEmissao <= ate);
 
-  const itensDoPeriodo = itens.filter((i) => i.data && i.data >= de && i.data <= ate
-    && (i.vendedorId || i.nfStatus === 'autorizada'));
+  /**
+   * O ITEM PERTENCE AO PERÍODO DA NOTA DELE, NÃO AO DA SUA PRÓPRIA DATA.
+   *
+   * "Faturamento R$ 658.510,63 na aba Hoje está correto, mas no Margem e frete
+   *  está R$ 609.296,35."
+   *
+   * Os itens eram filtrados pela data da própria linha, e as notas pela data de
+   * emissão. Quando as duas não são a mesma — e não são: a linha do item traz a
+   * data do pedido em alguns exports — as duas telas passam a contar conjuntos
+   * diferentes de venda, com o mesmo nome em cima.
+   *
+   * A nota é o fato fiscal e carrega a data que vale. Item de nota de outubro é
+   * de outubro, ponto — e aí a soma dos itens mais o frete volta a reconstruir o
+   * faturamento, em vez de ser um terceiro número que ninguém consegue explicar.
+   */
+  const idsDoPeriodo = new Set(doPeriodo.map((n) => n.id));
+  const itensDoPeriodo = itens.filter((i) => idsDoPeriodo.has(i.nfId));
   const temItensDeNota = itensDoPeriodo.length > 0;
+
+  /**
+   * O FATURAMENTO DO PERÍODO, pela MESMA conta da tela do Hoje.
+   *
+   * Mesma função, mesmo filtro, mesmo número — por construção, não por
+   * coincidência. Duas telas que medem faturamento de jeitos diferentes é a
+   * forma mais barata de perder a confiança numa base inteira.
+   */
+  const faturamentoDoPeriodo = cents(sum(doPeriodo, (n) => valorFaturado(n)));
+  const comItens = new Set(itensDoPeriodo.map((i) => i.nfId));
+  const notasSemItens = doPeriodo.filter((n) => !comItens.has(n.id));
 
   /**
    * A ORDEM DAS FONTES DE CUSTO, da mais confiável para a menos:
@@ -730,7 +756,10 @@ export async function margem({ de, ate }) {
     informados = [];
     for (const p of pedidosValidos) {
       const regua = custoConfiavelDoPedido(p);
-      if (regua.informado) { informados.push(linhaDeCustoInformado(p)); continue; }
+      if (regua.informado) {
+        informados.push(linhaDeCustoInformado(p, Math.abs(p.valorTotal || 0)));
+        continue;
+      }
       if (!regua.suspeito) continue;
       descartados.push({
         nfId: null,
@@ -772,6 +801,22 @@ export async function margem({ de, ate }) {
     totalRelatorio,
     // de onde vieram os números por vendedor, para a tela poder dizer
     fonte: fonteDosNumeros,
+    /**
+     * O FATURAMENTO E AS SUAS PARTES, para a tela poder mostrar a conta fechando.
+     *
+     * faturamento = mercadoria + frete cobrado + notas sem itens detalhados.
+     * A margem é medida só sobre a MERCADORIA; o resto fica à vista, em vez de
+     * virar a diferença inexplicada entre duas telas.
+     */
+    faturamento: {
+      total: faturamentoDoPeriodo,
+      notas: doPeriodo.length,
+      mercadoria: venda,
+      semItens: {
+        quantidade: notasSemItens.length,
+        valor: cents(sum(notasSemItens, (n) => valorFaturado(n))),
+      },
+    },
     /* os pedidos do período, para a tela poder dizer quantos entraram e quantos não */
     pedidosDoPeriodo: {
       quantidade: pedidosValidos.length,
@@ -835,6 +880,8 @@ export async function margem({ de, ate }) {
       quantidade: informados.length,
       custo: cents(sum(informados, (d) => d.custo)),
       custoRelatorio: cents(sum(informados, (d) => d.custoRelatorio || 0)),
+      /* a venda que ficaria sem custo confiável se ela não tivesse informado */
+      venda: cents(sum(informados, (d) => d.vendaFaturada || 0)),
       pedidos: informados.slice().sort((a, b) => (b.custo || 0) - (a.custo || 0)),
     },
     /**
@@ -898,13 +945,15 @@ export async function margem({ de, ate }) {
  * caminho das notas e o custo informado por ela só valia ali, num aparelho que
  * não tem XML de nota nenhum.
  */
-function linhaDeCustoInformado(pedido) {
+function linhaDeCustoInformado(pedido, vendaFaturada = null) {
   return {
     pedidoId: pedido.id,
     pedido: pedido.numero || null,
     valor: pedido.valorTotal == null ? null : cents(pedido.valorTotal),
     custo: cents(pedido.custoManual),
     custoRelatorio: pedido.valorCusto == null ? null : cents(pedido.valorCusto),
+    /* a venda faturada que depende deste custo: é ela que ficaria descoberta */
+    vendaFaturada: vendaFaturada == null ? null : cents(vendaFaturada),
     em: pedido.custoManualEm || null,
   };
 }
@@ -937,7 +986,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
     || (nf.pedidoNumero ? porNumero.get(String(nf.pedidoNumero)) : null);
   const descartados = [];
   const informados = [];
-  const jaListado = new Set();
+  const jaListado = new Map();
 
   const quantasNotas = new Map();
   for (const nf of notas) {
@@ -974,9 +1023,12 @@ function custoDasNotasPeloPedido(notas, pedidos) {
     const parte = varias ? valorFaturado(nf) / pedido.valorTotal : 1;
     if (regua.informado) {
       custo.set(nf.id, cents(pedido.custoManual * parte));
-      if (!jaListado.has(pedido.id)) {
-        jaListado.add(pedido.id);
-        informados.push(linhaDeCustoInformado(pedido));
+      const jaTem = jaListado.get(pedido.id);
+      if (jaTem) jaTem.vendaFaturada = cents((jaTem.vendaFaturada || 0) + Math.abs(valorFaturado(nf)));
+      else {
+        const linha = linhaDeCustoInformado(pedido, Math.abs(valorFaturado(nf)));
+        jaListado.set(pedido.id, linha);
+        informados.push(linha);
       }
       continue;
     }
@@ -1159,11 +1211,39 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
    */
   const custoPorVendedor = new Map();
   let custoSemVendedor = 0;
+  /**
+   * QUEM NÃO BATEU, E COM QUE NOME.
+   *
+   * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+   *  entender o porquê tá acontecendo isso. Porque não tá parametrizando os
+   *  custos dele."
+   *
+   * Vendedor com frete cobrado e custo de entrega zerado quase sempre quer dizer
+   * que a planilha escreve o nome dele de um jeito que o cadastro não reconhece
+   * — ou que DOIS vendedores começam com o mesmo primeiro nome, e aí o app não
+   * escolhe nenhum de propósito, porque escolher errado seria pior.
+   *
+   * Em nenhum dos casos a tela podia mostrar só o zero: zero quer dizer "não
+   * custou", e o que estava acontecendo era "não sei de quem é". Agora os nomes
+   * que não bateram aparecem, com o valor de cada um.
+   */
+  const semDono = new Map();
   for (const c of doPeriodoCusto) {
     const vid = c.vendedorId || vendedorPeloNome(c.vendedorNome);
-    if (!vid) { custoSemVendedor += c.valor || 0; continue; }
+    if (!vid) {
+      custoSemVendedor += c.valor || 0;
+      const nome = String(c.vendedorNome || '').trim() || 'sem nome na planilha';
+      const atual = semDono.get(nome) || { nome, valor: 0, entregas: 0 };
+      atual.valor += c.valor || 0;
+      atual.entregas += 1;
+      semDono.set(nome, atual);
+      continue;
+    }
     custoPorVendedor.set(vid, cents((custoPorVendedor.get(vid) || 0) + (c.valor || 0)));
   }
+  /* primeiro nome repetido entre vendedores: é por isso que o app não decide */
+  const primeirosRepetidos = [...porPrimeiroNome.entries()]
+    .filter(([, id]) => id === null).map(([nome]) => nome);
   const temCustoPorVendedor = custoPorVendedor.size > 0;
 
   /**
@@ -1221,6 +1301,12 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
       // é medido, não rateado — e a tela pode parar de pedir desculpa pelo rateio
       porVendedor: temCustoPorVendedor,
       semVendedor: cents(custoSemVendedor),
+      /* os nomes da planilha que não acharam vendedor, do maior valor para o menor */
+      nomesSemVendedor: [...semDono.values()]
+        .map((x) => ({ ...x, valor: cents(x.valor) }))
+        .sort((a, b) => b.valor - a.valor),
+      /* e os vendedores que o app não consegue distinguir pelo primeiro nome */
+      primeirosNomesRepetidos: primeirosRepetidos,
       entregas: doPeriodoCusto.length,
       /* entrega registrada sem custo lançado não é entrega de graça: é campo em branco */
       semValor: doPeriodoCusto.filter((c) => c.valor == null).length,

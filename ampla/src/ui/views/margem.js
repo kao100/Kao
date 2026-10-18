@@ -24,25 +24,39 @@ import { cents, normalize } from '../../core/util.js';
 import { ok, erro } from '../components/toast.js';
 import { formulario } from '../components/sheet.js';
 
-/** A linha do TOTAL, com frete e com a margem que o inclui — como cada vendedor. */
+/** A linha do TOTAL da mercadoria. O frete tem seção própria, logo abaixo. */
 const TOTAL_DA_TABELA = (r) => ({
   nome: 'TOTAL',
   venda: r.total.venda,
   custo: r.total.custo,
   lucro: r.total.lucro,
   margem: r.total.margem,
-  frete: r.total.frete,
-  margemComFrete: r.total.margemComFrete,
 });
 
+/**
+ * A MARGEM É SÓ DA MERCADORIA.
+ *
+ * "A gente pode considerar a margem só sobre o produto, porque o frete, ao mesmo
+ *  tempo que a gente tem cobrado ele, a gente tem o custo dele também. E você
+ *  não sabe o custo total do frete — tem mais outras coisas além desses custos
+ *  que você vê na planilha. Por isso não dá para considerar a margem sobre o
+ *  frete. O que eu preciso saber do frete é quanto que cobra e quanto que teve
+ *  de gastos, que nem você tá fazendo lá embaixo. Isso mantém."
+ *
+ * Ela está certa, e o motivo é melhor que o meu: a coluna "com frete" somava o
+ * frete cobrado ao lucro como se ele fosse lucro, quando o custo de entrega que
+ * o app conhece é só o que cabe na planilha — e não é tudo. Margem com uma
+ * receita cheia e um custo pela metade é margem inflada, e ela ia para o pai.
+ *
+ * O frete continua inteiro na seção de baixo, onde cobrado e pago ficam lado a
+ * lado e a sobra é a conta honesta. Aqui em cima, só mercadoria.
+ */
 const COLUNAS = [
   { header: 'Vendedor', key: 'nome' },
   { header: 'Vendeu', key: 'venda', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Custo', key: 'custo', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Lucro', key: 'lucro', tipo: 'dinheiro', alinhar: 'direita' },
   { header: 'Margem', key: 'margem', tipo: 'percentual', alinhar: 'direita' },
-  { header: 'Frete', key: 'frete', tipo: 'dinheiro', alinhar: 'direita' },
-  { header: 'Com frete', key: 'margemComFrete', tipo: 'percentual', alinhar: 'direita' },
 ];
 
 const COLUNAS_FRETE = [
@@ -162,6 +176,83 @@ async function semPerderOLugar() {
   const y = window.scrollY;
   await refresh();
   window.scrollTo({ top: y });
+}
+
+/**
+ * O QUE A TELA MOSTRARIA SE ELA NÃO TIVESSE INFORMADO ESSES CUSTOS.
+ *
+ * Sem eles, estes pedidos caem na régua (custo maior que a venda), o custo deles
+ * sai da conta e a venda que dependia deles fica descoberta. Escrever os dois
+ * cenários lado a lado é a única forma de ela VER que o número de cima já conta
+ * com o trabalho que ela teve.
+ */
+function efeitoDoCustoInformado(r) {
+  const i = r.custoInformado;
+  const venda = r.total.venda;
+  if (!venda || !i.custo) return '';
+  const custoSem = cents(r.total.custo - i.custo);
+  const margemSem = ((venda - custoSem) / venda) * 100;
+  const coberturaSem = i.venda ? ((venda - i.venda) / venda) * 100 : null;
+  return 'COMO CONFERIR QUE ELES ESTÃO VALENDO: sem estes custos informados, o app descartaria '
+    + `${i.quantidade === 1 ? 'este pedido' : `estes ${i.quantidade}`} (custo maior que a venda) `
+    + 'e a tela de cima mostraria custo de '
+    + `${money(custoSem)} e margem de ${pct(margemSem, 1)}`
+    + (coberturaSem == null ? '' : `, com só ${pct(coberturaSem, 1)} da venda coberta`)
+    + `. Com eles, mostra ${money(r.total.custo)} e ${pct(r.total.margem, 1)}, com a venda inteira `
+    + 'coberta. Os números de cima são os de agora, com o seu trabalho dentro.';
+}
+
+/**
+ * OS NOMES DA PLANILHA DE ENTREGAS QUE NÃO ACHARAM VENDEDOR.
+ *
+ * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+ *  entender o porquê."
+ *
+ * Mostrar só o zero era a tela dizendo "não custou" quando o que acontecia era
+ * "não sei de quem é". A diferença entre as duas é tudo: uma é informação sobre
+ * o vendedor, a outra é um nome escrito diferente numa planilha.
+ */
+function quemNaoBateu(custo) {
+  if (!custo.semVendedor) return '';
+  const nomes = (custo.nomesSemVendedor || []).slice(0, 4)
+    .map((x) => `${x.nome} (${money(x.valor)})`).join(', ');
+  const repetidos = custo.primeirosNomesRepetidos || [];
+  return `⚠️ ${money(custo.semVendedor)} de entrega ficaram FORA da tabela por não achar vendedor: `
+    + `${nomes}${(custo.nomesSemVendedor || []).length > 4 ? ', e outros' : ''}. `
+    + 'Vendedor com frete cobrado e custo zerado quase sempre é isto: o nome na planilha está '
+    + 'diferente do cadastro. '
+    + (repetidos.length
+      ? `Atenção: mais de um vendedor começa com "${repetidos.join('", "')}" — nesse caso o app não `
+        + 'escolhe nenhum de propósito, porque escolher errado seria pior. Escreva o nome completo '
+        + 'na planilha de entregas. '
+      : 'Escreva o nome como está no cadastro, ou cadastre um apelido para ele. ');
+}
+
+/**
+ * A CONTA DO FATURAMENTO, FECHANDO NA TELA.
+ *
+ * Faturamento = mercadoria + frete cobrado + notas sem item detalhado. Escrita
+ * assim, com os números do período, ela responde sozinha a pergunta que custou
+ * uma conversa inteira: por que a Margem mostra um número e o Hoje mostra outro.
+ *
+ * Quando sobra diferença que nenhuma das três partes explica, a frase diz isso
+ * em vez de arredondar: diferença que o app não sabe explicar é a que precisa
+ * aparecer.
+ */
+function contaDoFaturamento(r) {
+  const f = r.faturamento;
+  const frete = r.frete?.total || 0;
+  const resto = cents(f.total - f.mercadoria - frete - f.semItens.valor);
+  const partes = [`${money(f.mercadoria)} de mercadoria`, `${money(frete)} de frete cobrado`];
+  if (f.semItens.quantidade) {
+    partes.push(`${money(f.semItens.valor)} em ${num(f.semItens.quantidade, 0)} `
+      + `${f.semItens.quantidade === 1 ? 'nota sem item detalhado' : 'notas sem itens detalhados'}`);
+  }
+  return `${money(f.total)} de faturamento = ${partes.join(' + ')}`
+    + (Math.abs(resto) >= 1 ? ` + ${money(resto)} que o app ainda não sabe explicar.` : '.')
+    + (f.semItens.quantidade
+      ? ' Nota sem item detalhado não entra na margem: o app não sabe o que foi vendido nela.'
+      : '');
 }
 
 /**
@@ -382,14 +473,43 @@ export async function telaMargem({ query }) {
        * alto da tela — a margem de outra base, com as linhas de unidade trocada
        * dentro. O faturamento é a nota; o relatório é fonte de custo.
        */
+      /**
+       * O FATURAMENTO VEM PRIMEIRO, E É O MESMO NÚMERO DA TELA DO HOJE.
+       *
+       * "Faturamento R$ 658.510,63 na aba Hoje está correto, mas no Margem e
+       *  frete está R$ 609.296,35. O faturamento num lugar tá num e no outro tá
+       *  em outro. O correto é 658.510,63."
+       *
+       * Os dois números estavam certos e mediam coisas diferentes — faturamento
+       * é a nota cheia, a margem é da mercadoria — mas a tela mostrava só o
+       * segundo, com o mesmo rótulo que a outra usa para o primeiro. Dois
+       * números com o mesmo nome em telas diferentes destrói a confiança na base
+       * inteira, e com razão.
+       *
+       * Agora os dois aparecem juntos, com a conta no meio: faturamento menos
+       * frete menos notas sem item detalhado é a mercadoria, e é sobre ela que a
+       * margem é medida.
+       */
       h('div.grade.grade--2',
-        kpi({ label: 'Vendeu', valor: money(topo.venda), icone: '🧾', cor: 'info' }),
-        kpi({ label: 'Custo', valor: money(topo.custo), icone: '📦', cor: 'laranja' }),
+        kpi({
+          label: 'Faturamento', valor: money(r.faturamento.total), icone: '🧾', cor: 'info',
+          nota: `${num(r.faturamento.notas, 0)} notas · o mesmo número da tela Hoje`,
+        }),
+        kpi({
+          label: 'Mercadoria', valor: money(r.faturamento.mercadoria), icone: '📦', cor: 'info',
+          nota: 'sem o frete — é sobre ela que a margem é medida',
+        }),
+        kpi({ label: 'Custo', valor: money(topo.custo), icone: '🏷️', cor: 'laranja' }),
         kpi({ label: 'Lucro', valor: money(topo.lucro), icone: '💰', cor: 'ok' }),
         kpi({
           label: 'Margem', valor: topo.margem == null ? '—' : pct(topo.margem, 1),
-          icone: '📐', cor: 'roxo', nota: 'sobre a venda',
+          icone: '📐', cor: 'roxo', nota: 'sobre a mercadoria',
+        }),
+        kpi({
+          label: 'Frete cobrado', valor: money(r.frete.total), icone: '🚚',
+          nota: 'fora da margem — a conta dele fica abaixo',
         })),
+      h('p.mini.muted', { style: { marginTop: '8px' } }, contaDoFaturamento(r)),
       h('p.mini.muted', { style: { marginTop: '8px' } },
         (r.fonte === 'itens-da-nota'
           ? `${num(r.totalDasNotas ? r.totalDasNotas.produtos : 0, 0)} itens de nota no período. `
@@ -498,6 +618,19 @@ export async function telaMargem({ query }) {
         'Estes entram na margem com o valor que VOCÊ informou, inteiro, sem conferência do app — '
         + 'e continuam valendo quando o relatório for reenviado. Toque em qualquer linha para '
         + 'corrigir ou voltar ao valor do relatório.'),
+      /**
+       * A PROVA DE QUE ELES ESTÃO ENTRANDO.
+       *
+       * "Sobre os 22 pedidos com custo informado por mim, eles não foram
+       *  parametrizados ainda. Eu sei que você falou que o custo é R$ 402.209,53,
+       *  mas eu acho que não é."
+       *
+       * Ela não tinha como saber. O card dizia que os 22 estavam lá, e o número
+       * de cima não mudava na frente dela — porque ela já os tinha informado
+       * quando olhou pela primeira vez. "Está aplicado" é uma afirmação minha;
+       * o que convence é o número que apareceria se não estivesse.
+       */
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } }, efeitoDoCustoInformado(r)),
       tabela({
         colunas: [
           { header: 'Pedido', key: 'pedido' },
@@ -622,37 +755,11 @@ export async function telaMargem({ query }) {
           + 'unidade. Quando não tem, é o custo do cadastro do produto, e em último caso a '
           + 'proporção custo/venda do relatório de produtos vendidos. O que não teve nenhuma das '
           + 'três fica de fora e aparece em reais logo acima.'),
-        /**
-         * A coluna que responde "ele vende perto do custo, mas ganha no frete?".
-         * Margem e frete lado a lado, e a soma dos dois — porque material pesado
-         * sai com margem apertada de propósito e o resultado está no frete.
-         */
         h('p.mini.muted',
-          'VENDEU e MARGEM são só a mercadoria. O FRETE é cobrado à parte, e "COM FRETE" é a '
-          + 'margem quando ele entra na conta — é aí que uma margem apertada em material pesado '
-          + 'pode virar resultado.'),
-        /**
-         * "COM FRETE" É ANTES DE PAGAR A ENTREGA — E ESTE É O NÚMERO QUE VAI
-         * PARA O PAI DELA.
-         *
-         * No mês dela o frete cobrado foi R$ 60.743,48 e a entrega custou
-         * R$ 53.523,25: o frete acrescentou R$ 7.220,23, não R$ 60 mil. Lido
-         * sozinho, "39,9% com frete" conta a empresa seis pontos melhor do que
-         * ela foi — e é justamente o número com cara de resultado final, logo
-         * abaixo da linha do TOTAL.
-         *
-         * O custo da entrega já está na tela, duas seções abaixo. Mas quem lê a
-         * tabela de margem pode nunca chegar lá, e não é obrigação de ninguém
-         * juntar dois números de lugares diferentes para não se enganar.
-         */
-        r.frete?.custo?.temDado && r.total.venda > 0 && h('p.mini.muted',
-          `Antes de levar o "com frete" adiante: ele soma o frete COBRADO `
-          + `(${money(r.frete.total)}) e ainda NÃO desconta o que a entrega custou `
-          + `(${money(r.frete.custo.total)}). A sobra do frete no período foi `
-          + `${money(r.frete.custo.resultado)} — com ela, o resultado do período é `
-          + `${money(cents(r.total.lucro + r.frete.custo.resultado))}, `
-          + `${pct(((r.total.lucro + r.frete.custo.resultado) / r.total.venda) * 100, 1)} sobre a `
-          + 'venda. É este o número do mês.'),
+          'VENDEU e MARGEM são só a MERCADORIA. O frete não entra aqui: ele é cobrado à parte e '
+          + 'tem custo próprio, que o app só conhece até onde a planilha de entregas alcança. '
+          + 'Somá-lo à margem daria uma receita cheia com um custo pela metade. O que ele cobrou '
+          + 'e o que ele custou estão na seção de frete, logo abaixo.'),
         r.produtosSemCusto > 0 && aviso(`${r.produtosSemCusto} linha(s) de venda ficaram sem custo: `
           + 'o produto não apareceu no relatório de produtos vendidos deste período. A margem '
           + 'desses vendedores sai maior do que a real — a linha fica marcada abaixo.', 'atencao'),
@@ -717,9 +824,7 @@ export async function telaMargem({ query }) {
               ? `${num(r.frete.custo.entregas, 0)} entregas no período, e a planilha diz de quem é `
                 + 'cada venda — então "entregas custaram" é o que as entregas DELE custaram, '
                 + 'medido, e não um rateio. '
-                + (r.frete.custo.semVendedor > 0
-                  ? `${money(r.frete.custo.semVendedor)} ficaram fora da tabela por não ter vendedor na planilha. `
-                  : '')
+                + quemNaoBateu(r.frete.custo)
                 + (r.frete.custo.semCobranca > 0
                   ? `${r.frete.custo.semCobranca} entregas estão com R$ 0,00 — entrega sem custo lançado, `
                     + 'que normalmente é a frota própria. '

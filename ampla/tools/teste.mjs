@@ -1006,6 +1006,78 @@ console.log('\n▶ O orçamento guarda o vendedor que veio no arquivo');
   for (const x of guardados) await store.orcamentos.salvar(x);
 }
 
+console.log('\n▶ O faturamento da Margem é o MESMO da tela Hoje');
+{
+  /**
+   * "Faturamento R$ 658.510,63 na aba Hoje está correto, mas no Margem e frete
+   *  está R$ 609.296,35. O faturamento num lugar tá num e no outro tá em outro.
+   *  O correto é 658.510,63."
+   *
+   * Os dois números estavam certos e mediam coisas diferentes. Mas a tela
+   * mostrava só o segundo, com o mesmo rótulo que a outra usa para o primeiro —
+   * e dois números com o mesmo nome em telas diferentes destroem a confiança na
+   * base inteira, com razão.
+   *
+   * Pior: os ITENS eram filtrados pela data da própria linha e as notas pela
+   * data de emissão. Quando as duas diferem, as telas contam conjuntos
+   * diferentes de venda e a diferença não fecha com nada.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    pedidos: await store.pedidos.listar(),
+    fretes: await store.fretes.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.fretes) await store.fretes.remover(x.id);
+  await store.vendedores.salvar({ id: 'vFAT', nome: 'VENDEDOR FATURAMENTO' });
+
+  const nota = (n, prod, frete, ped) => store.nfs.salvar({
+    id: `nfat_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: prod + frete, valorProdutos: prod, valorFrete: frete,
+    vendedorId: 'vFAT', pedidoNumero: ped ? String(ped) : null,
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  /* o item carrega uma data de OUTRO mês de propósito: quem manda é a nota */
+  const item = (n, valor) => store.nfItens.salvar({
+    id: `itfat_${n}`, nfId: `nfat_${n}`, data: '2026-08-01', nfStatus: 'autorizada',
+    vendedorId: 'vFAT', produtoId: 'pfat', descricao: 'ITEM', quantidade: 1, valorTotal: valor,
+  });
+  await nota(3001, 10000, 1000, 600); await item(3001, 10000);
+  await store.pedidos.salvar({ id: 'ped_600', numero: '600', data: '2026-10-05', valorTotal: 11000, valorCusto: 6000 });
+  /* e uma nota SEM item nenhum: entra no faturamento, não entra na margem */
+  await nota(3002, 4000, 0, null);
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  const hoje = await revenue.resumo({ de: '2026-10-01', ate: '2026-10-31' });
+
+  igual('o faturamento da Margem bate com o do Hoje, ao centavo',
+    r.faturamento.total, hoje.total);
+  igual('e conta as mesmas notas', r.faturamento.notas, hoje.notas ?? 2);
+  igual('o item entra pelo período da NOTA, não pela data dele', r.total.venda, 10000);
+  igual('a nota sem item fica de fora da margem', r.faturamento.semItens.quantidade, 1);
+  igual('com o valor dela à vista', r.faturamento.semItens.valor, 4000);
+
+  /* e a conta fecha: faturamento = mercadoria + frete + notas sem item */
+  const soma = Math.round((r.faturamento.mercadoria + r.frete.total
+    + r.faturamento.semItens.valor) * 100) / 100;
+  igual('faturamento = mercadoria + frete + notas sem item', soma, r.faturamento.total);
+
+  /* a margem por vendedor não leva frete: é só mercadoria */
+  igual('a margem é só da mercadoria', r.total.venda, 10000);
+  igual('e o custo é o do pedido', r.total.custo, 6000);
+
+  for (const n of ['nfat_3001', 'nfat_3002']) await store.nfs.remover(n);
+  await store.nfItens.remover('itfat_3001');
+  await store.pedidos.remover('ped_600');
+  for (const x of guardadas.fretes) await store.fretes.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
 console.log('\n▶ Frete cobrado dá o MESMO número na tabela e no cartão');
 {
   /**
@@ -1051,6 +1123,81 @@ console.log('\n▶ Frete cobrado dá o MESMO número na tabela e no cartão');
   for (const n of ['itfr_7001', 'itfr_7002']) await store.nfItens.remover(n);
   await store.pedidos.remover('ped_7700');
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
+console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero');
+{
+  /**
+   * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+   *  entender o porquê tá acontecendo isso. Porque não tá parametrizando os
+   *  custos dele."
+   *
+   * Custo zero numa linha quer dizer "não custou". O que estava acontecendo era
+   * "não sei de quem é" — nome escrito na planilha de um jeito que o cadastro
+   * não reconhece. Mostrar só o zero transformava um problema de cadastro em
+   * informação falsa sobre o vendedor.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    fretes: await store.fretes.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.fretes) await store.fretes.remover(x.id);
+  await store.vendedores.salvar({ id: 'vCE', nome: 'CARLOS EDUARDO APARECIDO' });
+
+  await store.nfs.salvar({
+    id: 'nfce', numero: '4100', serie: '1', dataEmissao: '2026-10-10',
+    valorTotal: 11000, valorProdutos: 10000, valorFrete: 1000, vendedorId: 'vCE',
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  await store.fretes.salvar({
+    id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
+    valor: 700, vendedorNome: 'CADU', mes: '2026-10',
+  });
+
+  const r = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('a entrega sem dono não vira custo de ninguém', r.frete.custo.semVendedor, 700);
+  igual('e o nome que não bateu fica à vista',
+    (r.frete.custo.nomesSemVendedor[0] || {}).nome, 'CADU');
+  igual('com o valor dele', (r.frete.custo.nomesSemVendedor[0] || {}).valor, 700);
+
+  /* escrito como no cadastro, bate — e some da lista */
+  await store.fretes.salvar({
+    id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
+    valor: 700, vendedorNome: 'CARLOS EDUARDO APARECIDO', mes: '2026-10',
+  });
+  const r2 = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('com o nome do cadastro, a entrega acha o dono', r2.frete.custo.semVendedor, 0);
+  const linha = r2.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO');
+  igual('e o custo cai na linha dele', linha?.custoReal, 700);
+  igual('com a sobra calculada', linha?.resultado, 300);
+
+  /**
+   * E O CASO EM QUE O APP NÃO DECIDE DE PROPÓSITO: dois vendedores com o mesmo
+   * primeiro nome. Escolher errado seria pior que não escolher — mas tem de
+   * DIZER que foi isso.
+   */
+  await store.vendedores.salvar({ id: 'vZ1', nome: 'ZELIA MARIA DUARTE' });
+  await store.vendedores.salvar({ id: 'vZ2', nome: 'ZELIA CRISTINA BORGES' });
+  await store.fretes.salvar({
+    id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
+    valor: 700, vendedorNome: 'ZELIA', mes: '2026-10',
+  });
+  const r3 = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('primeiro nome de dois vendedores não escolhe nenhum', r3.frete.custo.semVendedor, 700);
+  ok('e a tela sabe dizer que foi por ambiguidade',
+    (r3.frete.custo.primeirosNomesRepetidos || []).includes('zelia'),
+    JSON.stringify(r3.frete.custo.primeirosNomesRepetidos));
+
+  await store.vendedores.remover('vZ1');
+  await store.vendedores.remover('vZ2');
+  await store.fretes.remover('frce');
+  await store.nfs.remover('nfce');
+  for (const x of guardadas.fretes) await store.fretes.salvar(x);
   for (const x of guardadas.itens) await store.nfItens.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
 }
