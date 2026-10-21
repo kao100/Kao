@@ -13,8 +13,10 @@ import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, rankLinha, aviso, vazio, progresso } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
 import { lerFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
+import { dreComercial, linhasDoDre } from '../../logic/comercial.js';
+import { escada } from '../components/escada.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
-import { money, pct, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
+import { money, pct, num, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
 
 export async function telaComercial({ query }) {
   const busca = lerFiltro(query);
@@ -54,6 +56,13 @@ export async function telaComercial({ query }) {
         botao('Importar vendas', { tipo: 'primario', onClick: () => navigate('/arquivos/nfs') })));
   }
 
+  /**
+   * O DRE comercial sai da MESMA conta da tela Margem, e não de uma cópia dela.
+   * Duas contas separadas para o mesmo número foi exatamente o erro que ela
+   * apontou — e que custou duas telas discordando do faturamento.
+   */
+  const d = await dreComercial(faixa);
+
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
 
@@ -86,6 +95,50 @@ export async function telaComercial({ query }) {
         h('strong', 'Faturamento fiscal ≠ soma dos vendedores'),
         h('div.mini', `diferença de ${money(resumo.conferencia.diferenca)} · ${resumo.semVendedor.notas} NF(s) sem vendedor`)),
       h('span', '›')),
+
+    secao('DRE comercial',
+      exportadores(() => montarExportacaoDre(d, faixa)),
+      h('div.empilha', { style: { gap: '10px' } },
+        h('div.grade.grade--4',
+          kpi({
+            label: 'Vendas líquidas', valor: money(d.vendasLiquidas), icone: '📦',
+            nota: 'base da margem', tamanho: 'p',
+          }),
+          kpi({
+            label: 'CMV (custo)', valor: money(d.cmv), icone: '🏷️', cor: 'laranja',
+            nota: d.percentualCmv == null ? null : `${pct(d.percentualCmv, 1)} da líquida`,
+            tamanho: 'p',
+          }),
+          kpi({
+            label: 'Lucro bruto', valor: money(d.lucroBruto), icone: '📈', cor: 'ok',
+            nota: 'líquida − CMV', tamanho: 'p',
+          }),
+          kpi({
+            label: '% Lucro bruto',
+            valor: d.percentualLucroBruto == null ? '—' : pct(d.percentualLucroBruto, 1),
+            icone: '🎯', cor: 'info', nota: 'sobre a líquida', tamanho: 'p',
+          })),
+
+        escada(linhasDoDre(d), { rotuloPercentual: '% das vendas líquidas' }),
+
+        h('p.mini.muted', 'Os percentuais à direita são sobre as VENDAS LÍQUIDAS, '
+          + 'que é a base da margem. Clique numa linha com seta para abrir o que está dentro dela.'),
+
+        ...d.avisos.map((a) => aviso(a.texto, a.nivel === 'info' ? 'info' : 'atencao')),
+
+        !d.conferencia.ok && aviso(`O faturamento pelas notas (${money(d.conferencia.pelasNotas)}) `
+          + `e pela margem (${money(d.conferencia.pelaMargem)}) estão diferentes em `
+          + `${money(Math.abs(d.conferencia.diferenca))}. Abra "Margem e frete": é lá que a `
+          + 'diferença tem nome.', 'atencao',
+        botao('Ver a margem', { pequeno: true, onClick: () => navigate(href('/margem', query)) })),
+
+        h('p.mini.muted',
+          `${num(d.itensVendidos.linhas, 0)} linha(s) de produto nas notas · `
+          + `${num(d.itensVendidos.produtos, 0)} produto(s) diferentes · `
+          + `ticket médio ${money(d.ticketMedio)}. `
+          + 'A margem é medida só sobre a mercadoria: o frete cobrado fica fora da base, '
+          + 'porque o custo dele não é todo conhecido. O resultado do frete está em '
+          + '"Margem e frete", em cobrado × pago.'))),
 
     /**
      * O GRÁFICO SAIU. "Eu não preciso dele. Ele está mais atrapalhando do que
@@ -194,6 +247,49 @@ function montarExportacaoVendedores(resumo, faixa) {
         ],
         linhas: resumo.ranking,
         total: { nome: 'TOTAL', valor: resumo.total, notas: resumo.notas },
+      },
+    ],
+  };
+}
+
+function montarExportacaoDre(d, faixa) {
+  const linhas = linhasDoDre(d).map((l) => ({
+    conta: `${l.sinal === '−' ? '(−) ' : ''}${l.rotulo}`,
+    valor: l.valor,
+    percentual: l.percentual,
+  }));
+  return {
+    titulo: 'DRE comercial',
+    subtitulo: `${formatDate(faixa.de)} a ${formatDate(faixa.ate)}`,
+    periodo: `Vendas líquidas ${money(d.vendasLiquidas)} · lucro bruto ${money(d.lucroBruto)}`,
+    nomeArquivo: `dre_comercial_${faixa.de}_a_${faixa.ate}`,
+    colunas: [
+      { header: 'Conta', key: 'conta' },
+      { header: 'Valor', key: 'valor', tipo: 'money', alinhar: 'direita' },
+      { header: '% da líquida', key: 'percentual', tipo: 'pct', alinhar: 'direita' },
+    ],
+    linhas,
+    blocos: [
+      {
+        tipo: 'kpis',
+        itens: [
+          { label: 'Faturamento', valor: money(d.faturamento) },
+          { label: 'Vendas líquidas', valor: money(d.vendasLiquidas) },
+          { label: 'CMV', valor: money(d.cmv) },
+          { label: 'Lucro bruto', valor: money(d.lucroBruto) },
+          { label: '% CMV', valor: d.percentualCmv == null ? '—' : pct(d.percentualCmv, 1) },
+          { label: '% Lucro bruto', valor: d.percentualLucroBruto == null ? '—' : pct(d.percentualLucroBruto, 1) },
+        ],
+      },
+      {
+        tipo: 'tabela',
+        titulo: 'A conta, de cima para baixo',
+        colunas: [
+          { header: 'Conta', key: 'conta' },
+          { header: 'Valor', key: 'valor', tipo: 'money', alinhar: 'direita' },
+          { header: '% da líquida', key: 'percentual', tipo: 'pct', alinhar: 'direita' },
+        ],
+        linhas,
       },
     ],
   };

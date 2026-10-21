@@ -442,3 +442,56 @@ textarea.entrada { min-height: 74px; resize: vertical; font-size: 14px; }
 .filtro__campo { display: flex; flex-direction: column; gap: 4px; }
 .filtro__rotulo { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
 @media (max-width: 380px) { .filtro__grade { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- escada */
+/* O DRE e o fluxo detalhado: a conta de cima para baixo, com as linhas que
+   abrem no lugar. Linha inteira é o botão — no telefone, acertar uma seta de
+   10px é tentar três vezes. */
+.escada {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.escada__item + .escada__item { border-top: 1px solid var(--line); }
+.escada__abrir {
+  display: block; width: 100%; padding: 0; margin: 0;
+  background: none; border: 0; text-align: left; cursor: pointer; color: inherit; font: inherit;
+}
+.escada__abrir:hover .escada__linha { background: var(--card-2); }
+.escada__linha {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; transition: background .12s;
+}
+.escada__sinal {
+  width: 12px; flex: none; text-align: center;
+  color: var(--muted); font-size: 14px; font-weight: 700;
+}
+.escada__nome { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.escada__rotulo { font-size: 13.5px; font-weight: 600; }
+.escada__nota { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.escada__valor {
+  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  font-size: 14px; font-weight: 600;
+}
+.escada__pct { font-size: 11px; color: var(--muted); font-weight: 600; }
+.escada__seta { flex: none; width: 14px; color: var(--muted); font-size: 11px; text-align: right; }
+
+/* subtotal: a linha de "=" que fecha um trecho da conta */
+.escada__item--subtotal { background: var(--card-2); }
+.escada__item--subtotal .escada__rotulo { text-transform: uppercase; letter-spacing: .02em; font-size: 12px; }
+.escada__item--subtotal .escada__valor { font-size: 15px; }
+/* resultado: o número da empresa, o que ela leva para o pai */
+.escada__item--resultado { background: var(--marca-fraca); }
+.escada__item--resultado .escada__rotulo { text-transform: uppercase; letter-spacing: .02em; font-size: 12px; }
+.escada__item--resultado .escada__valor { font-size: 17px; color: var(--marca); }
+
+.escada__filhos { background: var(--card-2); border-top: 1px solid var(--line); }
+.escada__filho {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 13px 7px 35px;
+}
+.escada__filho + .escada__filho { border-top: 1px solid var(--line); }
+.escada__filho .escada__valor { font-size: 12.5px; font-weight: 600; }
+.escada__filho .num { font-family: var(--fonte-num); font-variant-numeric: tabular-nums; }
+.escada .num { font-family: var(--fonte-num); font-variant-numeric: tabular-nums; }

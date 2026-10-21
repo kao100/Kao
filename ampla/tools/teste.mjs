@@ -38,6 +38,7 @@ const filtro = await import('../src/logic/filtro.js');
 const carteiraMod = await import('../src/logic/carteira.js');
 const abcMod = await import('../src/logic/abc.js');
 const margemMod = await import('../src/logic/margem.js');
+const comercialMod = await import('../src/logic/comercial.js');
 const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
@@ -1072,6 +1073,112 @@ console.log('\n▶ O faturamento da Margem é o MESMO da tela Hoje');
   for (const n of ['nfat_3001', 'nfat_3002']) await store.nfs.remover(n);
   await store.nfItens.remover('itfat_3001');
   await store.pedidos.remover('ped_600');
+  for (const x of guardadas.fretes) await store.fretes.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
+console.log('\n▶ O DRE comercial fecha: bruta − devolução − fora da base − CMV = lucro bruto');
+{
+  /**
+   * "Da aba comercial, o que eu acrescentaria que você não tem é as vendas
+   *  líquidas, ou seja, base para margem, CMV sobre líquida, e CMV custo. É
+   *  tipo um DRE. Comercial."
+   *
+   * Um DRE que não fecha é pior que nenhum: cada linha parece certa e o total
+   * mente. Então o que este teste verifica não é cada número — é a CONTA. Cada
+   * degrau da escada tem de sair do anterior, e a soma do que sai da base tem
+   * de explicar exatamente a diferença entre faturamento e vendas líquidas.
+   *
+   * E o faturamento daqui tem de ser o mesmo da tela Hoje, pelo mesmo motivo de
+   * antes: dois números com o mesmo nome em telas diferentes é a base inteira
+   * perdendo credibilidade.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    pedidos: await store.pedidos.listar(),
+    fretes: await store.fretes.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.fretes) await store.fretes.remover(x.id);
+  await store.vendedores.salvar({ id: 'vDRE', nome: 'VENDEDOR DRE' });
+
+  const faixa = { de: '2026-10-01', ate: '2026-10-31' };
+  const nota = (n, prod, frete, extra = {}) => store.nfs.salvar({
+    id: `ndre_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-12',
+    valorTotal: prod + frete, valorProdutos: prod, valorFrete: frete,
+    vendedorId: 'vDRE', status: 'autorizada', operacao: 'saida',
+    devolucao: false, devolucaoDeCompra: false, ...extra,
+  });
+
+  /* venda com item detalhado e custo de pedido: é ela que forma a base da margem */
+  await nota(4001, 10000, 1000, { pedidoNumero: '700' });
+  await store.nfItens.salvar({
+    id: 'idre_4001', nfId: 'ndre_4001', data: '2026-10-12', nfStatus: 'autorizada',
+    vendedorId: 'vDRE', produtoId: 'pdre', descricao: 'ITEM DRE', quantidade: 1, valorTotal: 10000,
+  });
+  await store.pedidos.salvar({
+    id: 'ped_700', numero: '700', data: '2026-10-08', valorTotal: 11000, valorCusto: 6000,
+  });
+  /* venda sem item nenhum: entra no faturamento, não entra na base da margem */
+  await nota(4002, 4000, 0);
+
+  const d1 = await comercialMod.dreComercial(faixa);
+  const hoje1 = await revenue.resumo(faixa);
+
+  igual('o faturamento do DRE é o mesmo da tela Hoje', d1.faturamento, hoje1.total);
+  ok('e os dois caminhos até ele conferem', d1.conferencia.ok, JSON.stringify(d1.conferencia));
+  igual('vendas brutas = faturamento quando não houve devolução', d1.vendasBrutas, 15000);
+  igual('o frete cobrado sai da base', d1.freteCobrado, 1000);
+  igual('a nota sem item também sai da base', d1.semItens.valor, 4000);
+  igual('nada fica sem explicação', d1.naoExplicado, 0);
+  igual('vendas líquidas = só a mercadoria com item', d1.vendasLiquidas, 10000);
+  igual('o CMV é o custo do pedido', d1.cmv, 6000);
+  igual('o lucro bruto é líquida − CMV', d1.lucroBruto, 4000);
+  igual('o CMV sobre a líquida', Math.round(d1.percentualCmv * 10) / 10, 60);
+  igual('e o lucro bruto sobre a líquida', Math.round(d1.percentualLucroBruto * 10) / 10, 40);
+  igual('os dois percentuais fecham em 100',
+    Math.round((d1.percentualCmv + d1.percentualLucroBruto) * 10) / 10, 100);
+  igual('os produtos diferentes são contados', d1.itensVendidos.produtos, 1);
+
+  /* a escada desenhada é a MESMA conta: cada degrau sai do anterior */
+  const linhas = comercialMod.linhasDoDre(d1);
+  const valor = (id) => linhas.find((l) => l.id === id)?.valor;
+  igual('escada: bruta + devolução = faturamento',
+    valor('dre-brutas') + (valor('dre-devolucoes') || 0), valor('dre-faturamento'));
+  igual('escada: faturamento + fora da base = vendas líquidas',
+    valor('dre-faturamento') + (valor('dre-fora-da-base') || 0), valor('dre-liquidas'));
+  igual('escada: vendas líquidas + CMV = lucro bruto',
+    valor('dre-liquidas') + valor('dre-cmv'), valor('dre-lucro-bruto'));
+  ok('a linha "fora da base" abre e diz o que é',
+    (linhas.find((l) => l.id === 'dre-fora-da-base')?.detalhe || []).length === 2,
+    JSON.stringify(linhas.find((l) => l.id === 'dre-fora-da-base')?.detalhe));
+
+  /* agora uma DEVOLUÇÃO de venda: abate o faturamento sem mexer na base */
+  await nota(4003, 1000, 0, { operacao: 'entrada', devolucao: true });
+  const d2 = await comercialMod.dreComercial(faixa);
+  const hoje2 = await revenue.resumo(faixa);
+
+  igual('a devolução aparece em linha própria', d2.devolucoes.valor, 1000);
+  igual('as vendas brutas não mudam', d2.vendasBrutas, 15000);
+  igual('o faturamento cai o valor devolvido', d2.faturamento, 14000);
+  igual('e continua igual ao da tela Hoje', d2.faturamento, hoje2.total);
+  igual('a base da margem não se mexe', d2.vendasLiquidas, 10000);
+  igual('nem o lucro bruto', d2.lucroBruto, 4000);
+  igual('a conta continua fechando sem resto', d2.naoExplicado, 0);
+  const l2 = comercialMod.linhasDoDre(d2);
+  const v2 = (id) => l2.find((l) => l.id === id)?.valor;
+  igual('escada com devolução: bruta − devolvido = faturamento',
+    v2('dre-brutas') + v2('dre-devolucoes'), v2('dre-faturamento'));
+  igual('e a devolução entra negativa na escada', v2('dre-devolucoes'), -1000);
+
+  for (const n of ['ndre_4001', 'ndre_4002', 'ndre_4003']) await store.nfs.remover(n);
+  await store.nfItens.remover('idre_4001');
+  await store.pedidos.remover('ped_700');
   for (const x of guardadas.fretes) await store.fretes.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
   for (const x of guardadas.itens) await store.nfItens.salvar(x);

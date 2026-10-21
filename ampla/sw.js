@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v70';
+const CACHE = 'ampla-v71';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -21,11 +21,11 @@ const APP_SHELL = [
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/abc.js', 'src/logic/routine.js',
   'src/logic/reports.js', 'src/logic/diagnostico.js', 'src/logic/suggest.js', 'src/logic/fotografia.js', 'src/logic/fluxo.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
-  'src/logic/margem.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
+  'src/logic/margem.js', 'src/logic/comercial.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
   'src/ui/shell.js', 'src/ui/nuvem-ui.js',
   'src/ui/components/ui.js', 'src/ui/components/sheet.js', 'src/ui/components/toast.js',
   'src/ui/components/chart.js', 'src/ui/components/table.js', 'src/ui/components/filtro.js',
-  'src/ui/components/marca.js',
+  'src/ui/components/marca.js', 'src/ui/components/escada.js',
   'src/ui/views/comercial.js', 'src/ui/views/produtos.js', 'src/ui/views/comissoes.js',
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
   'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',
