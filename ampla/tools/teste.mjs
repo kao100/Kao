@@ -40,6 +40,7 @@ const abcMod = await import('../src/logic/abc.js');
 const margemMod = await import('../src/logic/margem.js');
 const comercialMod = await import('../src/logic/comercial.js');
 const caixaMod = await import('../src/logic/caixa.js');
+const comprasLog = await import('../src/logic/compras.js');
 const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
@@ -63,6 +64,14 @@ function ok(descricao, condicao, detalhe = '') {
 function igual(descricao, recebido, esperado) {
   ok(descricao, JSON.stringify(recebido) === JSON.stringify(esperado),
     `recebido ${JSON.stringify(recebido)}, esperado ${JSON.stringify(esperado)}`);
+}
+
+async function limparClassificacao(...nomes) {
+  /* salvarConfig funde objetos: mandar {} não apaga chave nenhuma. Para tirar
+     uma conta da classificação, o valor tem de ir como null. */
+  await store.salvarConfig({
+    dre: { classificacao: Object.fromEntries(nomes.map((n) => [n, null])) },
+  });
 }
 
 async function importar(fonteId, nome, conteudo, extras = {}) {
@@ -2446,8 +2455,10 @@ console.log('\n▶ O DRE gerencial: cada degrau sai do anterior, e o que não fo
   for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
   for (const n of ['ndg_8101', 'ndg_8102']) await store.nfs.remover(n);
   for (const n of ['pdg_8101', 'pdg_8102']) await store.pedidos.remover(n);
+  await limparClassificacao('SIMPLES NACIONAL DAS', 'FRETE SOBRE VENDAS', 'ALUGUEL DA LOJA',
+    'EMPRESTIMO CAPITAL DE GIRO', 'CAUCAO DO ALUGUEL', 'CONTA QUE NINGUEM CLASSIFICOU');
   await store.salvarConfig({
-    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [], classificacao: {} },
+    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [] },
   });
   for (const x of guardadas.pagar) await store.pagar.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
@@ -2554,11 +2565,101 @@ console.log('\n▶ Caixa do período: para onde o dinheiro foi, sem nada escondi
 
   for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
   for (const x of await store.receber.listar()) await store.receber.remover(x.id);
+  await limparClassificacao('COMPRA DE MERCADORIA', 'ALUGUEL', 'ENERGIA');
   await store.salvarConfig({
-    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [], classificacao: {} },
+    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [] },
   });
   for (const x of guardadas.pagar) await store.pagar.salvar(x);
   for (const x of guardadas.receber) await store.receber.salvar(x);
+}
+
+console.log('\n▶ Compras: a meta é dela, e zero sem classificação não é "comprei zero"');
+{
+  /**
+   * "Eu vou colocar uma meta, uma porcentagem, para não ultrapassar isso. (…)
+   *  Eu não consideraria meta de 70%, eu acho muito."
+   *
+   * Duas coisas que o app não pode fazer aqui: chegar com uma meta inventada, e
+   * mostrar "R$ 0,00 comprados" quando na verdade ninguém disse quais contas do
+   * plano são compra. A segunda é a pior: zero por falta de informação parece
+   * uma notícia ótima no mês em que ela está tentando cortar custo.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pagar: await store.pagar.listar(),
+    cfg: await store.config(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pagar) await store.pagar.remover(x.id);
+
+  await store.nfs.salvar({
+    id: 'nfcp', numero: '5500', dataEmissao: '2027-01-10', mes: '2027-01', valorTotal: 200000,
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  const conta = (id, categoria, valor, vencimento, quem) => store.pagar.salvar({
+    id: `cp_${id}`, categoria, valor, vencimento, mes: vencimento.slice(0, 7),
+    fornecedorNome: quem, descricao: categoria, status: 'aberto',
+  });
+  await conta(1, 'SIMPLES NACIONAL DAS', 12000, '2027-01-20', 'RECEITA FEDERAL');
+  await conta(2, 'COMPRA DE MERCADORIA', 60000, '2027-01-06', 'FORNECEDOR Z');
+  await conta(3, 'COMPRA DE MERCADORIA', 25000, '2027-01-14', 'FORNECEDOR W');
+  await conta(4, 'ALUGUEL', 7000, '2027-01-10', 'IMOBILIARIA');
+
+  /* nada classificado: a tela não pode dizer "comprei zero" */
+  await limparClassificacao('SIMPLES NACIONAL DAS', 'COMPRA DE MERCADORIA', 'ALUGUEL');
+  await store.salvarConfig({ dre: { contasDeMercadoria: [] }, compras: { metaPercentual: null } });
+  const cego = await comprasLog.compras({ mes: '2027-01', meses: 3 });
+  igual('sem conta marcada, o app assume que não sabe', cego.sabeOQueECompra, false);
+  igual('e o comprado é zero por falta de informação, não por falta de compra',
+    cego.atual.comprado, 0);
+  igual('sem meta, não existe meta em reais', cego.atual.meta, null);
+  igual('nem diferença para cobrar', cego.atual.diferenca, null);
+
+  /* classificada, e com a meta dela */
+  await store.salvarConfig({
+    dre: { classificacao: { 'COMPRA DE MERCADORIA': 'mercadoria', 'SIMPLES NACIONAL DAS': 'deducao' } },
+  });
+  const r = await comprasLog.compras({ mes: '2027-01', meses: 3 });
+  igual('agora o app sabe o que é compra', r.sabeOQueECompra, true);
+  igual('receita líquida = faturamento − impostos', r.atual.receitaLiquida, 188000);
+  igual('o aluguel não entra na compra', r.atual.comprado, 85000);
+  igual('e o percentual sai mesmo sem meta',
+    Math.round(r.atual.percentual * 10) / 10, Math.round((85000 / 188000) * 1000) / 10);
+  igual('sem meta definida, o app não finge que há uma', r.atual.meta, null);
+
+  await comprasLog.definirMeta(55);
+  const m = await comprasLog.compras({ mes: '2027-01', meses: 3 });
+  igual('a meta em reais é a porcentagem da líquida', m.atual.meta, 103400);
+  igual('a diferença é comprado − meta', m.atual.diferenca, 85000 - 103400);
+  igual('e o app diz que está dentro', m.atual.dentroDaMeta, true);
+
+  await comprasLog.definirMeta(40);
+  const m2 = await comprasLog.compras({ mes: '2027-01', meses: 3 });
+  igual('com a meta mais apertada, está acima', m2.atual.dentroDaMeta, false);
+  igual('e diz quanto passou', m2.atual.diferenca, 85000 - 75200);
+
+  await comprasLog.definirMeta('');
+  igual('a meta pode ser tirada',
+    (await comprasLog.compras({ mes: '2027-01', meses: 3 })).metaPercentual, null);
+
+  const forn = m.fornecedores;
+  igual('o ranking soma o comprado do mês', forn.total, 85000);
+  igual('o maior fornecedor vem primeiro', forn.linhas[0].nome, 'FORNECEDOR Z');
+  igual('e abre a classe A', forn.linhas[0].classe, 'A');
+  igual('as semanas do mês somam o mesmo total',
+    Math.round(m.semanas.reduce((a, s) => a + s.valor, 0) * 100) / 100, 85000);
+  igual('cada compra aparece uma a uma', m.lancamentos.length, 2);
+  igual('os três meses pedidos vieram', m.porMes.length, 3);
+
+  for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
+  await store.nfs.remover('nfcp');
+  await limparClassificacao('SIMPLES NACIONAL DAS', 'COMPRA DE MERCADORIA', 'ALUGUEL');
+  await store.salvarConfig({
+    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [] },
+    compras: { metaPercentual: guardadas.cfg.compras?.metaPercentual ?? null },
+  });
+  for (const x of guardadas.pagar) await store.pagar.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
 }
 
 console.log('\n▶ Pasta do mês');

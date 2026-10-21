@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v73';
+const CACHE = 'ampla-v74';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -21,7 +21,7 @@ const APP_SHELL = [
   'src/logic/ingest.js', 'src/logic/link.js', 'src/logic/revenue.js', 'src/logic/commission.js',
   'src/logic/abc.js', 'src/logic/routine.js',
   'src/logic/reports.js', 'src/logic/diagnostico.js', 'src/logic/suggest.js', 'src/logic/fotografia.js', 'src/logic/fluxo.js', 'src/logic/filtro.js', 'src/logic/carteira.js',
-  'src/logic/margem.js', 'src/logic/comercial.js', 'src/logic/caixa.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
+  'src/logic/margem.js', 'src/logic/comercial.js', 'src/logic/caixa.js', 'src/logic/compras.js', 'src/logic/rt.js', 'src/logic/backup.js', 'src/logic/nuvem.js',
   'src/ui/shell.js', 'src/ui/nuvem-ui.js',
   'src/ui/components/ui.js', 'src/ui/components/sheet.js', 'src/ui/components/toast.js',
   'src/ui/components/chart.js', 'src/ui/components/table.js', 'src/ui/components/filtro.js',
@@ -30,7 +30,7 @@ const APP_SHELL = [
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
   'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',
   'src/ui/views/clientes.js', 'src/ui/views/margem.js', 'src/ui/views/rt.js',
-  'src/ui/views/fluxo.js', 'src/ui/views/dre.js', 'src/ui/views/caixa.js',
+  'src/ui/views/fluxo.js', 'src/ui/views/dre.js', 'src/ui/views/caixa.js', 'src/ui/views/compras.js',
   'src/styles/theme.css', 'src/styles/base.css', 'src/styles/components.css',
   'src/styles/views.css', 'src/styles/print.css',
 ].map((caminho) => BASE + caminho);
