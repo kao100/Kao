@@ -26,6 +26,7 @@ import { telaFechamento } from './ui/views/fechamento.js';
 import { telaOrcamentos } from './ui/views/orcamentos.js';
 import { telaClientes, telaCliente } from './ui/views/clientes.js';
 import { telaMargem } from './ui/views/margem.js';
+import { telaDre } from './ui/views/dre.js';
 
 /**
  * CINCO LUGARES, E SÓ.
@@ -68,6 +69,7 @@ const ROTAS = [
    */
   { path: '/conciliacao', view: telaConciliacao, titulo: 'O que o app precisa saber' },
   { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
+  { path: '/dre', view: telaDre, titulo: 'DRE gerencial' },
   { path: '/fechamento', view: telaFechamento, titulo: 'Fechamento do mês' },
   { path: '/arquivos', view: telaArquivos, titulo: 'Mandar os relatórios' },
   { path: '/arquivos/:fonte', view: telaImportar, titulo: 'Mandar relatório' },

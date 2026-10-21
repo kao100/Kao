@@ -2318,6 +2318,141 @@ console.log('\n▶ DRE pelo plano de contas');
 }
 
 
+console.log('\n▶ O DRE gerencial: cada degrau sai do anterior, e o que não foi classificado aparece');
+{
+  /**
+   * "A receita bruta, a receita líquida, a margem de contribuição, EBITDA. Aí
+   *  você abre as deduções de receita e vê: Simples DAS, PIS, devolução de
+   *  vendas. Aí a gente abre as despesas diretas, que é frete, comissão de
+   *  vendedores. (…) Como você vai saber isso? Eu posso te categorizar."
+   *
+   * O risco deste DRE não é errar uma conta: é empurrar para um degrau qualquer
+   * a conta que ninguém classificou, e aí o EBITDA fica bonito porque metade da
+   * despesa foi parar depois dele. Então o que se verifica aqui é justamente o
+   * contrário: conta sem classificação aparece em linha própria, desconta do
+   * lucro líquido, e não some dentro de nenhum degrau.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    pagar: await store.pagar.listar(),
+    cfg: await store.config(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.pagar) await store.pagar.remover(x.id);
+
+  const nota = (n, valor, extra = {}) => store.nfs.salvar({
+    id: `ndg_${n}`, numero: String(n), dataEmissao: '2026-11-10', mes: '2026-11',
+    valorTotal: valor, status: 'autorizada', operacao: 'saida',
+    devolucao: false, devolucaoDeCompra: false, pedidoNumero: String(n), ...extra,
+  });
+  const pedido = (n, custo, total) => store.pedidos.salvar({
+    id: `pdg_${n}`, numero: String(n), data: '2026-11-08', valorTotal: total, valorCusto: custo,
+  });
+  await nota(8101, 100000); await pedido(8101, 60000, 100000);
+  await nota(8102, 10000, { operacao: 'entrada', devolucao: true }); await pedido(8102, 0, 10000);
+
+  const pagar = (id, categoria, valor) => store.pagar.salvar({
+    id: `pgdg_${id}`, categoria, valor, vencimento: '2026-11-15', mes: '2026-11',
+    fornecedorNome: 'FORNECEDOR TESTE', descricao: categoria, situacao: 'aberto',
+  });
+  await pagar(1, 'SIMPLES NACIONAL DAS', 8000);
+  await pagar(2, 'FRETE SOBRE VENDAS', 5000);
+  await pagar(3, 'ALUGUEL DA LOJA', 7000);
+  await pagar(4, 'EMPRESTIMO CAPITAL DE GIRO', 3000);
+  await pagar(5, 'CAUCAO DO ALUGUEL', 2000);
+  await pagar(6, 'CONTA QUE NINGUEM CLASSIFICOU', 1000);
+
+  /* sem classificação nenhuma: TUDO cai na linha que pede o clique */
+  await store.salvarConfig({ dre: { contasDeMercadoria: [], classificacao: {} } });
+  const cru = (await dre.dre('2026-11')).gerencial;
+  igual('sem classificação, nenhuma despesa entra num degrau',
+    [cru.despesasDiretas.total, cru.despesasIndiretas.total, cru.emprestimos.total,
+      cru.naoOperacionais.total], [0, 0, 0, 0]);
+  igual('e todas aparecem na linha "sem classificação"', cru.semClassificacao.total, 26000);
+  igual('a devolução é dedução mesmo antes de qualquer classificação', cru.deducoes.total, 10000);
+  igual('a receita bruta é antes da devolução', cru.receitaBruta, 100000);
+  igual('e a líquida já desconta ela', cru.receitaLiquida, 90000);
+
+  /* a sugestão é sugestão: ela não classifica nada sozinha */
+  igual('o app sugere imposto pelo nome', dre.sugerirGrupo('SIMPLES NACIONAL DAS'), 'deducao');
+  igual('e frete como despesa direta', dre.sugerirGrupo('FRETE SOBRE VENDAS'), 'direta');
+  igual('mas não inventa grupo para o que não reconhece',
+    dre.sugerirGrupo('CONTA QUE NINGUEM CLASSIFICOU'), null);
+
+  /* agora classificada, do jeito que ela escolheria */
+  await store.salvarConfig({
+    dre: {
+      classificacao: {
+        'SIMPLES NACIONAL DAS': 'deducao',
+        'FRETE SOBRE VENDAS': 'direta',
+        'ALUGUEL DA LOJA': 'indireta',
+        'EMPRESTIMO CAPITAL DE GIRO': 'emprestimo',
+        'CAUCAO DO ALUGUEL': 'naoOperacional',
+      },
+    },
+  });
+  const g = (await dre.dre('2026-11')).gerencial;
+
+  igual('deduções = imposto + devolução', g.deducoes.total, 18000);
+  igual('receita líquida = bruta − deduções', g.receitaLiquida, 82000);
+  igual('o CMV vem do custo do pedido', g.cmv, 60000);
+  igual('lucro bruto = líquida − CMV', g.lucroBruto, 22000);
+  igual('despesas diretas', g.despesasDiretas.total, 5000);
+  igual('margem de contribuição = lucro bruto − diretas', g.margemContribuicao, 17000);
+  igual('despesas indiretas', g.despesasIndiretas.total, 7000);
+  igual('EBITDA = margem de contribuição − indiretas', g.ebitda, 10000);
+  igual('a conta não classificada continua à vista', g.semClassificacao.total, 1000);
+  igual('lucro líquido desconta dívida, não operacional E o não classificado',
+    g.lucroLiquido, 10000 - 3000 - 2000 - 1000);
+  igual('os percentuais são sobre a receita líquida',
+    Math.round(g.percentuais.ebitda * 10) / 10, Math.round((10000 / 82000) * 1000) / 10);
+
+  /* e a escada desenhada é a mesma conta, degrau por degrau */
+  const linhas = dre.linhasDoDreGerencial(g);
+  const v = (id) => linhas.find((l) => l.id === id)?.valor;
+  igual('escada: bruta + deduções = líquida',
+    v('g-receita-bruta') + v('g-deducoes'), v('g-receita-liquida'));
+  igual('escada: líquida + CMV = lucro bruto',
+    v('g-receita-liquida') + v('g-cmv'), v('g-lucro-bruto'));
+  igual('escada: lucro bruto + diretas = margem de contribuição',
+    v('g-lucro-bruto') + v('g-diretas'), v('g-margem-contribuicao'));
+  igual('escada: margem de contribuição + indiretas = EBITDA',
+    v('g-margem-contribuicao') + v('g-indiretas'), v('g-ebitda'));
+  igual('escada: EBITDA + dívida + não operacional + sem classificação = lucro líquido',
+    v('g-ebitda') + v('g-emprestimos') + v('g-nao-operacionais') + v('g-sem-classificacao'),
+    v('g-lucro-liquido'));
+  const dedu = linhas.find((l) => l.id === 'g-deducoes');
+  ok('a linha de deduções abre e nomeia a devolução',
+    dedu.detalhe.some((x) => x.nome === 'Devoluções de venda' && x.valor === 10000),
+    JSON.stringify(dedu.detalhe));
+
+  /* conta marcada como mercadoria sai das despesas: o CMV já a contém */
+  await store.salvarConfig({ dre: { classificacao: { 'ALUGUEL DA LOJA': 'mercadoria' } } });
+  const g2 = (await dre.dre('2026-11')).gerencial;
+  igual('marcada como mercadoria, a conta sai das indiretas', g2.despesasIndiretas.total, 0);
+  igual('e aparece à parte, para não sumir', g2.compras.total, 7000);
+
+  /* o custo que ela informou a mão vale no DRE também */
+  await store.salvarConfig({ dre: { classificacao: { 'ALUGUEL DA LOJA': 'indireta' } } });
+  const p1 = await store.pedidos.obter('pdg_8101');
+  await store.pedidos.salvar({ ...p1, custoManual: 45000, custoManualEm: Date.now() });
+  const g3 = (await dre.dre('2026-11')).gerencial;
+  igual('o custo informado a mão manda no CMV do DRE', g3.cmv, 45000);
+  igual('e o lucro bruto acompanha', g3.lucroBruto, 82000 - 45000);
+
+  for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
+  for (const n of ['ndg_8101', 'ndg_8102']) await store.nfs.remover(n);
+  for (const n of ['pdg_8101', 'pdg_8102']) await store.pedidos.remover(n);
+  await store.salvarConfig({
+    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [], classificacao: {} },
+  });
+  for (const x of guardadas.pagar) await store.pagar.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
 console.log('\n▶ Pasta do mês');
 {
   const p = await dossie.pasta('2026-09');

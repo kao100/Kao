@@ -39,6 +39,7 @@ export const OUTRAS = [
   { path: '/comercial', icone: '📊', label: 'Comercial', titulo: 'Comercial' },
   { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
   { path: '/margem', icone: '📐', label: 'Margem e frete', titulo: 'Margem e frete' },
+  { path: '/dre', icone: '📋', label: 'DRE gerencial', titulo: 'DRE gerencial' },
   { path: '/produtos', icone: '📦', label: 'Produtos e curva ABC', titulo: 'Produtos e curva ABC' },
   { path: '/clientes', icone: '👥', label: 'Clientes', titulo: 'Clientes' },
   { path: '/rt', icone: '🤝', label: 'RT', titulo: 'RT (indicação)' },

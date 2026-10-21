@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v71';
+const CACHE = 'ampla-v72';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -30,7 +30,7 @@ const APP_SHELL = [
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
   'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',
   'src/ui/views/clientes.js', 'src/ui/views/margem.js', 'src/ui/views/rt.js',
-  'src/ui/views/fluxo.js',
+  'src/ui/views/fluxo.js', 'src/ui/views/dre.js',
   'src/styles/theme.css', 'src/styles/base.css', 'src/styles/components.css',
   'src/styles/views.css', 'src/styles/print.css',
 ].map((caminho) => BASE + caminho);
