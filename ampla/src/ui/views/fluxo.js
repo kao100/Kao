@@ -19,6 +19,7 @@ import {
 import * as store from '../../core/store.js';
 import { ok } from '../components/toast.js';
 import { money, formatDate, today, monthLabel, monthKey } from '../../core/format.js';
+import { telaCaixaRealizado, alternador } from './caixa.js';
 
 const COLUNAS = [
   { header: 'Dia', key: 'data', tipo: 'data' },
@@ -29,7 +30,18 @@ const COLUNAS = [
   { header: 'Saldo projetado', key: 'saldoProjetado', tipo: 'dinheiro', alinhar: 'direita' },
 ];
 
-export async function telaFluxo({ query }) {
+export async function telaFluxo(ctx) {
+  /**
+   * DUAS PERGUNTAS, UMA TELA DE CAIXA. "Dá para pagar?" olha para frente e é a
+   * projeção de sempre; "para onde foi?" olha para trás e é o período fechado.
+   * Separar em dois itens de menu seria mais uma coisa para decidir antes de
+   * olhar — a barra tem cinco lugares e já está cheia.
+   */
+  if (ctx.query.v === 'realizado') return telaCaixaRealizado(ctx);
+  return telaProjecao(ctx);
+}
+
+async function telaProjecao({ query }) {
   const horizonte = query.h || '30';
   const base = query.de || today();
   const periodo = query.de && query.ate
@@ -43,6 +55,7 @@ export async function telaFluxo({ query }) {
 
   if (!r.temSaldo) {
     return h('div.empilha', { style: { gap: '14px' } },
+      alternador('projecao'),
       filtros(horizonte, query),
       vazio('🏦', 'Informe o saldo de hoje',
         'O fluxo de caixa parte do dinheiro que existe agora. Você digita esse número uma vez por '
@@ -66,6 +79,7 @@ export async function telaFluxo({ query }) {
   }));
 
   return h('div.empilha', { style: { gap: '14px' } },
+    alternador('projecao'),
     filtros(horizonte, query),
 
     /* ------------------------------------------------------------- hoje */

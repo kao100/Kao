@@ -18,10 +18,18 @@ export const CRITERIOS = {
   margem: { label: 'Margem', sufixo: 'R$', descricao: 'O que realmente dá resultado.' },
 };
 
-/** Fatia A = 80% do acumulado, B = até 95%, C = o resto. */
-export function classe(acumuladoPercentual) {
-  if (acumuladoPercentual <= 80) return 'A';
-  if (acumuladoPercentual <= 95) return 'B';
+/**
+ * Fatia A = as linhas que formam os primeiros 80% do acumulado; B até 95%; C o
+ * resto. O parâmetro é o acumulado ANTES desta linha, e não depois: a linha que
+ * ATRAVESSA os 80% ainda é A.
+ *
+ * A diferença aparece no caso que mais importa: quando uma única conta já é 90%
+ * do gasto, a regra antiga a jogava em B e a curva ficava sem classe A nenhuma
+ * — justamente a conta por onde se começa a cortar.
+ */
+export function classe(acumuladoAntes) {
+  if (acumuladoAntes < 80) return 'A';
+  if (acumuladoAntes < 95) return 'B';
   return 'C';
 }
 
@@ -193,6 +201,7 @@ export async function curva({ de, ate, criterio = 'faturamento', por = 'produto'
 
   const resultado = ordenadas.map((linha, i) => {
     const valor = valorDe(linha);
+    const antes = total ? (acumulado / total) * 100 : 0;
     acumulado += valor;
     const acumuladoPercentual = total ? (acumulado / total) * 100 : 0;
     return {
@@ -201,7 +210,7 @@ export async function curva({ de, ate, criterio = 'faturamento', por = 'produto'
       valorCriterio: valor,
       participacao: total ? (valor / total) * 100 : 0,
       acumuladoPercentual,
-      classe: classe(acumuladoPercentual),
+      classe: classe(antes),
     };
   });
 

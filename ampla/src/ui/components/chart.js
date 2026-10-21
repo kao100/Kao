@@ -77,7 +77,7 @@ export function grafBarras(itens, { altura = 150, cor = 'var(--azul)', formatar 
         h('rect.gr__barra', {
           x: cx - larguraBarra / 2, y: yTopo, width: larguraBarra, height: alt, rx: 3,
           style: { fill: item.cor || cor },
-        }),
+        }, h('title', `${item.rotulo}: ${formatar(item.valor)}`)),
         item.meta != null && item.meta > 0 && h('line.gr__meta', {
           x1: cx - larguraBarra / 2 - 2, x2: cx + larguraBarra / 2 + 2, y1: y(item.meta), y2: y(item.meta),
         }),
@@ -87,6 +87,62 @@ export function grafBarras(itens, { altura = 150, cor = 'var(--azul)', formatar 
         h('text.gr__rotulo', { x: cx, y: altura - 5, 'text-anchor': 'middle' }, item.rotulo),
       ];
     }));
+}
+
+/**
+ * DUAS SÉRIES LADO A LADO — entrou × saiu, semana a semana.
+ *
+ * "Aí ele mostra um gráfico de entradas, saídas por semana. (…) eu consigo
+ *  colocar o mouse em cima e aparece o valor gasto em cada um."
+ *
+ * O valor no topo da barra não cabe quando são duas por semana, então ele vive
+ * no <title>: no computador aparece ao parar o mouse em cima, e no telefone
+ * basta segurar. O número também fica escrito na tabela logo abaixo — gráfico
+ * que só responde ao mouse não serve para quem lê no celular.
+ *
+ * @param {Array<{rotulo:string, a:number, b:number}>} itens
+ */
+export function grafBarrasDuplas(itens, {
+  altura = 160, corA = 'var(--verde)', corB = 'var(--laranja)',
+  nomeA = 'Entradas', nomeB = 'Saídas', formatar = moneyShort,
+} = {}) {
+  if (!itens.length) return h('div.vazio.pequeno', 'Sem dados no período.');
+  const larg = 320;
+  const topo = 10;
+  const base = 20;
+  const valores = itens.flatMap((i) => [i.a || 0, i.b || 0]);
+  const max = Math.max(...valores, 0);
+  const min = Math.min(...valores, 0);
+  const faixa = (max - min) || 1;
+  const alturaUtil = altura - topo - base;
+  const y = (v) => topo + alturaUtil * (1 - (v - min) / faixa);
+  const passoX = (larg - 12) / itens.length;
+  const largura = Math.min(14, (passoX * 0.62) / 2);
+
+  const barra = (cx, valor, cor, nome, rotulo) => h('rect.gr__barra', {
+    x: cx - largura / 2, y: y(Math.max(valor, 0)), width: largura,
+    height: Math.max(Math.abs(y(Math.min(valor, 0)) - y(Math.max(valor, 0))), 2),
+    rx: 3, style: { fill: cor },
+  }, h('title', `${rotulo} · ${nome}: ${formatar(valor)}`));
+
+  return h('svg.gr', { viewBox: `0 0 ${larg} ${altura}`, style: { height: `${altura}px` } },
+    min < 0 && h('line.gr__zero', { x1: 6, x2: larg - 6, y1: y(0), y2: y(0) }),
+    ...itens.flatMap((item, i) => {
+      const centro = 6 + passoX * i + passoX / 2;
+      return [
+        barra(centro - largura * 0.6, item.a || 0, corA, nomeA, item.rotulo),
+        barra(centro + largura * 0.6, item.b || 0, corB, nomeB, item.rotulo),
+        h('text.gr__rotulo', { x: centro, y: altura - 5, 'text-anchor': 'middle' }, item.rotulo),
+      ];
+    }));
+}
+
+/** A legenda das duas séries, para a cor ter nome. */
+export function legenda(...series) {
+  return h('div.linha', { style: { gap: '14px', flexWrap: 'wrap', marginTop: '6px' } },
+    ...series.map(({ nome, cor }) => h('span.linha', { style: { gap: '5px' } },
+      h('span', { style: { width: '10px', height: '10px', borderRadius: '3px', background: cor, display: 'inline-block' } }),
+      h('span.mini.muted', nome))));
 }
 
 /** Mini gráfico sem eixos, para caber dentro de um card. */

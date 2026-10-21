@@ -39,6 +39,7 @@ const carteiraMod = await import('../src/logic/carteira.js');
 const abcMod = await import('../src/logic/abc.js');
 const margemMod = await import('../src/logic/margem.js');
 const comercialMod = await import('../src/logic/comercial.js');
+const caixaMod = await import('../src/logic/caixa.js');
 const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
@@ -2451,6 +2452,113 @@ console.log('\n▶ O DRE gerencial: cada degrau sai do anterior, e o que não fo
   for (const x of guardadas.pagar) await store.pagar.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
+console.log('\n▶ Caixa do período: para onde o dinheiro foi, sem nada escondido');
+{
+  /**
+   * "Aí ele mostra a situação dos lançamentos: entradas, atrasados, em aberto,
+   *  total. (…) Aí tem o desembolso por conta. O que que eu gastei mais. (…) E
+   *  tem uma curva ABC dos desembolsos. Isso é interessante para eu saber aonde
+   *  eu posso cortar."
+   *
+   * O risco aqui é a soma por cima: um total que não bate com as partes, ou uma
+   * semana sumindo do gráfico porque não teve movimento. Semana vazia é
+   * informação — o gráfico com buraco no meio faz a pessoa ler a semana errada.
+   */
+  const guardadas = {
+    receber: await store.receber.listar(),
+    pagar: await store.pagar.listar(),
+    cfg: await store.config(),
+  };
+  for (const x of guardadas.receber) await store.receber.remover(x.id);
+  for (const x of guardadas.pagar) await store.pagar.remover(x.id);
+
+  const saida = (id, categoria, valor, vencimento, quem, status) => store.pagar.salvar({
+    id: `cxp_${id}`, categoria, valor, vencimento, mes: '2026-12',
+    fornecedorNome: quem, descricao: categoria, status,
+  });
+  const entrada = (id, valor, vencimento, cliente, status) => store.receber.salvar({
+    id: `cxr_${id}`, valor, vencimento, mes: '2026-12', clienteNome: cliente, status,
+  });
+
+  /* dezembro de 2026: 1ª a 5ª semana, com a terceira de propósito sem nada */
+  await entrada(1, 90000, '2026-12-02', 'CLIENTE ALFA', 'pago');
+  await entrada(2, 30000, '2026-12-09', 'CLIENTE BETA', 'aberto');   // vence antes da base
+  await entrada(3, 25000, '2026-12-28', 'CLIENTE GAMA', 'aberto');   // vence depois
+  await saida(1, 'COMPRA DE MERCADORIA', 60000, '2026-12-03', 'FORNECEDOR Z', 'pago');
+  await saida(2, 'ALUGUEL', 7000, '2026-12-09', 'IMOBILIARIA', 'aberto');
+  await saida(3, 'ENERGIA', 2300, '2026-12-29', 'CPFL', 'aberto');
+  await saida(4, 'COMPRA DE MERCADORIA', 31000, '2026-12-04', 'FORNECEDOR W', 'pago');
+  /* cancelado não é saída: não saiu dinheiro nenhum */
+  await store.pagar.salvar({
+    id: 'cxp_x', categoria: 'ALUGUEL', valor: 99999, vencimento: '2026-12-05',
+    mes: '2026-12', fornecedorNome: 'IMOBILIARIA', status: 'cancelado',
+  });
+
+  await store.salvarConfig({
+    dre: {
+      classificacao: {
+        'COMPRA DE MERCADORIA': 'mercadoria', ALUGUEL: 'indireta', ENERGIA: 'indireta',
+      },
+    },
+  });
+
+  const r = await caixaMod.realizado({ de: '2026-12-01', ate: '2026-12-31', base: '2026-12-15' });
+
+  igual('recebimentos somam o período', r.entradas.total.valor, 145000);
+  igual('desembolsos também, e o cancelado fica de fora', r.saidas.total.valor, 100300);
+  igual('resultado = recebido − desembolsado', r.resultado, 44700);
+
+  igual('entradas confirmadas', r.entradas.confirmado.valor, 90000);
+  igual('entradas atrasadas são as que venceram e seguem abertas', r.entradas.atrasado.valor, 30000);
+  igual('entradas em aberto são as que ainda vão vencer', r.entradas.aberto.valor, 25000);
+  igual('as três situações fecham o total',
+    r.entradas.confirmado.valor + r.entradas.atrasado.valor + r.entradas.aberto.valor,
+    r.entradas.total.valor);
+  igual('e do lado das saídas também',
+    r.saidas.confirmado.valor + r.saidas.atrasado.valor + r.saidas.aberto.valor,
+    r.saidas.total.valor);
+
+  igual('a semana sem movimento continua no gráfico',
+    r.semanas.some((x) => x.a === 0 && x.b === 0), true);
+  igual('a soma das semanas é o total de entradas',
+    Math.round(r.semanas.reduce((a, x) => a + x.a, 0) * 100) / 100, r.entradas.total.valor);
+  igual('e o de saídas',
+    Math.round(r.semanas.reduce((a, x) => a + x.b, 0) * 100) / 100, r.saidas.total.valor);
+  ok('cada semana sabe quando começa e quando acaba',
+    r.semanas.every((x) => x.inicio && x.fim && x.fim > x.inicio), JSON.stringify(r.semanas[0]));
+
+  const conta = (n) => r.porConta.linhas.find((c) => c.nome === n);
+  igual('as duas compras do mesmo plano viram uma conta só', conta('COMPRA DE MERCADORIA').valor, 91000);
+  igual('com os dois lançamentos contados', conta('COMPRA DE MERCADORIA').itens, 2);
+  igual('a curva ABC põe a maior em A', conta('COMPRA DE MERCADORIA').classe, 'A');
+  igual('o total por conta é o total de saídas', r.porConta.total, r.saidas.total.valor);
+  igual('as três classes somam o total',
+    Math.round(r.porConta.classes.reduce((a, c) => a + c.valor, 0) * 100) / 100,
+    r.saidas.total.valor);
+
+  igual('a maior saída vem primeiro', r.maiores[0].valor, 60000);
+  igual('e diz em que situação está', r.maiores[0].situacao, 'Confirmado');
+
+  const raiz = r.arvore.find((n) => n.numero === '2');
+  igual('a árvore tem os desembolsos na raiz 2', raiz.valor, r.saidas.total.valor);
+  igual('os filhos somam a raiz',
+    Math.round(raiz.filhos.reduce((a, f) => a + f.valor, 0) * 100) / 100, raiz.valor);
+  const merc = raiz.filhos.find((f) => f.nome === 'Compra de mercadoria');
+  igual('o degrau 2.x é o do DRE', merc.valor, 91000);
+  ok('e 2.x.y é a conta do plano, numerada',
+    merc.filhos.length === 1 && /^2\.\d+\.1$/.test(merc.filhos[0].numero),
+    JSON.stringify(merc.filhos));
+  igual('a captação de empréstimo é dita como desconhecida, não como zero', r.captacao, null);
+
+  for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
+  for (const x of await store.receber.listar()) await store.receber.remover(x.id);
+  await store.salvarConfig({
+    dre: { contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [], classificacao: {} },
+  });
+  for (const x of guardadas.pagar) await store.pagar.salvar(x);
+  for (const x of guardadas.receber) await store.receber.salvar(x);
 }
 
 console.log('\n▶ Pasta do mês');

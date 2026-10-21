@@ -88,3 +88,60 @@ function filho(d, base) {
       h('span.num.pequeno', d.valor == null ? '—' : money(d.valor)),
       parte != null && h('span.escada__pct', pct(parte, 1))));
 }
+
+/**
+ * ÁRVORE — 1, 1.1, 1.1.1, abrindo quantos níveis houver.
+ *
+ * "Você abre e vai abrindo e vai desmembrando as coisas."
+ *
+ * A escada acima abre um nível; esta abre todos. A numeração não é enfeite: é
+ * como ela aponta para uma linha — "essa 2.3.1 aqui" — sem precisar do nome
+ * inteiro, que no plano de contas costuma ter sete palavras.
+ *
+ * @param {Array<{numero, nome, valor, itens, filhos}>} nos
+ */
+export function arvore(nos, { prefixo = 'arv' } = {}) {
+  /* a raiz não tem percentual: 100% de si mesma não diz nada. Cada filho mostra
+     quanto ele é DO PAI, que é a pergunta de quem está abrindo a linha. */
+  return h('div.escada', ...nos.map((n) => galho(n, 0, null, prefixo)));
+}
+
+function galho(no, nivel, base, prefixo) {
+  const id = `${prefixo}-${no.numero}`;
+  const temFilhos = (no.filhos || []).length > 0;
+  const aberta = temFilhos && ABERTAS.has(id);
+  const parte = base && no.valor != null ? (Math.abs(no.valor) / Math.abs(base)) * 100 : null;
+
+  const filhos = h('div.escada__galhos', { style: { display: aberta ? '' : 'none' } },
+    ...(temFilhos ? no.filhos.map((f) => galho(f, nivel + 1, no.valor, prefixo)) : []));
+
+  const seta = temFilhos ? h('span.escada__seta', aberta ? '▾' : '▸') : null;
+  const corpo = h('div.escada__linha', { style: { paddingLeft: `${13 + nivel * 16}px` } },
+    h('span.escada__numero', no.numero),
+    h('div.escada__nome',
+      h('span.escada__rotulo', { style: nivel ? { fontWeight: '600', fontSize: '12.5px' } : {} }, no.nome),
+      no.itens ? h('span.escada__nota', `${no.itens} lançamento${no.itens === 1 ? '' : 's'}`) : null),
+    h('div.escada__valor',
+      h('span.num', no.valor == null ? '—' : money(no.valor)),
+      parte != null && h('span.escada__pct', pct(parte, 1))),
+    seta);
+
+  const caixa = h(`div.escada__item${nivel === 0 ? '.escada__item--subtotal' : ''}`);
+  if (temFilhos) {
+    const botao = h('button.escada__abrir', {
+      type: 'button',
+      'aria-expanded': aberta ? 'true' : 'false',
+      onClick: () => {
+        const agora = !ABERTAS.has(id);
+        if (agora) ABERTAS.add(id); else ABERTAS.delete(id);
+        filhos.style.display = agora ? '' : 'none';
+        seta.textContent = agora ? '▾' : '▸';
+        botao.setAttribute('aria-expanded', agora ? 'true' : 'false');
+      },
+    }, corpo);
+    caixa.append(botao, filhos);
+  } else {
+    caixa.append(corpo);
+  }
+  return caixa;
+}
