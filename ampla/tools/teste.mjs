@@ -2420,6 +2420,29 @@ console.log('\n▶ O DRE gerencial: cada degrau sai do anterior, e o que não fo
     Math.round(g.percentuais.ebitda * 10) / 10, Math.round((10000 / 82000) * 1000) / 10);
 
   /* e a escada desenhada é a mesma conta, degrau por degrau */
+  /**
+   * UMA NOTA SEM CUSTO NÃO PODE APAGAR O DRE INTEIRO.
+   *
+   * Antes, qualquer venda sem custo de pedido deixava lucro bruto, margem de
+   * contribuição, EBITDA e lucro líquido em branco — quatro travessões no meio
+   * da tela aberta justamente para ver esses quatro números. Agora a conta sai
+   * e a ressalva anda junto dela.
+   */
+  await store.nfs.salvar({
+    id: 'ndg_8103', numero: '8103', dataEmissao: '2026-11-11', mes: '2026-11',
+    valorTotal: 20000, status: 'autorizada', operacao: 'saida',
+    devolucao: false, devolucaoDeCompra: false,
+  });
+  const parcial = (await dre.dre('2026-11')).gerencial;
+  ok('com custo faltando, o lucro bruto continua aparecendo', parcial.lucroBruto != null, '');
+  ok('o EBITDA também', parcial.ebitda != null, '');
+  igual('mas o app diz que o número não é confiável', parcial.confiavel, false);
+  ok('e a linha diz, em reais, quanto de venda está sem custo',
+    /20\.000,00 de venda ainda sem custo/.test(
+      dre.linhasDoDreGerencial(parcial).find((l) => l.id === 'g-lucro-bruto').nota || ''),
+    dre.linhasDoDreGerencial(parcial).find((l) => l.id === 'g-lucro-bruto').nota);
+  await store.nfs.remover('ndg_8103');
+
   const linhas = dre.linhasDoDreGerencial(g);
   const v = (id) => linhas.find((l) => l.id === id)?.valor;
   igual('escada: bruta + deduções = líquida',
@@ -2659,6 +2682,260 @@ console.log('\n▶ Compras: a meta é dela, e zero sem classificação não é "
     compras: { metaPercentual: guardadas.cfg.compras?.metaPercentual ?? null },
   });
   for (const x of guardadas.pagar) await store.pagar.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
+console.log('\n▶ Nota cancelada e reemitida: o app pergunta qual morreu, e não conta duas vezes');
+{
+  /**
+   * "Essas NF foram canceladas. Tá em duplicidade aí."
+   *
+   * No relatório de comissão de um mês real havia cinco pares — mesma data,
+   * mesmo centavo, números diferentes. A nota era emitida, cancelada e refeita,
+   * às vezes no nome de outro cliente, e o export do sistema diz "autorizada"
+   * nas duas. A venda contava duas vezes no faturamento, na margem e na
+   * comissão do vendedor.
+   *
+   * O app não pode escolher qual morreu — ele mostra as duas e pergunta. Mas,
+   * respondido, tem de valer em todas as telas e TEM DE SOBREVIVER à próxima
+   * importação do relatório, que vai continuar dizendo "autorizada".
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pendencias: await store.pendencias.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+
+  const nota = (n, valor, cliente) => store.nfs.salvar({
+    id: `nfd_${n}`, numero: String(n), serie: '1', dataEmissao: '2026-10-16', mes: '2026-10',
+    valorTotal: valor, valorProdutos: valor, clienteNome: cliente,
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  /* o formato do par real: mesmo dia, mesmo valor, clientes diferentes */
+  await nota(9101, 217.16, 'CLIENTE DUP UM');
+  await nota(9102, 217.16, 'CLIENTE DUP DOIS');
+  /* e uma venda sozinha, que não pode virar pergunta */
+  await nota(9103, 2535.20, 'CLIENTE SOZINHO');
+
+  await link.recalcular();
+  const abertas = (await store.pendencias.listar()).filter((p) => p.status === 'aberta');
+  const par = abertas.find((p) => p.tipo === 'nf_repetida');
+  ok('o par de notas vira uma pergunta', !!par, JSON.stringify(abertas.map((p) => p.tipo)));
+  igual('com as duas notas dentro, para ela escolher',
+    (par.notas || []).map((n) => n.numero).sort(), ['9101', '9102']);
+  igual('e o valor em risco é o da nota excedente, não o do par', par.valor, 217.16);
+  igual('a venda sozinha não vira pergunta',
+    abertas.filter((p) => p.tipo === 'nf_repetida').length, 1);
+
+  const antes = await revenue.resumo({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('antes de responder, as duas somam no faturamento', antes.total, 2969.52);
+
+  await link.cancelarNota('nfd_9101', 'Cancelada e reemitida');
+  const nf = await store.nfs.obter('nfd_9101');
+  igual('a nota fica marcada como cancelada', nf.status, 'cancelada');
+  igual('e com a marca de quem cancelou', nf.canceladaPor, 'manual');
+  igual('com o motivo guardado', nf.canceladaMotivo, 'Cancelada e reemitida');
+
+  const depois = await revenue.resumo({ de: '2026-10-01', ate: '2026-10-31' });
+  igual('ela sai do faturamento na hora', depois.total, 2752.36);
+  igual('e a pergunta some sozinha',
+    (await store.pendencias.listar()).filter((p) => p.tipo === 'nf_repetida' && p.status === 'aberta').length, 0);
+
+  /**
+   * O TESTE QUE IMPORTA MAIS: reimportar o relatório NÃO desfaz o acerto.
+   * O arquivo continua dizendo "autorizada" nas duas — se o app obedecesse, a
+   * venda voltaria a contar dobrada no primeiro arquivo do mês seguinte.
+   */
+  await importar('nfs', 'nfs-dup.csv', `Número da nota;Data;Razão social;Total;Situação
+9101;16/10/2026;CLIENTE DUP UM;217,16;Autorizada
+9102;16/10/2026;CLIENTE DUP DOIS;217,16;Autorizada`);
+  const depoisDoArquivo = await store.nfs.obter('nfd_9101');
+  igual('o relatório não ressuscita a nota cancelada por ela',
+    depoisDoArquivo?.status, 'cancelada');
+  igual('o faturamento continua sem ela',
+    (await revenue.resumo({ de: '2026-10-01', ate: '2026-10-31' })).total, 2752.36);
+
+  /* e a volta atrás existe */
+  await link.reativarNota('nfd_9101');
+  igual('marcar por engano não é sem saída',
+    (await store.nfs.obter('nfd_9101')).status, 'autorizada');
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const x of await store.pendencias.listar()) await store.pendencias.remover(x.id);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pendencias) await store.pendencias.salvar(x);
+  await link.recalcular();
+}
+
+console.log('\n▶ Conversão de orçamento: 100% era divisão errada, não boa notícia');
+{
+  /**
+   * "A partir do orçamento a gente fala que a conversão é 100 por cento. Tá
+   *  errada, precisa arrumar isso."
+   *
+   * A taxa dividia convertidos pelos DECIDIDOS (convertidos + perdidos). O
+   * sistema dela nunca marca orçamento como perdido — aprova ou deixa em aberto
+   * para sempre. Com perdidos = 0, a conta era convertidos ÷ convertidos: 100%,
+   * todo mês, para qualquer valor orçado.
+   */
+  const guardados = await store.orcamentos.listar();
+  for (const x of guardados) await store.orcamentos.remover(x.id);
+
+  const orc = (n, valor, situacao) => store.orcamentos.salvar({
+    id: `orcq_${n}`, numero: String(n), data: '2026-10-10', mes: '2026-10',
+    clienteNome: `CLIENTE ORC ${n}`, valorTotal: valor, situacao,
+  });
+  /* o arquivo dela: só aprovado e em aberto, nunca perdido */
+  await orc(1, 10000, 'convertido');
+  await orc(2, 30000, 'aberto');
+  await orc(3, 10000, 'aberto');
+
+  const faixa = { de: '2026-10-01', ate: '2026-10-31' };
+  const r = await quotes.resumo(faixa);
+  igual('a conversão é sobre TUDO que foi orçado, não sobre os decididos',
+    Math.round(r.taxa * 10) / 10, Math.round((1 / 3) * 1000) / 10);
+  igual('em valor também', Math.round(r.taxaValor * 10) / 10, 20);
+  igual('o app sabe que o arquivo nunca marca perda', r.arquivoMarcaPerda, false);
+  igual('e por isso não mostra a taxa sobre decididos', r.taxaDecididos, null);
+  igual('dizendo quantos ainda não foram decididos', r.naoDecididos, 2);
+
+  /* com perda registrada, a segunda taxa volta a fazer sentido */
+  await orc(4, 10000, 'perdido');
+  const r2 = await quotes.resumo(faixa);
+  igual('agora o arquivo decide', r2.arquivoMarcaPerda, true);
+  igual('e a taxa sobre decididos aparece', Math.round(r2.taxaDecididos), 50);
+  igual('sem mexer na taxa sobre o total orçado',
+    Math.round(r2.taxa * 10) / 10, Math.round((1 / 4) * 1000) / 10);
+
+  /* o caso que gerava o 100%: um convertido e o resto em aberto */
+  for (const x of await store.orcamentos.listar()) await store.orcamentos.remover(x.id);
+  await orc(5, 5000, 'convertido');
+  await orc(6, 95000, 'aberto');
+  const r3 = await quotes.resumo(faixa);
+  ok('o orçamento quase todo em aberto não dá mais 100% de conversão',
+    r3.taxa < 100, String(r3.taxa));
+  igual('ele dá os 50% de quantidade que é a verdade', Math.round(r3.taxa), 50);
+  igual('e 5% em valor, que é a verdade que importa', Math.round(r3.taxaValor), 5);
+
+  for (const x of await store.orcamentos.listar()) await store.orcamentos.remover(x.id);
+  for (const x of guardados) await store.orcamentos.salvar(x);
+}
+
+console.log('\n▶ Os degraus do DRE são fixos; os grupos dentro deles são dela');
+{
+  /**
+   * "Tem que ter mais escolhas de em que degrau. Eu preciso entender quais são
+   *  esses degraus que ele mesmo criou, ou a oportunidade de criar novos."
+   *
+   * Os degraus não podem ser criados: cada um é uma POSIÇÃO na conta (dedução
+   * antes da receita líquida, despesa direta antes da margem de contribuição,
+   * empréstimo depois do EBITDA). Inventar uma linha no meio faria EBITDA e
+   * margem de contribuição significarem outra coisa.
+   *
+   * A liberdade está um nível abaixo: os GRUPOS, que ela nomeia, e nos quais o
+   * degrau abre. E o teste que importa é que isso NÃO muda nenhum total — só a
+   * forma de olhar.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pedidos: await store.pedidos.listar(),
+    pagar: await store.pagar.listar(),
+    cfg: await store.config(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.pagar) await store.pagar.remover(x.id);
+
+  await store.nfs.salvar({
+    id: 'ngr', numero: '7700', dataEmissao: '2027-02-10', mes: '2027-02', valorTotal: 100000,
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+    pedidoNumero: '7700',
+  });
+  await store.pedidos.salvar({
+    id: 'pgr', numero: '7700', data: '2027-02-08', valorTotal: 100000, valorCusto: 50000,
+  });
+  const conta = (id, categoria, valor) => store.pagar.salvar({
+    id: `gr_${id}`, categoria, valor, vencimento: '2027-02-15', mes: '2027-02',
+    fornecedorNome: 'FORNECEDOR TESTE', descricao: categoria, status: 'aberto',
+  });
+  await conta(1, 'SALARIOS', 9000);
+  await conta(2, 'FGTS', 1000);
+  await conta(3, 'ALUGUEL DA LOJA', 6000);
+  await conta(4, 'ENERGIA ELETRICA', 2000);
+
+  await limparClassificacao('SALARIOS', 'FGTS', 'ALUGUEL DA LOJA', 'ENERGIA ELETRICA');
+  await store.salvarConfig({
+    dre: {
+      classificacao: {
+        SALARIOS: 'indireta', FGTS: 'indireta',
+        'ALUGUEL DA LOJA': 'indireta', 'ENERGIA ELETRICA': 'indireta',
+      },
+      grupos: { SALARIOS: null, FGTS: null, 'ALUGUEL DA LOJA': null, 'ENERGIA ELETRICA': null },
+    },
+  });
+
+  const sem = (await dre.dre('2027-02')).gerencial;
+  igual('sem grupo nomeado, o degrau soma tudo igual', sem.despesasIndiretas.total, 18000);
+  igual('e não inventa um nível de pasta vazio', sem.despesasIndiretas.grupos.length, 0);
+  const linhaSem = dre.linhasDoDreGerencial(sem).find((l) => l.id === 'g-indiretas');
+  igual('abrindo o degrau, vêm as contas direto', linhaSem.detalhe.length, 4);
+
+  /* agora ela nomeia dois grupos dentro do mesmo degrau */
+  await store.salvarConfig({
+    dre: {
+      grupos: {
+        SALARIOS: 'Pessoal e encargos', FGTS: 'Pessoal e encargos',
+        'ALUGUEL DA LOJA': 'Ocupação', 'ENERGIA ELETRICA': 'Ocupação',
+      },
+    },
+  });
+  const com = (await dre.dre('2027-02')).gerencial;
+  igual('o total do degrau não muda — grupo é forma de olhar, não de somar',
+    com.despesasIndiretas.total, 18000);
+  igual('nem o EBITDA', com.ebitda, sem.ebitda);
+  igual('nem o lucro líquido', com.lucroLiquido, sem.lucroLiquido);
+  igual('o degrau passa a ter dois grupos', com.despesasIndiretas.grupos.length, 2);
+  const pessoal = com.despesasIndiretas.grupos.find((x) => x.nome === 'Pessoal e encargos');
+  igual('o maior grupo vem primeiro', com.despesasIndiretas.grupos[0].nome, 'Pessoal e encargos');
+  igual('e soma as contas que estão dentro dele', pessoal.valor, 10000);
+  igual('com as duas contas guardadas', pessoal.contas.map((c) => c.nome).sort(), ['FGTS', 'SALARIOS']);
+
+  const linhaCom = dre.linhasDoDreGerencial(com).find((l) => l.id === 'g-indiretas');
+  igual('a escada abre nos grupos', linhaCom.detalhe.map((x) => x.nome),
+    ['Pessoal e encargos', 'Ocupação']);
+  igual('e cada grupo abre nas contas do plano',
+    linhaCom.detalhe[0].filhos.map((x) => x.nome).sort(), ['FGTS', 'SALARIOS']);
+  igual('a soma dos grupos é o total do degrau',
+    Math.round(linhaCom.detalhe.reduce((a, x) => a + x.valor, 0) * 100) / 100, 18000);
+
+  /* uma conta sem grupo, num degrau que já tem grupos, não some nem é adotada */
+  await store.salvarConfig({ dre: { grupos: { 'ENERGIA ELETRICA': null } } });
+  const misto = (await dre.dre('2027-02')).gerencial;
+  igual('conta sem grupo vai para "Sem grupo", à vista',
+    misto.despesasIndiretas.grupos.some((x) => x.nome === 'Sem grupo'), true);
+  igual('e o total continua o mesmo', misto.despesasIndiretas.total, 18000);
+
+  /* os grupos oferecidos: os prontos do degrau + os que ela criou */
+  const cfg = await store.config();
+  const oferecidos = dre.gruposExistentes(cfg).get('indireta');
+  ok('os grupos prontos do degrau aparecem', oferecidos.includes('Pessoal e encargos'), JSON.stringify(oferecidos));
+  ok('e os que ela criou também', oferecidos.includes('Ocupação'), JSON.stringify(oferecidos));
+  igual('cada degrau sabe onde entra na conta',
+    dre.degrauPorId('emprestimo').numero, 5);
+  igual('e os degraus continuam seis, que são as linhas do DRE', dre.DEGRAUS.length, 6);
+
+  for (const x of await store.pagar.listar()) await store.pagar.remover(x.id);
+  await store.nfs.remover('ngr');
+  await store.pedidos.remover('pgr');
+  await limparClassificacao('SALARIOS', 'FGTS', 'ALUGUEL DA LOJA', 'ENERGIA ELETRICA');
+  await store.salvarConfig({
+    dre: {
+      contasDeMercadoria: guardadas.cfg.dre?.contasDeMercadoria || [],
+      grupos: { SALARIOS: null, FGTS: null, 'ALUGUEL DA LOJA': null, 'ENERGIA ELETRICA': null },
+    },
+  });
+  for (const x of guardadas.pagar) await store.pagar.salvar(x);
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
 }
 

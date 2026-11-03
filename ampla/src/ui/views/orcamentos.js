@@ -64,22 +64,40 @@ export async function telaOrcamentos({ query }) {
         valor: r.taxa == null ? '—' : pct(r.taxa, 0),
         icone: '✅',
         cor: r.taxa == null ? undefined : (r.taxa >= 50 ? 'ok' : 'atencao'),
-        nota: r.taxa == null ? 'nada decidido ainda' : `${r.convertido.quantidade} de ${r.decididos} decididos`,
+        nota: r.taxa == null ? 'nenhum orçamento no período'
+          : `${r.convertido.quantidade} de ${r.quantidade} orçamentos`,
       }),
       kpi({ label: 'Ticket médio orçado', valor: money(r.ticketMedio), icone: '🎫' })),
 
-    r.taxa != null && card('Do que já foi decidido', null,
+    /**
+     * O QUE A TAXA DIVIDE, ESCRITO NA TELA.
+     *
+     * Ela viu 100% de conversão e sabia que estava errado. Estava: a conta
+     * dividia pelos DECIDIDOS, e o sistema dela nunca marca orçamento como
+     * perdido — então era convertidos ÷ convertidos. Agora a taxa é sobre TUDO
+     * que foi orçado, e a tela diz isso em vez de deixar ela adivinhar.
+     */
+    card('Do que foi orçado no período', null,
       progresso({
         valor: r.convertido.valor,
-        total: r.convertido.valor + r.perdido.valor,
+        total: r.total || 1,
         cor: 'var(--verde)',
         esquerda: `${money(r.convertido.valor)} virou venda`,
-        direita: `${money(r.perdido.valor)} perdido`,
+        direita: `de ${money(r.total)} orçados`,
       }),
       h('p.mini.muted', { style: { marginTop: '8px' } },
-        'Em valor, a conversão é de '
-        + `${r.taxaValor == null ? '—' : pct(r.taxaValor, 0)}. `
-        + 'Orçamento em aberto fica fora da conta: ainda pode virar venda.')),
+        `Em valor, ${r.taxaValor == null ? '—' : pct(r.taxaValor, 1)} do que foi orçado já virou `
+        + `venda. Ainda não decididos: ${r.naoDecididos} orçamento(s)`
+        + `${r.aberto.valor ? `, ${money(r.aberto.valor)} em aberto` : ''}.`),
+      r.arquivoMarcaPerda
+        ? h('p.mini.muted', { style: { marginTop: '6px' } },
+          `Só entre os que já foram decididos (${r.decididos}), a conversão é de `
+          + `${pct(r.taxaDecididos, 0)} em quantidade e ${pct(r.taxaValorDecididos, 0)} em valor.`)
+        : aviso('Nenhum orçamento deste período está marcado como perdido ou recusado no seu '
+          + 'arquivo. Por isso o app NÃO mostra "convertidos ÷ decididos": sem perda registrada, '
+          + 'essa conta daria 100% todo mês, para qualquer valor orçado — que foi o número errado '
+          + 'que você viu. A conversão acima é sobre o total orçado, e essa não depende de o '
+          + 'sistema marcar a perda.', 'atencao')),
 
     card('Situação dos orçamentos', null,
       h('div.empilha', { style: { gap: '8px' } },
@@ -91,8 +109,9 @@ export async function telaOrcamentos({ query }) {
             h('span.num.forte', money(g.valor)));
         })),
       r.semSituacao > 0 && h('p.mini.muted', { style: { marginTop: '8px' } },
-        `${r.semSituacao} orçamento(s) vieram sem situação no arquivo. Eles entram no total orçado, `
-        + 'mas ficam fora da taxa de conversão — o app não decide por eles.')),
+        `${r.semSituacao} orçamento(s) vieram sem situação no arquivo. Eles entram no total orçado `
+        + '(e no denominador da conversão), mas o app não decide por eles: ficam como não '
+        + 'convertidos até o arquivo dizer o contrário.')),
 
     // o gráfico saiu: ela quer o número conferível, não o desenho
     secao('Orçado por mês',

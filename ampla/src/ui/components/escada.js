@@ -43,7 +43,7 @@ function linha(l, rotuloPercentual) {
 
   const caixa = h(`div.escada__item.escada__item--${l.tipo || 'linha'}`);
   const filhos = h('div.escada__filhos', { style: { display: aberta ? '' : 'none' } },
-    ...(temDetalhe ? detalhe.map((d) => filho(d, l.base)) : []));
+    ...(temDetalhe ? detalhe.map((d) => filho(d, l.base, id)) : []));
 
   const seta = temDetalhe ? h('span.escada__seta', aberta ? '▾' : '▸') : null;
 
@@ -76,17 +76,49 @@ function linha(l, rotuloPercentual) {
   return caixa;
 }
 
-function filho(d, base) {
+/**
+ * UM NÍVEL A MAIS, QUANDO ELA NOMEOU OS GRUPOS.
+ *
+ * "Você abre e vai abrindo e vai desmembrando as coisas."
+ *
+ * O degrau abre nos grupos dela ("Pessoal e encargos"), e o grupo abre nas
+ * contas do plano que estão dentro dele. Sem grupo nomeado, o degrau abre
+ * direto nas contas e este segundo nível nem existe.
+ */
+function filho(d, base, prefixo = 'f') {
   const parte = base && d.valor != null ? (Math.abs(d.valor) / Math.abs(base)) * 100 : null;
   const sub = [d.nota, d.itens ? `${d.itens} lançamento${d.itens === 1 ? '' : 's'}` : null]
     .filter(Boolean).join(' · ');
-  return h('div.escada__filho',
+  const netos = d.filhos || [];
+  const id = `${prefixo}-${d.nome}`;
+  const aberto = netos.length > 0 && ABERTAS.has(id);
+
+  const seta = netos.length ? h('span.escada__seta', aberto ? '▾' : '▸') : null;
+  const corpo = h('div.escada__filho',
     h('div.escada__nome',
       h('span.pequeno', d.nome),
       sub && h('span.escada__nota', sub)),
     h('div.escada__valor',
       h('span.num.pequeno', d.valor == null ? '—' : money(d.valor)),
-      parte != null && h('span.escada__pct', pct(parte, 1))));
+      parte != null && h('span.escada__pct', pct(parte, 1))),
+    seta);
+
+  if (!netos.length) return corpo;
+
+  const dentro = h('div.escada__netos', { style: { display: aberto ? '' : 'none' } },
+    ...netos.map((n) => filho(n, d.valor, `${id}>`)));
+  const botao = h('button.escada__abrir', {
+    type: 'button',
+    'aria-expanded': aberto ? 'true' : 'false',
+    onClick: () => {
+      const agora = !ABERTAS.has(id);
+      if (agora) ABERTAS.add(id); else ABERTAS.delete(id);
+      dentro.style.display = agora ? '' : 'none';
+      seta.textContent = agora ? '▾' : '▸';
+      botao.setAttribute('aria-expanded', agora ? 'true' : 'false');
+    },
+  }, corpo);
+  return h('div.escada__grupo', botao, dentro);
 }
 
 /**

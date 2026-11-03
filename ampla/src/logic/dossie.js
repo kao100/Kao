@@ -328,9 +328,12 @@ function docOrcamentos(o) {
     linhas: o.abertos,
     total: { numero: 'TOTAL', valorTotal: cents(sum(o.abertos, (x) => x.valorTotal || 0)) },
     nota: o.taxa == null
-      ? 'Nenhum orçamento decidido no mês, então não há taxa de conversão para mostrar.'
-      : `No mês, ${pct(o.taxa, 0)} dos orçamentos decididos viraram venda `
-        + `(${o.convertido.quantidade} de ${o.decididos}).`,
+      ? 'Nenhum orçamento no mês, então não há taxa de conversão para mostrar.'
+      : `No mês, ${pct(o.taxa, 0)} dos orçamentos viraram venda `
+        + `(${o.convertido.quantidade} de ${o.quantidade}), ${pct(o.taxaValor || 0, 0)} em valor.`
+        + (o.arquivoMarcaPerda
+          ? ` Entre os já decididos, ${pct(o.taxaDecididos, 0)}.`
+          : ' O arquivo não marca orçamento perdido, então a conversão é sobre o total orçado.'),
   };
 }
 

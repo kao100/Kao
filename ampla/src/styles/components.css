@@ -503,3 +503,19 @@ textarea.entrada { min-height: 74px; resize: vertical; font-size: 14px; }
 .escada__galhos { background: var(--card); border-top: 1px solid var(--line); }
 .escada__galhos .escada__item { background: var(--card); }
 .escada__galhos .escada__item + .escada__item { border-top: 1px solid var(--line); }
+.escada__grupo + .escada__grupo,
+.escada__grupo + .escada__filho,
+.escada__filho + .escada__grupo { border-top: 1px solid var(--line); }
+.escada__grupo .escada__filho { background: var(--card-2); }
+.escada__netos { background: var(--card); }
+.escada__netos .escada__filho { padding-left: 50px; background: var(--card); }
+.escada__netos .escada__filho + .escada__filho { border-top: 1px solid var(--line); }
+
+/* uma conta do plano, com as duas escolhas: degrau e grupo */
+.plano { padding: 9px 0; border-top: 1px solid var(--line); }
+.plano:first-child { border-top: 0; }
+.plano__escolhas { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.plano__escolhas select { font-size: 12.5px; }
+.plano__escolhas select:disabled { opacity: .55; }
+@media (max-width: 380px) { .plano__escolhas { grid-template-columns: 1fr; } }
+.card--plano { padding: 11px 12px; }

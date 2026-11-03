@@ -58,7 +58,7 @@
 
 import * as store from '../core/store.js';
 import { today, monthKey, money, formatDate } from '../core/format.js';
-import { normalize, docNumber, sameMoney, cents, sum, key as chaveTexto } from '../core/util.js';
+import { normalize, docNumber, sameMoney, cents, sum, sortBy, key as chaveTexto } from '../core/util.js';
 import { interpretarStatusDoArquivo } from './ingest.js';
 
 export const TIPOS_PENDENCIA = {
@@ -168,6 +168,17 @@ export const TIPOS_PENDENCIA = {
       + 'EDUARDO APARECIDO DO NASCIMENTO"). O app NÃO junta por semelhança — ele mostra os dois e '
       + 'pergunta. Confirmando, o nome completo vira apelido do mesmo vendedor e os números se '
       + 'somam daí em diante.',
+  },
+  nf_repetida: {
+    titulo: 'Duas notas, mesmo dia, mesmo valor',
+    icone: '👯',
+    gravidade: 'alta',
+    explicacao: 'Quando uma nota é cancelada e reemitida, o relatório traz as DUAS — e o app '
+      + 'não tem como saber qual delas morreu: o arquivo diz "autorizada" nas duas. Enquanto '
+      + 'ninguém disser, a venda conta dobrada no faturamento, na margem e na comissão do '
+      + 'vendedor. O app não escolhe por conta própria: ele mostra as duas, com cliente e '
+      + 'número, e você diz qual foi cancelada — num toque. Se forem duas vendas de verdade, '
+      + 'também é um toque, e ele não pergunta de novo.',
   },
   pagar_sem_categoria: {
     titulo: 'Pagamento sem categoria',
@@ -1364,6 +1375,49 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
     });
   }
 
+  /**
+   * NOTA CANCELADA E REEMITIDA: O RELATÓRIO TRAZ AS DUAS.
+   *
+   * "Essas NF foram canceladas. Tá em duplicidade aí."
+   *
+   * No relatório de comissão de outubro havia quatro pares assim — mesma data,
+   * mesmo centavo, números diferentes: 4642/4646, 4643/4648, 4644/4649,
+   * 4697/4701 e 4707/4712. A nota era emitida, cancelada e refeita (às vezes
+   * para outro cliente), e o export do sistema diz "autorizada" nas duas. Sem a
+   * coluna de situação trazendo o cancelamento, o app não tem como saber — e a
+   * venda contava duas vezes no faturamento, na margem e na comissão.
+   *
+   * A regra é estreita de propósito: MESMA DATA e MESMO VALOR AO CENTAVO. Duas
+   * vendas diferentes caírem nisso acontece, e por isso o app PERGUNTA em vez de
+   * decidir. O cliente nem entra na regra: metade dos pares dela era de
+   * clientes diferentes, porque a nota foi refeita no nome certo.
+   */
+  const porDataValor = new Map();
+  for (const nf of nfs) {
+    if (nf.status !== 'autorizada' || nf.devolucao || nf.operacao === 'entrada') continue;
+    if (!nf.dataEmissao || !nf.valorTotal) continue;
+    const chave = `${nf.dataEmissao}_${Math.round(nf.valorTotal * 100)}`;
+    if (!porDataValor.has(chave)) porDataValor.set(chave, []);
+    porDataValor.get(chave).push(nf);
+  }
+  for (const [chave, grupo] of porDataValor) {
+    if (grupo.length < 2) continue;
+    const ordenadas = sortBy(grupo, (n) => Number(docNumber(n.numero)) || 0);
+    nova('nf_repetida', chave, {
+      titulo: `NF ${ordenadas.map((n) => n.numero).join(' e NF ')} — ${money(ordenadas[0].valorTotal)}`,
+      detalhe: `${formatDate(ordenadas[0].dataEmissao)} · `
+        + ordenadas.map((n) => `${n.numero}: ${n.clienteNome || 'cliente não identificado'}`).join(' · ')
+        + ' · mesmo valor, mesmo dia',
+      /* o valor em risco é o das notas EXCEDENTES, não o do grupo inteiro */
+      valor: cents(ordenadas[0].valorTotal * (ordenadas.length - 1)),
+      mes: ordenadas[0].mes,
+      notas: ordenadas.map((n) => ({
+        id: n.id, numero: n.numero, clienteNome: n.clienteNome || null, valor: n.valorTotal,
+      })),
+      alvo: { store: 'nfs', id: ordenadas[0].id },
+    });
+  }
+
   const semCategoria = pagamentos.filter((p) => p.status !== 'pago' && !p.categoria);
 
   const produtoPorId = new Map(produtos.map((p) => [p.id, p]));
@@ -1434,6 +1488,55 @@ export function porQueSemVendedor(nf, pedidoPorNumero, pedidoPorClienteValor) {
 }
 
 /** Define o vendedor de uma NF à mão — com registro de quem, quando e por quê. */
+/**
+ * MARCAR UMA NOTA COMO CANCELADA, QUANDO O ARQUIVO NÃO DIZ.
+ *
+ * O cancelamento é um FATO, não uma estimativa: ou a nota foi cancelada ou não
+ * foi, e quem sabe é ela. Por isso isto não é "ajustar número" — é informar um
+ * dado que nenhum relatório dela carrega hoje.
+ *
+ * A marca fica gravada na nota (quem, quando, por quê) e sobrevive à
+ * reimportação do relatório: senão o acerto se perderia no primeiro arquivo
+ * novo, que é justamente quando ela não estaria olhando.
+ *
+ * E vale para TUDO de uma vez, porque faturamento, margem, DRE, caixa e
+ * comissão passam todos por valeParaFaturamento: cancelada ali, cancelada em
+ * todo lugar.
+ */
+export async function cancelarNota(nfId, motivo = null) {
+  const nf = await store.nfs.obter(nfId);
+  if (!nf) throw new Error('Nota não encontrada.');
+  await store.nfs.salvar({
+    ...nf,
+    status: 'cancelada',
+    canceladaPor: 'manual',
+    canceladaEm: new Date().toISOString().slice(0, 10),
+    canceladaMotivo: motivo || null,
+  });
+  await store.registrar('nf_cancelada', { alvoId: nfId, alvo: nf.numero, motivo });
+  await recalcular();
+  return nf;
+}
+
+/** A volta atrás: marcar cancelada por engano não pode ser sem saída. */
+export async function reativarNota(nfId) {
+  const nf = await store.nfs.obter(nfId);
+  if (!nf) throw new Error('Nota não encontrada.');
+  if (nf.canceladaPor !== 'manual') {
+    throw new Error('Esta nota foi cancelada pelo arquivo, não por você. Reenvie o relatório.');
+  }
+  await store.nfs.salvar({
+    ...nf,
+    status: 'autorizada',
+    canceladaPor: null,
+    canceladaEm: null,
+    canceladaMotivo: null,
+  });
+  await store.registrar('nf_reativada', { alvoId: nfId, alvo: nf.numero });
+  await recalcular();
+  return nf;
+}
+
 export async function definirVendedorDaNf(nfId, vendedorId, motivo) {
   const nf = await store.nfs.obter(nfId);
   if (!nf) throw new Error('NF não encontrada.');

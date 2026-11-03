@@ -19,11 +19,15 @@
 import { h } from '../../core/dom.js';
 import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
-import { dre, linhasDoDreGerencial, planosDeContas, sugerirGrupo, lerClassificacao, GRUPOS } from '../../logic/dre.js';
+import {
+  dre, linhasDoDreGerencial, planosDeContas, sugerirGrupo,
+  lerClassificacao, lerGrupos, gruposExistentes, degrauPorId, DEGRAUS,
+} from '../../logic/dre.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, aviso, chips } from '../components/ui.js';
 import { escada } from '../components/escada.js';
 import { exportadores } from '../components/table.js';
+import { formulario, detalhe } from '../components/sheet.js';
 import { ok } from '../components/toast.js';
 import { money, pct, monthKey, monthLabel, monthLabelShort, addMonths, today } from '../../core/format.js';
 
@@ -34,6 +38,8 @@ export async function telaDre({ query }) {
 
   const g = d.gerencial;
   const classificacao = lerClassificacao(cfg);
+  const grupos = lerGrupos(cfg);
+  const disponiveis = gruposExistentes(cfg);
   const semClassificar = planos.filter((pl) => !classificacao.has(pl.nome));
 
   return h('div.empilha', { style: { gap: '14px' } },
@@ -48,19 +54,19 @@ export async function telaDre({ query }) {
         label: 'Margem de contribuição',
         valor: g.margemContribuicao == null ? '—' : money(g.margemContribuicao),
         icone: '📐', cor: 'info', tamanho: 'p',
-        nota: g.percentuais.margemContribuicao == null ? 'falta custo' : pct(g.percentuais.margemContribuicao, 1),
+        nota: notaDoPercentual(g, g.percentuais.margemContribuicao),
       }),
       kpi({
         label: 'EBITDA', valor: g.ebitda == null ? '—' : money(g.ebitda),
         icone: '⚙️', cor: g.ebitda >= 0 ? 'ok' : 'ruim', tamanho: 'p',
-        nota: g.percentuais.ebitda == null ? 'falta custo' : pct(g.percentuais.ebitda, 1),
+        nota: notaDoPercentual(g, g.percentuais.ebitda),
       }),
       kpi({
         label: 'Lucro líquido', valor: g.lucroLiquido == null ? '—' : money(g.lucroLiquido),
         icone: g.lucroLiquido >= 0 ? '📈' : '📉',
         cor: g.lucroLiquido == null ? undefined : (g.lucroLiquido >= 0 ? 'ok' : 'ruim'),
         tamanho: 'p',
-        nota: g.percentuais.lucroLiquido == null ? 'falta custo' : pct(g.percentuais.lucroLiquido, 1),
+        nota: notaDoPercentual(g, g.percentuais.lucroLiquido),
       })),
 
     ...d.avisos.map((a) => aviso(a.texto, a.nivel === 'info' ? 'info' : 'atencao')),
@@ -100,7 +106,21 @@ export async function telaDre({ query }) {
         nota: `${c.itens} lançamento(s)`,
       })))),
 
-    cardClassificar(planos, classificacao));
+    cardClassificar(planos, classificacao, grupos, disponiveis));
+}
+
+/**
+ * O percentual, e a ressalva junto quando o custo não é conhecido em tudo. Um
+ * travessão no lugar do número não protegia ninguém: escondia o resultado da
+ * empresa na tela feita para mostrá-lo.
+ */
+function notaDoPercentual(g, valor) {
+  if (valor == null) return null;
+  const texto = pct(valor, 1);
+  const c = g.cobertura;
+  if (g.confiavel || !c || c.faturadoTotal == null) return texto;
+  const falta = Math.round((c.faturadoTotal - c.faturadoComCusto) * 100) / 100;
+  return falta > 0 ? `${texto} · ${money(falta)} sem custo` : texto;
 }
 
 function seletorDeMes(mes) {
@@ -119,10 +139,39 @@ function seletorDeMes(mes) {
  * reforma" pode ser manutenção da loja (indireta) ou obra nova (não
  * operacional), e só quem assina o cheque sabe qual é.
  */
-function cardClassificar(planos, classificacao) {
-  const trocar = async (nome, grupo) => {
-    await store.salvarConfig({ dre: { classificacao: { [nome]: grupo || null } } });
+function cardClassificar(planos, classificacao, grupos, disponiveis) {
+  const trocarDegrau = async (nome, degrau) => {
+    /* trocar de degrau com um grupo que não existe lá deixaria o grupo órfão */
+    const grupoAtual = grupos.get(nome) || null;
+    const cabe = degrau && (disponiveis.get(degrau) || []).includes(grupoAtual);
+    await store.salvarConfig({
+      dre: {
+        classificacao: { [nome]: degrau || null },
+        grupos: { [nome]: cabe ? grupoAtual : null },
+      },
+    });
     refresh();
+  };
+
+  const trocarGrupo = async (nome, grupo) => {
+    await store.salvarConfig({ dre: { grupos: { [nome]: grupo || null } } });
+    refresh();
+  };
+
+  const criarGrupo = async (pl, degrau) => {
+    const r = await formulario({
+      titulo: 'Criar um grupo',
+      descricao: `Dentro de "${degrauPorId(degrau).nome}". O grupo é um nome seu — serve para o `
+        + 'DRE abrir em partes que você reconhece, sem mudar a conta. Ele passa a ficar '
+        + 'disponível para as outras contas deste mesmo degrau.',
+      campos: [{
+        chave: 'nome', label: 'Nome do grupo', tipo: 'texto', obrigatorio: true,
+        ajuda: 'Por exemplo: Pessoal e encargos, Ocupação, Veículos.',
+      }],
+      confirmar: 'Criar e usar',
+    });
+    if (!r?.nome?.trim()) return;
+    await trocarGrupo(pl.nome, r.nome.trim());
   };
 
   const aceitarSugestoes = async () => {
@@ -130,8 +179,8 @@ function cardClassificar(planos, classificacao) {
     let quantas = 0;
     for (const pl of planos) {
       if (classificacao.has(pl.nome)) continue;
-      const s = sugerirGrupo(pl.nome);
-      if (s) { novas[pl.nome] = s; quantas += 1; }
+      const sugerido = sugerirGrupo(pl.nome);
+      if (sugerido) { novas[pl.nome] = sugerido; quantas += 1; }
     }
     if (!quantas) { ok('Nenhuma sugestão nova.'); return; }
     await store.salvarConfig({ dre: { classificacao: novas } });
@@ -144,8 +193,7 @@ function cardClassificar(planos, classificacao) {
    *
    * Quase toda conta que sobra é estrutura — aluguel, encargo, energia. Mas
    * "sobrou" não é motivo para o app decidir: o botão diz exatamente quantas e
-   * para onde vão, e quem aperta é ela. A diferença entre sugerir e chutar é
-   * essa frase.
+   * para onde vão, e quem aperta é ela.
    */
   const sobrando = planos.filter((pl) => !classificacao.has(pl.nome) && !sugerirGrupo(pl.nome));
   const marcarResto = async () => {
@@ -160,39 +208,98 @@ function cardClassificar(planos, classificacao) {
 
   return h('div#classificar',
     card('Em que degrau entra cada conta',
-      comSugestao.length > 0
-        ? botao(`Aceitar ${comSugestao.length} sugestão(ões)`, { pequeno: true, onClick: aceitarSugestoes })
-        : null,
-      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
-        'O app não adivinha para onde vai cada conta do seu plano. Escolha o degrau de cada uma '
-        + 'e o DRE se monta sozinho daqui em diante — a escolha vale para todos os meses.'),
-      sobrando.length > 0 && h('div', { style: { marginBottom: '10px' } },
-        botao(`Marcar as ${sobrando.length} que sobraram como despesas indiretas`, {
+      botao('O que são os degraus?', { pequeno: true, onClick: explicarDegraus }),
+      h('p.pequeno.muted', { style: { marginBottom: '4px' } },
+        'Cada conta do seu plano tem duas perguntas. O DEGRAU diz onde o dinheiro entra na '
+        + 'conta do DRE — são seis, fixos, porque são as linhas do próprio DRE. O GRUPO é um '
+        + 'nome seu dentro do degrau ("Pessoal e encargos", "Ocupação"), e esse você cria '
+        + 'quantos quiser: é nele que o DRE abre.'),
+      h('p.mini.muted', { style: { marginBottom: '10px' } },
+        'A escolha vale para todos os meses, e dá para trocar quando quiser.'),
+
+      h('div.btn-linha', { style: { marginBottom: '10px' } },
+        comSugestao.length > 0 && botao(`Aceitar ${comSugestao.length} sugestão(ões)`, {
+          tipo: 'primario', pequeno: true, onClick: aceitarSugestoes,
+        }),
+        sobrando.length > 0 && botao(`As ${sobrando.length} que sobraram → despesas indiretas`, {
           pequeno: true, onClick: marcarResto,
         })),
+
       h('div.empilha', { style: { gap: '2px' } },
-        ...planos.map((pl) => linhaDoPlano(pl, classificacao, trocar))),
-      h('div.empilha', { style: { gap: '4px', marginTop: '12px' } },
-        ...GRUPOS.map((gr) => h('p.mini.muted', h('strong', `${gr.nome}: `), gr.ajuda)))));
+        ...planos.map((pl) => linhaDoPlano(pl, {
+          classificacao, grupos, disponiveis, trocarDegrau, trocarGrupo, criarGrupo,
+        })))));
 }
 
-function linhaDoPlano(pl, classificacao, trocar) {
-  const atual = classificacao.get(pl.nome) || '';
-  const sugestao = !atual ? sugerirGrupo(pl.nome) : null;
-  const nomeSugerido = sugestao ? GRUPOS.find((gr) => gr.id === sugestao)?.nome : null;
+const CRIAR = '__criar__';
 
-  return h('label.linha.linha--entre', { style: { padding: '7px 0', gap: '10px' } },
-    h('span.crescer', { style: { minWidth: 0 } },
-      h('span.pequeno', pl.nome),
-      h('span.mini.muted', { style: { display: 'block' } },
-        money(pl.valor) + (nomeSugerido ? ` · sugestão: ${nomeSugerido}` : ''))),
-    h('select.entrada', {
-      style: { maxWidth: '46%' },
-      value: atual,
-      onChange: (e) => trocar(pl.nome, e.target.value),
-    },
-    h('option', { value: '' }, atual ? '— tirar —' : '— escolher —'),
-    ...GRUPOS.map((gr) => h('option', { value: gr.id, selected: gr.id === atual }, gr.nome))));
+function linhaDoPlano(pl, ctx) {
+  const { classificacao, grupos, disponiveis, trocarDegrau, trocarGrupo, criarGrupo } = ctx;
+  const degrau = classificacao.get(pl.nome) || '';
+  const grupo = grupos.get(pl.nome) || '';
+  const sugestao = !degrau ? sugerirGrupo(pl.nome) : null;
+  const nomeSugerido = sugestao ? degrauPorId(sugestao)?.nome : null;
+  const opcoesDeGrupo = degrau ? (disponiveis.get(degrau) || []) : [];
+
+  return h('div.plano',
+    h('div.linha.linha--entre', { style: { gap: '10px' } },
+      h('span.pequeno.crescer', { style: { minWidth: 0 } }, pl.nome),
+      h('span.num.mini.muted', money(pl.valor))),
+    nomeSugerido && h('span.mini.muted', `sugestão pelo nome: ${nomeSugerido}`),
+    h('div.plano__escolhas',
+      h('select.entrada', {
+        value: degrau,
+        onChange: (e) => trocarDegrau(pl.nome, e.target.value),
+      },
+      h('option', { value: '' }, degrau ? '— tirar do DRE —' : '— escolher o degrau —'),
+      ...DEGRAUS.map((gr) => h('option', {
+        value: gr.id, selected: gr.id === degrau,
+      }, `${gr.numero}. ${gr.nome}`))),
+
+      h('select.entrada', {
+        disabled: !degrau,
+        value: grupo,
+        onChange: (e) => (e.target.value === CRIAR
+          ? criarGrupo(pl, degrau)
+          : trocarGrupo(pl.nome, e.target.value)),
+      },
+      h('option', { value: '' }, degrau ? '— sem grupo —' : 'escolha o degrau primeiro'),
+      ...opcoesDeGrupo.map((nome) => h('option', { value: nome, selected: nome === grupo }, nome)),
+      degrau && h('option', { value: CRIAR }, '＋ criar um grupo…'))));
+}
+
+/**
+ * "Quais são esses degraus que ele mesmo criou?"
+ *
+ * Nenhum: são as linhas do próprio DRE. Esta folha diz isso com todas as
+ * letras, mostra onde cada degrau entra na conta e dá exemplos de conta que
+ * cai em cada um — porque "despesa direta" e "despesa indireta" só são óbvias
+ * para quem já montou um DRE antes.
+ */
+function explicarDegraus() {
+  detalhe('Os seis degraus do DRE',
+    h('p.pequeno',
+      'O app não inventou nenhum degrau. Eles são as linhas do próprio DRE — as mesmas do '
+      + 'relatório que você recebeu — e são fixos porque cada um é uma POSIÇÃO na conta: '
+      + 'dedução entra antes da receita líquida, despesa direta entra antes da margem de '
+      + 'contribuição, empréstimo entra depois do EBITDA.'),
+    h('p.pequeno.muted',
+      'Criar um degrau novo seria criar uma linha nova no meio da conta, e aí EBITDA e margem '
+      + 'de contribuição passariam a significar outra coisa — deixariam de bater com o '
+      + 'relatório do seu BPO. O que você cria à vontade são os GRUPOS dentro de cada degrau.'),
+    h('div.empilha', { style: { gap: '12px' } },
+      ...DEGRAUS.map((gr) => h('div.card.card--plano',
+        h('div.linha', { style: { gap: '8px' } },
+          h('span.selo.selo--info', String(gr.numero)),
+          h('strong.pequeno', gr.nome)),
+        h('p.mini.muted', { style: { marginTop: '4px' } }, gr.onde),
+        h('p.mini', { style: { marginTop: '6px' } },
+          h('strong', 'Costuma ser: '), gr.exemplos.join(', ') + '.'),
+        h('p.mini.muted', { style: { marginTop: '4px' } },
+          h('strong', 'Grupos prontos: '), gr.gruposSugeridos.join(' · '))))),
+    h('p.mini.muted',
+      'Conta que você não classificar não é chutada para nenhum degrau: ela desce numa linha '
+      + 'própria, "Sem classificação", que aparece no DRE e desconta do lucro líquido.'));
 }
 
 function montarExportacao(g, mes) {

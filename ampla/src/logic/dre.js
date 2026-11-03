@@ -17,70 +17,145 @@
  */
 
 import * as store from '../core/store.js';
-import { monthKey } from '../core/format.js';
+import { monthKey, money } from '../core/format.js';
 import { cents, sum } from '../core/util.js';
 import { valeParaFaturamento, valorFaturado } from './revenue.js';
 
 const SEM_CLASSIFICACAO = 'Sem plano de contas';
+const SEM_GRUPO = 'Sem grupo';
 
 /**
- * OS DEGRAUS DO DRE GERENCIAL, e a que grupo cada conta do plano pertence.
+ * OS DEGRAUS DO DRE GERENCIAL, e a que degrau cada conta do plano pertence.
  *
- * "Tem uma série de coisas aqui que são categorizadas. Como você vai saber
- *  isso? Eu posso te categorizar, não tem problema. Só preciso que tenha isso."
+ * "Tem que ter mais escolhas de em que degrau. Eu preciso entender quais são
+ *  esses degraus que ele mesmo criou, ou a oportunidade de criar novos. Sei lá,
+ *  eu não entendi muito bem não."
  *
- * O app NÃO adivinha para qual degrau cada conta vai. As pistas abaixo servem
- * só para SUGERIR na tela de classificação, onde ela confirma — e conta não
- * confirmada não é empurrada para um grupo qualquer: ela aparece numa linha
- * própria, "sem classificação", que desconta do lucro líquido e pede o clique.
- * Chutar o grupo de uma conta é inventar vínculo, e inventar vínculo aqui muda
- * o EBITDA sem que ninguém perceba.
+ * Resposta honesta: o app NÃO inventou degrau nenhum. Os seis abaixo são as
+ * linhas do próprio DRE — as mesmas do relatório do BPO — e elas são fixas
+ * porque cada uma é uma POSIÇÃO NA CONTA: dedução entra antes da receita
+ * líquida, despesa direta entra antes da margem de contribuição, empréstimo
+ * entra depois do EBITDA. Criar um degrau novo seria criar uma linha nova no
+ * meio da conta, e aí EBITDA e margem de contribuição passariam a significar
+ * outra coisa — e deixariam de ser comparáveis com o relatório dela.
+ *
+ * O que ela cria são os GRUPOS dentro de cada degrau: "Pessoal e encargos",
+ * "Ocupação", "Veículos". Esses são dela, ela inventa quantos quiser, e o DRE
+ * abre neles sem que a conta mude de forma.
+ *
+ * O app não adivinha o degrau de nenhuma conta. As pistas servem só para
+ * SUGERIR na tela, onde ela confirma — e conta não confirmada não é empurrada
+ * para um degrau qualquer: aparece numa linha própria, "sem classificação",
+ * que desconta do lucro líquido e pede o clique.
  */
-export const GRUPOS = [
+export const DEGRAUS = [
   {
     id: 'deducao',
+    numero: 1,
     nome: 'Deduções da receita',
-    ajuda: 'imposto sobre a venda: Simples/DAS, PIS, COFINS, ICMS, ISS',
+    ajuda: 'imposto que incide sobre a venda',
+    onde: 'Sai da receita bruta, antes da receita líquida.',
+    exemplos: ['Simples Nacional / DAS', 'PIS', 'COFINS', 'ICMS', 'ISS', 'Substituição tributária'],
+    gruposSugeridos: ['Impostos federais', 'Impostos estaduais', 'Impostos municipais'],
     pistas: /simples|\bdas\b|\bpis\b|cofins|icms|\biss\b|irpj|csll|imposto|tribut|federa|difal|\bst\b|substitui/i,
   },
   {
     id: 'mercadoria',
+    numero: 2,
     nome: 'Compra de mercadoria',
-    ajuda: 'já entra pelo CMV — fica fora das despesas para não contar duas vezes',
+    ajuda: 'o que você comprou para revender',
+    onde: 'NÃO desce pelas despesas: esse custo já entra no DRE pelo CMV. '
+      + 'Contar nos dois lugares derrubaria o resultado do mês sem motivo.',
+    exemplos: ['Compra de mercadoria para revenda', 'Fornecedor de material', 'Frete sobre a compra'],
+    gruposSugeridos: ['Fornecedores de revenda', 'Frete sobre compras'],
     pistas: /mercadoria|revenda|compra de produto|estoque|fornecedor/i,
   },
   {
     id: 'direta',
+    numero: 3,
     nome: 'Despesas diretas',
-    ajuda: 'o que só existe porque houve venda: frete, comissão, RT',
+    ajuda: 'o que só existe porque houve venda',
+    onde: 'Sai do lucro bruto, antes da margem de contribuição.',
+    exemplos: ['Frete de entrega', 'Comissão de vendedores', 'RT (indicação)', 'Embalagem'],
+    gruposSugeridos: ['Frete e entrega', 'Comissões e RT', 'Embalagem'],
     pistas: /frete|entrega|transport|comiss|\brt\b|indica/i,
   },
   {
     id: 'indireta',
+    numero: 4,
     nome: 'Despesas indiretas',
-    ajuda: 'a estrutura: salários, encargos, aluguel, energia, manutenção',
+    ajuda: 'a estrutura, que existe vendendo ou não',
+    onde: 'Sai da margem de contribuição, antes do EBITDA.',
+    exemplos: ['Salários e encargos', 'Aluguel', 'Energia', 'Contador', 'Manutenção', 'Combustível'],
+    gruposSugeridos: [
+      'Pessoal e encargos', 'Ocupação (aluguel, energia, água)', 'Administrativas',
+      'Comerciais e marketing', 'Manutenção e reformas', 'Veículos e combustível',
+      'Tecnologia e sistemas', 'Serviços de terceiros', 'Pró-labore',
+    ],
     pistas: null,
   },
   {
     id: 'emprestimo',
+    numero: 5,
     nome: 'Empréstimos e financiamentos',
-    ajuda: 'parcela e juros de dívida — fica depois do EBITDA',
+    ajuda: 'dívida: parcela, juros e tarifa de banco',
+    onde: 'Sai depois do EBITDA. É por isso que o EBITDA mostra como a operação '
+      + 'vai indo mesmo quando a dívida está pesada.',
+    exemplos: ['Capital de giro', 'Financiamento de veículo', 'Antecipação de recebíveis', 'Juros e tarifas'],
+    gruposSugeridos: ['Juros e tarifas', 'Amortização de empréstimo', 'Antecipação de recebíveis'],
     pistas: /emprestim|empréstim|financiam|capital de giro|juros|antecipa|desconto de duplicata/i,
   },
   {
     id: 'naoOperacional',
+    numero: 6,
     nome: 'Itens não operacionais',
-    ajuda: 'o que não é a operação: caução, compra de veículo, investimento',
+    ajuda: 'dinheiro que saiu, mas não é a operação',
+    onde: 'Sai depois do EBITDA, junto com a dívida, antes do lucro líquido.',
+    exemplos: ['Caução de aluguel', 'Compra de veículo', 'Obra ou imobilizado', 'Distribuição de lucro'],
+    gruposSugeridos: ['Investimentos e imobilizado', 'Caução e depósitos', 'Sócios'],
     pistas: /cau[çc][aã]o|ve[íi]culo|imobiliz|investiment|distribui[çc][aã]o de lucro|dividendo/i,
   },
 ];
 
-const PORID = new Map(GRUPOS.map((g) => [g.id, g]));
+/* o nome antigo continua valendo: outros módulos já importam GRUPOS */
+export const GRUPOS = DEGRAUS;
+
+const PORID = new Map(DEGRAUS.map((g) => [g.id, g]));
+
+export function degrauPorId(id) { return PORID.get(id) || null; }
 
 /** O grupo que as pistas SUGEREM para uma conta — sugestão, nunca decisão. */
 export function sugerirGrupo(nome) {
-  const g = GRUPOS.find((x) => x.pistas && x.pistas.test(nome || ''));
+  const g = DEGRAUS.find((x) => x.pistas && x.pistas.test(nome || ''));
   return g ? g.id : null;
+}
+
+/**
+ * O GRUPO DA CONTA — o nome que ELA deu, dentro do degrau.
+ *
+ * O degrau diz onde o número entra na conta; o grupo diz como ela chama aquilo.
+ * Conta sem grupo não ganha um inventado: ela aparece solta dentro do degrau,
+ * que é a verdade — ninguém agrupou ainda.
+ */
+export function lerGrupos(cfg) {
+  const mapa = new Map();
+  for (const [nome, grupo] of Object.entries(cfg?.dre?.grupos || {})) {
+    const limpo = String(grupo || '').trim();
+    if (limpo) mapa.set(String(nome), limpo);
+  }
+  return mapa;
+}
+
+/** Todos os grupos que já existem, por degrau, para a tela oferecer. */
+export function gruposExistentes(cfg) {
+  const classificacao = lerClassificacao(cfg);
+  const grupos = lerGrupos(cfg);
+  const porDegrau = new Map(DEGRAUS.map((d) => [d.id, new Set(d.gruposSugeridos || [])]));
+  for (const [conta, grupo] of grupos) {
+    const degrau = classificacao.get(conta);
+    if (degrau && porDegrau.has(degrau)) porDegrau.get(degrau).add(grupo);
+  }
+  return new Map([...porDegrau].map(([id, set]) => [id, [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))]));
 }
 
 /**
@@ -120,9 +195,9 @@ export async function dre(mes = monthKey(new Date().toISOString().slice(0, 10)))
   const resultado = lucroBruto == null ? null : lucroBruto - despesas;
 
   const gerencial = montarGerencial({
-    pagamentos, mes, classificacao,
+    pagamentos, mes, classificacao, grupos: lerGrupos(cfg),
     /* a bruta do gerencial é ANTES da devolução: ela volta abaixo, como dedução */
-    receitaBruta: cents(receitaBruta + devolucoes), devolucoes, cmv, lucroBruto,
+    receitaBruta: cents(receitaBruta + devolucoes), devolucoes, cmv, cobertura,
   });
 
   return {
@@ -141,7 +216,10 @@ export async function dre(mes = monthKey(new Date().toISOString().slice(0, 10)))
     mercadoria,
     resultado,
     margemLiquida: resultado != null && receitaBruta ? (resultado / receitaBruta) * 100 : null,
-    avisos: montarAvisos({ cobertura, mercadoria, grupos, marcadas, receitaBruta }),
+    avisos: montarAvisos({
+      cobertura: { ...cobertura, semCusto: semCusto.length },
+      mercadoria, grupos, marcadas, receitaBruta,
+    }),
   };
 }
 
@@ -225,15 +303,21 @@ function calcularCmv(notas, pedidos) {
  * calculado sobre custo incompleto é dar um número errado com cara de certo —
  * que é a única coisa que este app não pode fazer.
  */
-function montarGerencial({ pagamentos, mes, classificacao, receitaBruta, devolucoes, cmv, lucroBruto }) {
+function montarGerencial({
+  pagamentos, mes, classificacao, grupos, receitaBruta, devolucoes, cmv, cobertura,
+}) {
   const doMes = pagamentos.filter((p) => p.vencimento && monthKey(p.vencimento) === mes);
 
-  /* cada conta do plano, com o degrau em que ela cai (ou nenhum) */
+  /* cada conta do plano, com o degrau em que ela cai e o grupo que ela deu */
   const contas = new Map();
   for (const p of doMes) {
     const nome = (p.categoria || '').trim() || SEM_CLASSIFICACAO;
     if (!contas.has(nome)) {
-      contas.set(nome, { nome, valor: 0, itens: 0, grupo: classificacao.get(nome) || null });
+      contas.set(nome, {
+        nome, valor: 0, itens: 0,
+        degrau: classificacao.get(nome) || null,
+        grupo: grupos.get(nome) || null,
+      });
     }
     const c = contas.get(nome);
     c.valor += p.valor || 0;
@@ -241,14 +325,41 @@ function montarGerencial({ pagamentos, mes, classificacao, receitaBruta, devoluc
   }
   const todas = [...contas.values()].map((c) => ({ ...c, valor: cents(c.valor) }));
 
-  const doGrupo = (id) => {
-    const lista = todas.filter((c) => c.grupo === id).sort((a, b) => b.valor - a.valor);
-    return { total: cents(sum(lista, (c) => c.valor)), contas: lista };
+  /**
+   * O degrau abre nos GRUPOS dela quando ela nomeou algum; quando não nomeou
+   * nenhum, abre direto nas contas. Um nível de pasta vazio só atrapalha.
+   */
+  const agrupar = (lista) => {
+    const mapa = new Map();
+    for (const c of lista) {
+      const nome = c.grupo || SEM_GRUPO;
+      if (!mapa.has(nome)) mapa.set(nome, { nome, valor: 0, itens: 0, contas: [] });
+      const g = mapa.get(nome);
+      g.valor += c.valor;
+      g.itens += c.itens;
+      g.contas.push(c);
+    }
+    return [...mapa.values()]
+      .map((g) => ({
+        ...g,
+        valor: cents(g.valor),
+        contas: g.contas.sort((a, b) => b.valor - a.valor),
+      }))
+      .sort((a, b) => b.valor - a.valor);
   };
-  const semGrupo = (() => {
-    const lista = todas.filter((c) => !c.grupo).sort((a, b) => b.valor - a.valor);
-    return { total: cents(sum(lista, (c) => c.valor)), contas: lista };
-  })();
+
+  const bloco = (lista) => {
+    const ordenada = lista.sort((a, b) => b.valor - a.valor);
+    const temGrupo = ordenada.some((c) => c.grupo);
+    return {
+      total: cents(sum(ordenada, (c) => c.valor)),
+      contas: ordenada,
+      grupos: temGrupo ? agrupar(ordenada) : [],
+    };
+  };
+
+  const doGrupo = (id) => bloco(todas.filter((c) => c.degrau === id));
+  const semGrupo = bloco(todas.filter((c) => !c.degrau));
 
   const deducoesDePlano = doGrupo('deducao');
   const diretas = doGrupo('direta');
@@ -262,11 +373,12 @@ function montarGerencial({ pagamentos, mes, classificacao, receitaBruta, devoluc
     total: cents(deducoesDePlano.total + devolucoes),
     contas: [
       ...(devolucoes ? [{
-        nome: 'Devoluções de venda', valor: devolucoes, itens: 0, grupo: 'deducao',
-        origem: 'notas fiscais',
+        nome: 'Devoluções de venda', valor: devolucoes, itens: 0, degrau: 'deducao',
+        grupo: null, origem: 'notas fiscais',
       }] : []),
       ...deducoesDePlano.contas,
     ],
+    grupos: deducoesDePlano.grupos,
   };
 
   const receitaLiquida = cents(receitaBruta - deducoes.total);
@@ -276,16 +388,30 @@ function montarGerencial({ pagamentos, mes, classificacao, receitaBruta, devoluc
    * números com motivos diferentes, e por isso têm nomes diferentes nas duas
    * telas, em vez de um deles aparecer no lugar do outro.
    */
-  const lucro = lucroBruto == null ? null : cents(receitaLiquida - cmv);
-  const margemContribuicao = lucro == null ? null : cents(lucro - diretas.total);
-  const ebitda = margemContribuicao == null ? null : cents(margemContribuicao - indiretas.total);
-  const lucroLiquido = ebitda == null ? null
-    : cents(ebitda - emprestimos.total - naoOperacionais.total - semGrupo.total);
+  /**
+   * O DRE MOSTRA O NÚMERO E DIZ O QUE FALTA — não deixa a tela em branco.
+   *
+   * Antes, uma única nota sem custo de pedido apagava lucro bruto, margem de
+   * contribuição, EBITDA e lucro líquido de uma vez: quatro travessões no meio
+   * da tela que ela abriu justamente para ver esses quatro números. O cuidado
+   * era certo (CMV incompleto deixa o lucro MAIOR do que ele é), mas a resposta
+   * estava errada — esconder não é a única forma de não mentir.
+   *
+   * Agora a conta sai inteira e a cobertura viaja com ela: cada linha abaixo do
+   * CMV carrega, escrito do lado, em quanto da venda o custo é conhecido. Quem
+   * lê vê o número E vê o tamanho da ressalva.
+   */
+  const lucro = cents(receitaLiquida - cmv);
+  const margemContribuicao = cents(lucro - diretas.total);
+  const ebitda = cents(margemContribuicao - indiretas.total);
+  const lucroLiquido = cents(ebitda - emprestimos.total - naoOperacionais.total - semGrupo.total);
 
   const sobre = (v) => (receitaLiquida && v != null ? (v / receitaLiquida) * 100 : null);
 
   return {
     mes,
+    cobertura,
+    confiavel: !!cobertura?.completa,
     receitaBruta,
     devolucoes,
     deducoes,
@@ -316,9 +442,31 @@ function montarGerencial({ pagamentos, mes, classificacao, receitaBruta, devoluc
 /** As linhas da escada do DRE gerencial, na ordem da conta. */
 export function linhasDoDreGerencial(g) {
   const p = g.percentuais;
-  const detalhe = (bloco) => bloco.contas.map((c) => ({
+  /**
+   * A ressalva anda junto do número, em vez de virar um travessão. E ela fala
+   * em REAIS: "custo conhecido em 100% da venda" arredondado, junto de "o lucro
+   * real é menor", era a tela se contradizendo na mesma linha. O que falta tem
+   * tamanho, e é o tamanho que diz se a ressalva importa.
+   */
+  const c = g.cobertura;
+  const falta = c && c.faturadoTotal != null
+    ? Math.round((c.faturadoTotal - c.faturadoComCusto) * 100) / 100 : null;
+  const ressalva = g.confiavel || !falta || falta <= 0
+    ? null
+    : `${money(falta)} de venda ainda sem custo conhecido — o lucro real é um pouco menor`;
+  /**
+   * O degrau abre nos grupos dela, e cada grupo abre nas contas do plano. Sem
+   * grupo nomeado, abre direto nas contas: um nível de pasta vazio só atrapalha
+   * quem está procurando de onde saiu um número.
+   */
+  const conta = (c) => ({
     nome: c.nome, valor: c.valor, itens: c.itens, nota: c.origem || null,
-  }));
+  });
+  const detalhe = (bloco) => ((bloco.grupos || []).length
+    ? bloco.grupos.map((g) => ({
+      nome: g.nome, valor: g.valor, itens: g.itens, filhos: g.contas.map(conta),
+    }))
+    : bloco.contas.map(conta));
   const degrau = (id, rotulo, bloco, nota) => (bloco.total
     ? {
       id,
@@ -354,6 +502,7 @@ export function linhasDoDreGerencial(g) {
       rotulo: 'CMV — custo da mercadoria vendida',
       sinal: '−',
       valor: -g.cmv,
+      nota: ressalva,
       percentual: p.cmv,
     },
     {
@@ -361,6 +510,7 @@ export function linhasDoDreGerencial(g) {
       rotulo: 'Lucro bruto',
       tipo: 'subtotal',
       valor: g.lucroBruto,
+      nota: ressalva,
       percentual: p.lucroBruto,
     },
     degrau('g-diretas', 'Despesas diretas', g.despesasDiretas,
@@ -370,7 +520,7 @@ export function linhasDoDreGerencial(g) {
       rotulo: 'Margem de contribuição',
       tipo: 'subtotal',
       valor: g.margemContribuicao,
-      nota: 'o que sobra para pagar a estrutura',
+      nota: ressalva || 'o que sobra para pagar a estrutura',
       percentual: p.margemContribuicao,
     },
     degrau('g-indiretas', 'Despesas indiretas', g.despesasIndiretas,
@@ -380,7 +530,7 @@ export function linhasDoDreGerencial(g) {
       rotulo: 'EBITDA',
       tipo: 'subtotal',
       valor: g.ebitda,
-      nota: 'resultado da operação, antes de dívida e do que não é operação',
+      nota: ressalva || 'resultado da operação, antes de dívida e do que não é operação',
       percentual: p.ebitda,
     },
     degrau('g-emprestimos', 'Empréstimos e financiamentos', g.emprestimos, null),
@@ -400,6 +550,7 @@ export function linhasDoDreGerencial(g) {
       rotulo: 'Lucro líquido',
       tipo: 'resultado',
       valor: g.lucroLiquido,
+      nota: ressalva,
       percentual: p.lucroLiquido,
     },
   ].filter(Boolean);
@@ -432,11 +583,14 @@ function montarAvisos({ cobertura, grupos, marcadas, receitaBruta }) {
   if (!receitaBruta) avisos.push({ nivel: 'atencao', texto: 'Nenhuma nota fiscal neste mês. Importe o relatório fiscal.' });
 
   if (cobertura.faturadoTotal && !cobertura.completa) {
-    const pct = Math.round(cobertura.percentual || 0);
+    const falta = Math.round((cobertura.faturadoTotal - cobertura.faturadoComCusto) * 100) / 100;
     avisos.push({
       nivel: 'atencao',
-      texto: `O custo é conhecido em ${pct}% do faturamento. O lucro bruto só aparece quando estiver em 100% — `
-        + 'o app não completa custo por estimativa. Importe o relatório de vendas com a coluna VALOR DO CUSTO.',
+      texto: `${money(falta)} de venda deste mês ainda não têm custo de pedido — ${cobertura.semCusto} `
+        + `nota(s). O CMV abaixo é o custo do resto, então o lucro bruto, a margem de contribuição, `
+        + 'o EBITDA e o lucro líquido estão um pouco MAIORES do que vão ficar. O app não completa '
+        + 'custo por estimativa: mande o relatório de vendas com a coluna VALOR DO CUSTO, '
+        + 'com um mês de folga para trás.',
     });
   }
 

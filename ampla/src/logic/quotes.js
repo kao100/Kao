@@ -35,8 +35,32 @@ export async function resumo({ de, ate }) {
   const total = cents(sum(orcamentos, (o) => o.valorTotal || 0));
   const convertido = lista.find((g) => g.situacao === 'convertido');
   const perdido = lista.find((g) => g.situacao === 'perdido');
+  const aberto = lista.find((g) => g.situacao === 'aberto');
   const decididos = convertido.quantidade + perdido.quantidade;
   const semSituacao = lista.find((g) => g.situacao === 'desconhecida');
+
+  /**
+   * CEM POR CENTO DE CONVERSÃO ERA UM ERRO DE DIVISÃO, NÃO UMA BOA NOTÍCIA.
+   *
+   * "A gente fala que a conversão é 100 por cento. Tá errada, precisa arrumar."
+   *
+   * A taxa dividia os convertidos pelos DECIDIDOS (convertidos + perdidos). A
+   * ideia era justa: orçamento em aberto ainda pode virar venda, e contá-lo como
+   * perda seria antecipar um fato. Só que o sistema dela NUNCA marca um
+   * orçamento como perdido — ele aprova ou deixa em aberto para sempre. Com
+   * perdidos = 0, a divisão era convertidos ÷ convertidos: 100%, todo mês, para
+   * qualquer empresa, independente de quanto foi orçado.
+   *
+   * É o pior tipo de erro deste app: não dava erro, e o número errado era
+   * redondo e bonito.
+   *
+   * O número que vale passou a ser o que não depende de o arquivo marcar perda:
+   * quanto do que foi ORÇADO já virou venda. A taxa sobre os decididos continua
+   * existindo, mas só aparece quando o arquivo realmente produz perdas — e,
+   * quando não produz, a tela diz por que ela sumiu.
+   */
+  const arquivoMarcaPerda = perdido.quantidade > 0;
+  const naoDecididos = aberto.quantidade + semSituacao.quantidade;
 
   return {
     de,
@@ -45,15 +69,20 @@ export async function resumo({ de, ate }) {
     total,
     ticketMedio: orcamentos.length ? cents(total / orcamentos.length) : 0,
     grupos: lista.filter((g) => g.quantidade > 0),
-    // a taxa só faz sentido sobre o que já foi decidido: orçamento em aberto
-    // ainda pode virar venda, e contá-lo como perda seria antecipar um fato
-    taxa: decididos ? (convertido.quantidade / decididos) * 100 : null,
-    taxaValor: (convertido.valor + perdido.valor)
-      ? (convertido.valor / (convertido.valor + perdido.valor)) * 100
-      : null,
+    /* convertidos sobre TUDO que foi orçado no período — é a conversão até aqui */
+    taxa: orcamentos.length ? (convertido.quantidade / orcamentos.length) * 100 : null,
+    taxaValor: total ? (convertido.valor / total) * 100 : null,
+    /* e a antiga, sobre o que já foi decidido, só quando o arquivo decide */
+    taxaDecididos: arquivoMarcaPerda && decididos
+      ? (convertido.quantidade / decididos) * 100 : null,
+    taxaValorDecididos: arquivoMarcaPerda && (convertido.valor + perdido.valor)
+      ? (convertido.valor / (convertido.valor + perdido.valor)) * 100 : null,
+    arquivoMarcaPerda,
+    naoDecididos,
     decididos,
     convertido,
     perdido,
+    aberto,
     semSituacao: semSituacao.quantidade,
     porCliente: rankearClientes(orcamentos),
     abertos: orcamentos

@@ -8,7 +8,7 @@ import { navigate, href, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import {
   TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
-  juntarVendedores, juntarTodosOsPares, vendedoresParecidos,
+  juntarVendedores, juntarTodosOsPares, vendedoresParecidos, cancelarNota,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -206,6 +206,18 @@ function acoes(p, contexto) {
     botoes.push(botao('Importar custos', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/produtos') }));
   } else if (p.tipo === 'item_sem_nf') {
     botoes.push(botao('Importar NFs', { tipo: 'primario', pequeno: true, onClick: () => navigate('/arquivos/nfs') }));
+  } else if (p.tipo === 'nf_repetida') {
+    /**
+     * UM BOTÃO POR NOTA, com o número e o cliente escritos nele. A pergunta é
+     * "qual delas morreu?" e a resposta só pode vir dela — o arquivo diz
+     * "autorizada" nas duas.
+     */
+    for (const n of p.notas || []) {
+      botoes.push(botao(`NF ${n.numero} foi cancelada`, {
+        pequeno: true,
+        onClick: () => marcarCancelada(p, n),
+      }));
+    }
   } else if (p.tipo === 'pagar_sem_categoria') {
     botoes.push(botao('Ver o caixa', { tipo: 'primario', pequeno: true, onClick: () => navigate('/fluxo') }));
   } else if (p.tipo === 'pago_sem_banco') {
@@ -241,7 +253,22 @@ function acoes(p, contexto) {
      * se resolve mandando o XML, o outro não se resolve, acabou.
      */
     for (const extra of MOTIVOS_EXTRA[p.tipo] || []) {
-      botoes.push(botao(`✓ ${extra}`, { tipo: 'ok', pequeno: true, onClick: () => ignorar(p, extra) }));
+      botoes.push(botao(`✓ ${extra}`, {
+        tipo: 'ok',
+        pequeno: true,
+        /**
+         * "A NF foi cancelada" não pode ser só um motivo para sumir da lista.
+         *
+         * "Todas as que foram para ignoradas são as notas que foram canceladas."
+         *
+         * Antes, dizer isso escondia a pendência e deixava a nota faturando: ela
+         * continuava no total do mês, na margem e na comissão. Agora a frase faz
+         * o que diz — a nota é marcada como cancelada e sai de todas as telas.
+         */
+        onClick: () => (extra === CANCELOU_A_NOTA && p.alvo?.store === 'nfs'
+          ? cancelarPelaPendencia(p, extra)
+          : ignorar(p, extra)),
+      }));
     }
     botoes.push(botao('Outro motivo…', { pequeno: true, onClick: () => ignorar(p) }));
   }
@@ -253,12 +280,16 @@ function acoes(p, contexto) {
  * quer dizer a mesma coisa numa nota e num movimento de banco.
  */
 /** Motivos de um toque que valem só para alguns tipos, ao lado do principal. */
+const CANCELOU_A_NOTA = 'A NF foi cancelada';
+
 const MOTIVOS_EXTRA = {
-  nf_sem_vendedor: ['A NF foi cancelada'],
-  nf_sem_pedido: ['A NF foi cancelada'],
+  nf_sem_vendedor: [CANCELOU_A_NOTA],
+  nf_sem_pedido: [CANCELOU_A_NOTA],
+  devolucao_sem_origem: [CANCELOU_A_NOTA],
 };
 
 const MOTIVO_RAPIDO = {
+  nf_repetida: 'São duas vendas diferentes',
   nf_sem_vendedor: 'Deixar sem vendedor',
   nf_sem_pedido: 'A nota está correta',
   nf_vendedor_nao_vende: 'Pode deixar como está',
@@ -706,6 +737,49 @@ async function ignorar(p, motivoPronto) {
   await atualizarAlertas();
   ok(`Pendência ignorada — ${motivo.toLowerCase()}.`);
   refresh();
+}
+
+/**
+ * Marcar a nota como cancelada é mexer no faturamento de um mês inteiro, então
+ * a tela mostra antes exatamente o que vai sair e de onde.
+ */
+async function marcarCancelada(p, nota) {
+  const r = await formulario({
+    titulo: `Cancelar a NF ${nota.numero}?`,
+    descricao: `${nota.clienteNome || 'cliente não identificado'} · ${money(nota.valor)}\n\n`
+      + 'Ela sai do faturamento, da margem, do DRE e da comissão do vendedor — em todas as '
+      + 'telas, a partir de agora. A marca fica gravada e sobrevive quando você reenviar o '
+      + 'relatório de notas.\n\n'
+      + 'Se for engano, dá para voltar atrás: a nota reaparece aqui como cancelada por você.',
+    campos: [{
+      chave: 'motivo',
+      label: 'Por quê? (opcional)',
+      tipo: 'texto',
+      valor: 'Cancelada e reemitida',
+    }],
+    confirmar: 'Sim, foi cancelada',
+  });
+  if (!r) return;
+  try {
+    await cancelarNota(nota.id, r.motivo || 'Cancelada e reemitida');
+    await atualizarAlertas();
+    ok(`NF ${nota.numero} marcada como cancelada.`);
+    refresh();
+  } catch (e) {
+    erro(e.message || 'Não deu para cancelar.');
+  }
+}
+
+/** Dizer "foi cancelada" numa pendência de nota cancela a nota de verdade. */
+async function cancelarPelaPendencia(p, motivo) {
+  try {
+    await cancelarNota(p.alvo.id, motivo);
+    await atualizarAlertas();
+    ok('Nota marcada como cancelada — ela sai do faturamento e da comissão.');
+    refresh();
+  } catch (e) {
+    erro(e.message || 'Não deu para cancelar.');
+  }
 }
 
 async function reabrir(p) {

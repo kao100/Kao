@@ -1730,6 +1730,24 @@ function preservar(nome, antigo, novo) {
   for (const campo of PRESERVAR[nome] || []) {
     if (antigo[campo] != null && (novo[campo] == null || novo[campo] === '')) out[campo] = antigo[campo];
   }
+  /**
+   * A NOTA QUE ELA MARCOU COMO CANCELADA CONTINUA CANCELADA.
+   *
+   * O relatório diz "autorizada" nas duas notas do par cancelado-e-reemitido —
+   * é justamente por isso que ela teve de marcar à mão. Deixar a reimportação
+   * desfazer a marca apagaria o acerto no primeiro arquivo novo do mês
+   * seguinte, sem aviso, e a venda voltaria a contar dobrada.
+   *
+   * O arquivo só vence quando ele próprio diz "cancelada": aí os dois
+   * concordam e a origem passa a ser o arquivo.
+   */
+  if (nome === 'nfs' && antigo.canceladaPor === 'manual' && novo.status !== 'cancelada') {
+    out.status = 'cancelada';
+    out.canceladaPor = 'manual';
+    out.canceladaEm = antigo.canceladaEm || null;
+    out.canceladaMotivo = antigo.canceladaMotivo || null;
+  }
+
   // vendedor que você definiu (à mão ou confirmando um pedido) não volta atrás
   if (nome === 'nfs' && ['manual', 'pedido-confirmado'].includes(antigo.vendedorOrigem)) {
     out.vendedorId = antigo.vendedorId;

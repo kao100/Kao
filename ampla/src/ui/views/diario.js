@@ -304,7 +304,7 @@ function cardOrcamentos(orc) {
     .slice(0, 5);
 
   return card('Orçamentos do mês',
-    h('span.mini.muted', orc.taxa == null ? 'nada decidido' : `${pct(orc.taxa, 0)} vira venda`),
+    h('span.mini.muted', orc.taxa == null ? 'sem orçamento' : `${pct(orc.taxa, 0)} vira venda`),
     h('div.grade.grade--2',
       kpi({ label: 'Orçado', valor: money(orc.total), tamanho: 'p', nota: `${orc.quantidade} orçamento(s)` }),
       kpi({ label: 'Em aberto', valor: String(orc.abertos.length), tamanho: 'p', nota: 'esperando resposta' })),

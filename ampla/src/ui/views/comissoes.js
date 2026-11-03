@@ -17,13 +17,26 @@ import { money, pct, formatDate, monthKey, monthLabel, addMonths, today, timesta
 
 export async function telaComissoes({ query }) {
   const mes = query.m || monthKey(today());
-  const [calculo, regras, ajustes, vendedores, produtos] = await Promise.all([
+  const [calculo, regras, ajustes, vendedores, produtos, pendencias] = await Promise.all([
     commission.calcular(mes),
     store.regrasComissao.listar(),
     store.ajustesComissao.listar(),
     store.vendedores.listar(),
     store.produtos.listar(),
+    store.pendencias.listar(),
   ]);
+  /**
+   * A COMISSÃO É O LUGAR ONDE A NOTA REPETIDA CUSTA DINHEIRO.
+   *
+   * "Essas NF foram canceladas. Tá em duplicidade aí."
+   *
+   * Nota cancelada e reemitida aparece duas vezes no relatório, com situação
+   * "autorizada" nas duas — e o vendedor recebe comissão pela venda dobrada. O
+   * aviso vive aqui porque é aqui que ela conferiu, e porque é daqui que sai o
+   * PDF que vai para o vendedor.
+   */
+  const repetidas = pendencias.filter((p) => p.tipo === 'nf_repetida'
+    && p.status === 'aberta' && p.mes === mes);
   definirTitulo('Comissões', monthLabel(mes));
   const fechada = calculo.status === 'fechada';
 
@@ -52,6 +65,16 @@ export async function telaComissoes({ query }) {
         label: 'Vendedores', valor: String(calculo.vendedores.length), icone: '👥',
         nota: `${calculo.linhas.length} linhas calculadas`,
       })),
+
+    repetidas.length > 0 && h('button.aviso.aviso--atencao', {
+      style: { width: '100%' }, onClick: () => navigate(href('/conciliacao', { t: 'nf_repetida' })),
+    },
+    h('div.crescer', { style: { textAlign: 'left' } },
+      h('strong', `${repetidas.length} par(es) de notas com o mesmo valor no mesmo dia`),
+      h('div.mini', `${money(repetidas.reduce((a, p) => a + (p.valor || 0), 0))} podem estar `
+        + 'contando duas vezes. Se alguma foi cancelada e reemitida, diga qual — '
+        + 'a comissão deste mês muda.')),
+    h('span', '›')),
 
     /* conferência obrigatória */
     calculo.conferencia.ok
