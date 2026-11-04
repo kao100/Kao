@@ -9,6 +9,7 @@ import * as store from '../../core/store.js';
 import {
   TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
   juntarVendedores, juntarTodosOsPares, vendedoresParecidos, cancelarNota,
+  familiasDeNomes, juntarNomes,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -20,9 +21,9 @@ import { cents, sum, sortBy } from '../../core/util.js';
 
 export async function telaConciliacao({ query }) {
   const filtro = query.t || 'todas';
-  const [pendencias, vendedores, nfs, titulos, pagamentos] = await Promise.all([
+  const [pendencias, vendedores, nfs, titulos, pagamentos, familias] = await Promise.all([
     store.pendencias.listar(), store.vendedores.listar(), store.nfs.listar(),
-    store.receber.listar(), store.pagar.listar(),
+    store.receber.listar(), store.pagar.listar(), familiasDeNomes(),
   ]);
   definirTitulo('Conciliação');
 
@@ -49,8 +50,29 @@ export async function telaConciliacao({ query }) {
       }),
       kpi({ label: 'Ignoradas', valor: String(ignoradas.length), icone: '🙈' })),
 
+    /**
+     * O ATALHO QUE RESOLVE CENTENAS DE UMA VEZ.
+     *
+     * "São 341 pendências. Eu não consigo olhar uma por uma."
+     *
+     * Quando quase toda a lista é a mesma pessoa escrita de jeitos diferentes,
+     * o trabalho não é por nota — é por pessoa. Então o caminho aparece ANTES
+     * da lista, dizendo quantas notas estão em jogo, em vez de esperar que ela
+     * role até o fim para descobrir que havia um botão.
+     */
+    familias.length > 0 && h('button.aviso.aviso--atencao', {
+      style: { width: '100%' }, onClick: () => navigate('/conciliacao/nomes'),
+    },
+    h('div.crescer', { style: { textAlign: 'left' } },
+      h('strong', `${familias.reduce((a, f) => a + f.membros.length, 0)} nomes podem ser `
+        + `${familias.length} pessoa(s)`),
+      h('div.mini', `${familias.reduce((a, f) => a + f.notasEmJogo, 0)} nota(s) presas em `
+        + 'variações de grafia. Junte os nomes e boa parte desta lista some de uma vez.')),
+    h('span', '›')),
+
     h('div.btn-linha',
       botao('🔄 Refazer os vínculos', { onClick: () => refazer() }),
+      botao('👥 Juntar nomes', { onClick: () => navigate('/conciliacao/nomes') }),
       botao('Central de arquivos', { onClick: () => navigate('/arquivos') })));
 
   if (!abertas.length && filtro === 'todas') {
@@ -71,7 +93,9 @@ export async function telaConciliacao({ query }) {
    * nome que fica é sempre o CURTO — é o que ela usa e o que já carrega o
    * faturamento. Continua sendo escolha dela: nada acontece sem o toque.
    */
-  const pares = vendedoresParecidos(vendedores);
+  /* o card de pares some quando a tela nova já cobre o caso: dois caminhos
+     para a mesma decisão acabam discordando */
+  const pares = familias.length ? [] : vendedoresParecidos(vendedores);
 
   return h('div.empilha', { style: { gap: '14px' } },
     cabecalho,
@@ -1030,4 +1054,157 @@ async function definirManual(nf, vendedores) {
   await atualizarAlertas();
   ok('Vendedor definido.');
   refresh();
+}
+
+/* ------------------------------------------------- um nome, um vendedor */
+
+/**
+ * A TELA QUE RESOLVE TREZENTAS E QUARENTA E UMA DE UMA VEZ.
+ *
+ * "Eu não consigo linkar 341 coisas olhando uma por uma. Quero que ele linke
+ *  todas as variações do Carlos Eduardo, e do Francisco."
+ *
+ * A unidade de trabalho aqui não é a nota: é a PESSOA. O app agrupa os
+ * cadastros que dividem um pedaço de nome, mostra quantas notas e quanto
+ * dinheiro cada um carrega, e ela confirma a família inteira num toque.
+ *
+ * O que ele marca sozinho é só o que é quase certo — o nome inteiro de um
+ * dentro do outro ("CARLOS EDUARDO" dentro de "CARLOS EDUARDO 8"). O que divide
+ * apenas um pedaço ("LUIZ EDUARDO" e "CARLOS EDUARDO" dividem o EDUARDO) vem
+ * desmarcado, com o pedaço repetido escrito do lado. Marcar por semelhança
+ * continua proibido; sugerir e deixar ela olhar, não.
+ */
+export async function telaNomes() {
+  const familias = await familiasDeNomes();
+  definirTitulo('Um nome, um vendedor',
+    familias.length ? `${familias.length} pessoa(s) com nome repetido` : 'nada repetido');
+
+  if (!familias.length) {
+    return h('div.empilha', { style: { gap: '14px' } },
+      h('div.tudo-ok',
+        h('div.tudo-ok__icone', '✅'),
+        h('h3', 'Nenhum nome repetido'),
+        h('p.pequeno.muted',
+          'Todo vendedor cadastrado tem um nome só. Quando um arquivo novo trouxer uma '
+          + 'variação de grafia, ela aparece aqui para você juntar.')),
+      botao('Voltar', { bloco: true, onClick: () => navigate('/conciliacao') }));
+  }
+
+  const notas = familias.reduce((a, f) => a + f.notasEmJogo, 0);
+  const valor = cents(sum(familias, (f) => f.valorEmJogo));
+
+  return h('div.empilha', { style: { gap: '14px' } },
+    h('div.grade.grade--2',
+      kpi({
+        label: 'Nomes para juntar',
+        valor: String(familias.reduce((a, f) => a + f.membros.length, 0)),
+        icone: '👥', cor: 'atencao', nota: `em ${familias.length} pessoa(s)`,
+      }),
+      kpi({ label: 'Notas em jogo', valor: String(notas), icone: '🧾', nota: money(valor) })),
+
+    aviso('Cada arquivo escreve o nome do vendedor do seu jeito, e o app trata o nome como '
+      + 'dado: nome novo, cadastro novo. É o certo — ligar por semelhança seria inventar '
+      + 'vínculo. Mas aqui você diz, de uma vez, quais grafias são a mesma pessoa. O que você '
+      + 'confirmar fica guardado como apelido: o próximo arquivo com aquela grafia já cai no '
+      + 'lugar certo sozinho.', 'info'),
+
+    ...familias.map((f) => cardFamilia(f)));
+}
+
+function cardFamilia(f) {
+  /* quem fica pode ser trocado: o padrão é o cadastro com mais notas */
+  let destinoId = f.destino.id;
+  const marcados = new Set(f.membros.filter((m) => m.certeza === 'contido').map((m) => m.id));
+
+  const botaoJuntar = h('button.btn.btn--primario', { style: { width: '100%' } });
+  const corpo = h('div.empilha', { style: { gap: '2px' } });
+
+  const nomeDoDestino = () => (f.opcoes.find((o) => o.id === destinoId)?.nome || f.destino.nome);
+
+  const redesenhar = () => {
+    const outros = [...f.membros, f.destino]
+      .filter((m) => m.id !== destinoId)
+      .sort((a, b) => b.notas - a.notas);
+    corpo.replaceChildren(...outros.map((m) => linhaDoNome(m, marcados, atualizar)));
+    atualizar();
+  };
+
+  function atualizar() {
+    const quantos = [...marcados].filter((id) => id !== destinoId).length;
+    botaoJuntar.textContent = quantos
+      ? `Juntar ${quantos} nome(s) em ${nomeDoDestino()}`
+      : 'Marque os nomes que são a mesma pessoa';
+    botaoJuntar.disabled = !quantos;
+  }
+
+  botaoJuntar.addEventListener('click', () => juntarFamilia(f, destinoId, [...marcados], nomeDoDestino()));
+
+  const seletor = h('select.entrada', {
+    onChange: (e) => { destinoId = e.target.value; marcados.delete(destinoId); redesenhar(); },
+  }, ...f.opcoes.map((o) => h('option', {
+    value: o.id, selected: o.id === destinoId,
+  }, o.nome)));
+
+  redesenhar();
+
+  return card(null, null,
+    h('div.empilha', { style: { gap: '4px', marginBottom: '10px' } },
+      h('span.mini.muted', 'O VENDEDOR QUE FICA'),
+      seletor,
+      h('span.mini.muted',
+        `${f.destino.notas} nota(s) · ${money(f.destino.valor)} já estão neste cadastro.`)),
+    h('span.mini.muted', 'SÃO A MESMA PESSOA?'),
+    corpo,
+    h('div', { style: { marginTop: '10px' } }, botaoJuntar));
+}
+
+function linhaDoNome(m, marcados, atualizar) {
+  const caixa = h('input', {
+    type: 'checkbox',
+    checked: marcados.has(m.id),
+    onChange: (e) => {
+      if (e.target.checked) marcados.add(m.id); else marcados.delete(m.id);
+      atualizar();
+    },
+  });
+  const porque = m.certeza === 'contido'
+    ? 'o nome inteiro aparece no outro'
+    : `só ${m.pedacosComuns.map((p) => p.toUpperCase()).join(' e ')} se repete`;
+
+  return h('label.linha.linha--entre', { style: { padding: '8px 0', gap: '10px' } },
+    caixa,
+    h('span.crescer', { style: { minWidth: 0 } },
+      h('span.pequeno', m.nome),
+      h('span.mini.muted', { style: { display: 'block' } },
+        `${m.notas} nota(s) · ${m.pedidos} pedido(s) · ${money(m.valor)}`),
+      h('span.mini.muted', { style: { display: 'block' } }, porque)),
+    m.naoVende ? selo('não vende', 'atencao') : null);
+}
+
+async function juntarFamilia(f, destinoId, marcados, nomeDoDestino) {
+  const ids = marcados.filter((id) => id !== destinoId);
+  if (!ids.length) return;
+  const nomes = [...f.membros, f.destino].filter((m) => ids.includes(m.id)).map((m) => m.nome);
+  const notas = [...f.membros, f.destino].filter((m) => ids.includes(m.id))
+    .reduce((a, m) => a + m.notas, 0);
+
+  const r = await formulario({
+    titulo: `Juntar em ${nomeDoDestino}?`,
+    descricao: `${nomes.join('\n')}\n\n`
+      + `${notas} nota(s) passam para ${nomeDoDestino}, junto com os pedidos, os títulos e as `
+      + 'linhas de comissão. Os nomes acima viram apelidos dele — o próximo arquivo que trouxer '
+      + 'qualquer um deles já cai no lugar certo, sem perguntar.\n\n'
+      + 'Faturamento, margem e comissão do mês mudam na hora.',
+    campos: [],
+    confirmar: 'Juntar',
+  });
+  if (!r) return;
+  try {
+    const feito = await juntarNomes(destinoId, ids, `confirmado por você: ${nomes.join(', ')}`);
+    await atualizarAlertas();
+    ok(`${feito.nomes.length} nome(s) juntados · ${feito.notas} nota(s) agora são de ${nomeDoDestino}.`);
+    refresh();
+  } catch (e) {
+    erro(e.message || 'Não deu para juntar.');
+  }
 }

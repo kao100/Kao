@@ -63,7 +63,7 @@ export const FONTES = {
     },
     formatos: ['xlsx', 'csv', 'pdf', 'xml', 'zip'],
     colunasReais: ['número da nota', 'data', 'razão social', 'CPF/CNPJ', 'total', 'situação',
-      'natureza da operação'],
+      'natureza da operação', 'vendedor'],
     campos: [
       campo('numero', 'Número da nota', 'texto', { chaveNatural: true, sinonimos: ['nota', 'nf', 'numero nota', 'num nota', 'nro nota', 'numero', 'documento'] }),
       campo('dataEmissao', 'Data', 'data', { sinonimos: ['data', 'emissao', 'emissão', 'data emissao', 'data da nota'] }),
@@ -99,6 +99,26 @@ export const FONTES = {
       }),
       campo('serie', 'Série', 'texto', { sinonimos: ['serie', 'série'] }),
       campo('pedidoNumero', 'Pedido', 'texto', { sinonimos: ['pedido', 'num pedido', 'numero pedido', 'nro pedido'] }),
+      /**
+       * O VENDEDOR DA NOTA — a coluna existia no arquivo e o app a ignorava.
+       *
+       * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo
+       *  na nota fiscal."
+       *
+       * O construtor da nota sempre leu `vendedorNome`, mas nenhuma coluna
+       * alimentava esse campo aqui: o relatório dela trazia o vendedor e ele
+       * caía no chão. Sem ele, a nota só ganhava dono se alguma das pontes
+       * fechasse — o pedido, o contas a receber, o relatório de comissão — e o
+       * que não fechava virava pergunta, uma por nota.
+       *
+       * É irmão do erro da coluna fantasma dos orçamentos, pelo avesso: lá uma
+       * coluna apontava para um campo que não existia; aqui um campo esperava
+       * uma coluna que ninguém tinha declarado.
+       */
+      campo('vendedorNome', 'Vendedor', 'texto', {
+        sinonimos: ['vendedor', 'representante', 'consultor', 'vendedora', 'responsavel',
+          'vendedor responsavel', 'nome do vendedor'],
+      }),
     ],
     ajuda: 'INCLUA A COLUNA NATUREZA DA OPERAÇÃO. É ela que separa venda de DEVOLUÇÃO: sem ela, '
       + 'a devolução entra como faturamento e ainda gera comissão. Este relatório também não traz '
@@ -130,6 +150,16 @@ export const FONTES = {
       campo('valorCusto', 'Valor do custo', 'dinheiro', { sinonimos: ['custo', 'valor custo', 'valor do custo', 'vl custo', 'cmv'] }),
       campo('valorTotal', 'Valor total', 'dinheiro', { sinonimos: VALOR_TOTAL }),
       campo('clienteDoc', 'CPF / CNPJ', 'texto', { sinonimos: DOC }),
+      /**
+       * A NOTA QUE O PEDIDO GEROU, quando o relatório traz.
+       *
+       * É a ponte mais curta entre pedido e nota — e o construtor já a lia. Sem
+       * a coluna declarada, o app dependia das três pontes indiretas, e o que
+       * não fechava virava pergunta, uma por nota.
+       */
+      campo('nfNumero', 'Nota fiscal', 'texto', {
+        sinonimos: ['nota fiscal', 'nota', 'nf', 'numero nf', 'nfe'],
+      }),
     ],
     ajuda: 'Inclua a coluna VENDEDOR no export. É ela que faz a comissão fechar sozinha: o '
       + 'vendedor do pedido passa para todas as notas daquele pedido, sem você marcar nada. '
@@ -425,6 +455,12 @@ export const FONTES = {
       campo('valorUnitario', 'Valor unitário', 'dinheiro', { sinonimos: ['valor unitario', 'preco', 'unitario'] }),
       campo('custoUnitario', 'Custo unitário', 'dinheiro', { sinonimos: ['custo', 'custo unitario'] }),
       campo('seq', 'Item nº', 'inteiro', { sinonimos: ['item', 'seq'] }),
+      /* o construtor sempre leu estes três; faltava a coluna que os alimenta */
+      campo('nfSerie', 'Série da nota', 'texto', { sinonimos: ['serie', 'série', 'serie nf'] }),
+      campo('custoTotal', 'Custo total', 'dinheiro', {
+        sinonimos: ['custo total', 'valor custo', 'valor do custo', 'vl custo', 'cmv'],
+      }),
+      campo('unidade', 'Unidade', 'texto', { sinonimos: ['un', 'und', 'unid', 'unidade', 'medida'] }),
     ],
   },
 

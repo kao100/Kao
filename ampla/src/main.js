@@ -18,7 +18,7 @@ import { telaFluxo } from './ui/views/fluxo.js';
 import { telaComercial, telaVendedor } from './ui/views/comercial.js';
 import { telaProdutos, telaProduto } from './ui/views/produtos.js';
 import { telaComissoes } from './ui/views/comissoes.js';
-import { telaConciliacao, telaVendedores } from './ui/views/conciliacao.js';
+import { telaConciliacao, telaVendedores, telaNomes } from './ui/views/conciliacao.js';
 import { telaRt } from './ui/views/rt.js';
 import { telaArquivos, telaImportar } from './ui/views/arquivos.js';
 import { telaAjustes } from './ui/views/ajustes.js';
@@ -70,6 +70,7 @@ const ROTAS = [
    */
   { path: '/conciliacao', view: telaConciliacao, titulo: 'O que o app precisa saber' },
   { path: '/conciliacao/vendedores', view: telaVendedores, titulo: 'De quem foi esta venda?' },
+  { path: '/conciliacao/nomes', view: telaNomes, titulo: 'Um nome, um vendedor' },
   { path: '/dre', view: telaDre, titulo: 'DRE gerencial' },
   { path: '/compras', view: telaCompras, titulo: 'Compras' },
   { path: '/fechamento', view: telaFechamento, titulo: 'Fechamento do mês' },

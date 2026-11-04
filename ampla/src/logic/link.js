@@ -1588,6 +1588,214 @@ export function vendedoresParecidos(vendedores) {
  * Continua sendo decisão dela: este caminho só existe atrás de um botão que diz
  * exatamente quais pares vai juntar.
  */
+/**
+ * UM NOME, UM VENDEDOR — resolver as variações em lote, e não uma a uma.
+ *
+ * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo 8 na
+ *  nota fiscal. Eu não consigo linkar 341 coisas olhando uma por uma. Quero que
+ *  ele linke todas as variações do Carlos Eduardo, e do Francisco."
+ *
+ * O que acontece na base dela: o nome que vem no arquivo é tratado como DADO —
+ * se não existe vendedor com aquele nome, o app cria o cadastro. É a regra
+ * certa (ligar por semelhança é inventar vínculo), mas tem um efeito que ela
+ * sentiu na pele: cada variação de grafia vira uma pessoa, e cada pessoa nova
+ * traz as perguntas dela junto. Trezentas e quarenta e uma.
+ *
+ * A saída NÃO é passar a adivinhar. É dar a ela uma ferramenta que decide em
+ * lote: o app AGRUPA os cadastros que compartilham um pedaço de nome, mostra
+ * quantas notas e quanto dinheiro cada um carrega, e ela confirma a família
+ * inteira num toque. Continua sendo escolha dela — só que uma escolha por
+ * pessoa, em vez de uma por nota.
+ *
+ * E o que ela confirma fica: o nome que sai vira APELIDO do que fica, então o
+ * próximo arquivo com "CARLOS EDUARDO 8" já cai no lugar certo sozinho, sem
+ * pergunta nenhuma.
+ */
+const PARTICULAS_DE_NOME = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'di', 'du', 'del', 'van', 'von',
+  'jr', 'junior', 'filho', 'neto', 'sobrinho', 'ltda', 'me', 'epp', 'eireli',
+]);
+
+/** Os pedaços que identificam uma pessoa: fora partículas, números e abreviações. */
+export function pedacosDoNome(nome) {
+  return normalize(nome)
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p.length >= 3 && !PARTICULAS_DE_NOME.has(p) && !/^\d+$/.test(p));
+}
+
+/**
+ * As famílias de nomes que PODEM ser a mesma pessoa: cadastros que
+ * compartilham pelo menos um pedaço de nome.
+ *
+ * A sugestão vem em dois níveis, e a diferença entre eles é toda a honestidade
+ * desta tela:
+ *
+ *  • CONTIDO — todos os pedaços de um nome aparecem no outro ("CARLOS EDUARDO"
+ *    dentro de "CARLOS EDUARDO 8"). É praticamente certo, e vem já marcado.
+ *  • SÓ UM PEDAÇO — "LUIZ EDUARDO" e "CARLOS EDUARDO" dividem só o EDUARDO.
+ *    Pode ser a mesma pessoa e pode ser outra; vem DESMARCADO, com o pedaço
+ *    repetido escrito do lado, para ela decidir olhando.
+ */
+export async function familiasDeNomes() {
+  const [vendedores, nfs, pedidos] = await Promise.all([
+    store.vendedores.listar(), store.nfs.listar(), store.pedidos.listar(),
+  ]);
+
+  const carga = new Map();
+  const somar = (id, campo, valor) => {
+    if (!id) return;
+    if (!carga.has(id)) carga.set(id, { notas: 0, valor: 0, pedidos: 0 });
+    const c = carga.get(id);
+    c[campo] += 1;
+    c.valor += Math.abs(valor || 0);
+  };
+  for (const nf of nfs) {
+    if (nf.status === 'cancelada' || nf.operacao === 'entrada') continue;
+    somar(nf.vendedorId, 'notas', nf.valorTotal);
+  }
+  for (const p of pedidos) somar(p.vendedorId, 'pedidos', 0);
+
+  const comPedacos = vendedores.map((v) => ({
+    v,
+    pedacos: new Set([...pedacosDoNome(v.nome), ...(v.apelidos || []).flatMap(pedacosDoNome)]),
+    carga: carga.get(v.id) || { notas: 0, valor: 0, pedidos: 0 },
+  })).filter((x) => x.pedacos.size > 0);
+
+  /* união por pedaço compartilhado: quem divide um pedaço cai na mesma família */
+  const pai = new Map(comPedacos.map((x) => [x.v.id, x.v.id]));
+  const raiz = (id) => {
+    let r = id;
+    while (pai.get(r) !== r) r = pai.get(r);
+    while (pai.get(id) !== r) { const n = pai.get(id); pai.set(id, r); id = n; }
+    return r;
+  };
+  const unir = (a, b) => { const ra = raiz(a); const rb = raiz(b); if (ra !== rb) pai.set(ra, rb); };
+
+  const porPedaco = new Map();
+  for (const x of comPedacos) {
+    for (const p of x.pedacos) {
+      if (!porPedaco.has(p)) porPedaco.set(p, []);
+      porPedaco.get(p).push(x);
+    }
+  }
+  for (const [, lista] of porPedaco) {
+    for (let i = 1; i < lista.length; i += 1) unir(lista[0].v.id, lista[i].v.id);
+  }
+
+  const grupos = new Map();
+  for (const x of comPedacos) {
+    const r = raiz(x.v.id);
+    if (!grupos.has(r)) grupos.set(r, []);
+    grupos.get(r).push(x);
+  }
+
+  const familias = [];
+  for (const [, membros] of grupos) {
+    if (membros.length < 2) continue;
+    /* quem fica, por padrão: o cadastro confirmado com mais notas — é o que já
+       carrega histórico, meta e comissão, e mudar isso custa caro */
+    const ordenados = [...membros].sort((a, b) => {
+      const peso = (x) => (x.v.confirmado === true && !x.v.naoVende ? 1 : 0);
+      return (peso(b) - peso(a)) || (b.carga.notas - a.carga.notas) || (b.carga.valor - a.carga.valor);
+    });
+    const destino = ordenados[0];
+    const outros = ordenados.slice(1).map((x) => {
+      const dentro = [...x.pedacos].every((p) => destino.pedacos.has(p))
+        || [...destino.pedacos].every((p) => x.pedacos.has(p));
+      const comuns = [...x.pedacos].filter((p) => destino.pedacos.has(p));
+      return {
+        id: x.v.id,
+        nome: x.v.nome,
+        apelidos: x.v.apelidos || [],
+        naoVende: !!x.v.naoVende,
+        notas: x.carga.notas,
+        pedidos: x.carga.pedidos,
+        valor: cents(x.carga.valor),
+        /* contido = quase certo, vem marcado; só um pedaço = ela decide */
+        certeza: dentro ? 'contido' : 'pedaco',
+        pedacosComuns: comuns,
+      };
+    });
+    familias.push({
+      id: `fam_${destino.v.id}`,
+      destino: {
+        id: destino.v.id,
+        nome: destino.v.nome,
+        apelidos: destino.v.apelidos || [],
+        naoVende: !!destino.v.naoVende,
+        notas: destino.carga.notas,
+        pedidos: destino.carga.pedidos,
+        valor: cents(destino.carga.valor),
+      },
+      opcoes: ordenados.map((x) => ({ id: x.v.id, nome: x.v.nome })),
+      membros: outros,
+      notasEmJogo: outros.reduce((a, m) => a + m.notas, 0),
+      valorEmJogo: cents(outros.reduce((a, m) => a + m.valor, 0)),
+    });
+  }
+  return familias.sort((a, b) => b.notasEmJogo - a.notasEmJogo);
+}
+
+/**
+ * Junta de uma vez os cadastros que ela confirmou serem a mesma pessoa.
+ *
+ * Um `recalcular()` por fusão seria o mesmo trabalho repetido N vezes numa base
+ * de mil notas — e é justamente o caso dela, com 341 pendências em jogo. Então
+ * as fusões acontecem todas e o recálculo vem UMA vez, no fim.
+ */
+export async function juntarNomes(ficaId, saiIds, motivo) {
+  const fica = await store.vendedores.obter(ficaId);
+  if (!fica) throw new Error('Vendedor não encontrado.');
+
+  const apelidos = new Set(fica.apelidos || []);
+  let notas = 0;
+  let pedidos = 0;
+  const juntados = [];
+
+  for (const saiId of saiIds) {
+    if (saiId === ficaId) continue;
+    const sai = await store.vendedores.obter(saiId);
+    if (!sai) continue;
+    apelidos.add(sai.nome);
+    for (const a of sai.apelidos || []) apelidos.add(a);
+
+    const trocar = async (repo, campo) => {
+      const todos = await repo.listar();
+      const mexidos = todos.filter((r) => r[campo] === saiId).map((r) => ({ ...r, [campo]: ficaId }));
+      if (mexidos.length) await repo.salvarMuitos(mexidos);
+      return mexidos.length;
+    };
+    notas += await trocar(store.nfs, 'vendedorId');
+    pedidos += await trocar(store.pedidos, 'vendedorId');
+    await trocar(store.receber, 'vendedorId');
+    await trocar(store.nfItens, 'vendedorId');
+    await trocar(store.vendasProduto, 'vendedorId');
+    await trocar(store.comissoesRelatorio, 'vendedorId');
+
+    await store.vendedores.remover(saiId);
+    juntados.push(sai.nome);
+  }
+
+  /**
+   * Quem ela acabou de confirmar como vendedor VENDE. Deixar o "não vende" de
+   * pé aqui devolveria as mesmas notas como pendência no segundo seguinte — foi
+   * o que a fez abrir a tela.
+   */
+  await store.vendedores.salvar({
+    ...fica, apelidos: [...apelidos], confirmado: true, naoVende: false,
+  });
+
+  await store.registrar('vendedores_juntados', {
+    alvoId: ficaId,
+    alvo: fica.nome,
+    de: juntados.join(', '),
+    para: fica.nome,
+    motivo: motivo || `${notas} nota(s) e ${pedidos} pedido(s) passaram para ${fica.nome}`,
+  });
+  await recalcular();
+  return { nomes: juntados, notas, pedidos };
+}
+
 export async function juntarTodosOsPares(motivo) {
   const pares = vendedoresParecidos(await store.vendedores.listar());
   const feitos = [];

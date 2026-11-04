@@ -2939,6 +2939,185 @@ console.log('\n▶ Os degraus do DRE são fixos; os grupos dentro deles são del
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
 }
 
+console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
+{
+  /**
+   * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo 8
+   *  na nota fiscal. Eu não consigo linkar 341 coisas olhando uma por uma.
+   *  Quero que ele linke todas as variações do Carlos Eduardo, e do Francisco."
+   *
+   * O nome que vem no arquivo é tratado como DADO: nome novo, cadastro novo. É
+   * a regra certa — ligar por semelhança é inventar vínculo. Só que cada
+   * variação de grafia virava uma pessoa, cada pessoa trazia as perguntas dela,
+   * e a conta chegou em trezentas e quarenta e uma.
+   *
+   * A saída não é passar a adivinhar: é decidir POR PESSOA em vez de por nota.
+   * O app agrupa, marca sozinho só o que é quase certo, e deixa o resto para
+   * ela olhar.
+   */
+  const guardados = {
+    vendedores: await store.vendedores.listar(),
+    nfs: await store.nfs.listar(),
+    pendencias: await store.pendencias.listar(),
+  };
+  for (const x of guardados.vendedores) await store.vendedores.remover(x.id);
+  for (const x of guardados.nfs) await store.nfs.remover(x.id);
+
+  const vend = (id, nome, extra = {}) => store.vendedores.salvar({
+    id, nome, apelidos: [], ativo: true, ...extra,
+  });
+  await vend('v_ce', 'CARLOS EDUARDO', { confirmado: true });
+  await vend('v_ce8', 'CARLOS EDUARDO 8');
+  await vend('v_le', 'LUIZ EDUARDO', { naoVende: true, confirmado: true });
+  await vend('v_fr', 'FRANCISCO');
+  await vend('v_frs', 'FRANCISCO PEREIRA');
+  await vend('v_mv', 'MARIA VITORIA');
+
+  let n = 0;
+  /* a nota carrega o NOME, como vem no arquivo: é dele que o vínculo sai a cada
+     recálculo, e é por isso que juntar os nomes resolve de verdade */
+  const nota = (vendedorId, vendedorNome, quantas, valor) => Promise.all(
+    Array.from({ length: quantas }, () => {
+      n += 1;
+      return store.nfs.salvar({
+        id: `nfn_${n}`, numero: String(6000 + n), dataEmissao: '2026-10-05', mes: '2026-10',
+        valorTotal: valor, valorProdutos: valor, clienteNome: `CLIENTE ${n}`,
+        vendedorId, vendedorNome, status: 'autorizada', operacao: 'saida',
+        devolucao: false, devolucaoDeCompra: false,
+      });
+    }),
+  );
+  await nota('v_ce', 'CARLOS EDUARDO', 10, 1000);
+  await nota('v_ce8', 'CARLOS EDUARDO 8', 5, 2000);
+  await nota('v_le', 'LUIZ EDUARDO', 3, 500);
+  await nota('v_fr', 'FRANCISCO', 2, 700);
+  await nota('v_frs', 'FRANCISCO PEREIRA', 4, 900);
+  await nota('v_mv', 'MARIA VITORIA', 1, 100);
+
+  const familias = await link.familiasDeNomes();
+  igual('os nomes se juntam em duas pessoas, não em seis', familias.length, 2);
+
+  const eduardo = familias.find((f) => f.destino.id === 'v_ce');
+  ok('quem fica é o cadastro confirmado com mais notas', !!eduardo, JSON.stringify(familias.map((f) => f.destino.nome)));
+  igual('com os outros dois na família', eduardo.membros.map((m) => m.nome).sort(),
+    ['CARLOS EDUARDO 8', 'LUIZ EDUARDO']);
+
+  const ce8 = eduardo.membros.find((m) => m.nome === 'CARLOS EDUARDO 8');
+  igual('o nome inteiro dentro do outro é quase certo', ce8.certeza, 'contido');
+  igual('e traz as notas dele para ela ver', ce8.notas, 5);
+
+  const le = eduardo.membros.find((m) => m.nome === 'LUIZ EDUARDO');
+  igual('dividir só um pedaço NÃO é quase certo', le.certeza, 'pedaco');
+  igual('e o app diz qual pedaço se repete', le.pedacosComuns, ['eduardo']);
+  igual('mostrando também quem está marcado como "não vende"', le.naoVende, true);
+
+  igual('a conta do que está em jogo é por família', eduardo.notasEmJogo, 8);
+  ok('e a pessoa sozinha não vira família',
+    !familias.some((f) => [f.destino.id, ...f.membros.map((m) => m.id)].includes('v_mv')),
+    JSON.stringify(familias));
+
+  /* ela confirma a família inteira num toque */
+  const feito = await link.juntarNomes('v_ce', ['v_ce8', 'v_le'], 'confirmado por você');
+  igual('as notas dos dois passam de uma vez', feito.notas, 8);
+  const ce = await store.vendedores.obter('v_ce');
+  igual('os nomes viram apelidos de quem ficou',
+    (ce.apelidos || []).sort(), ['CARLOS EDUARDO 8', 'LUIZ EDUARDO']);
+  igual('e os cadastros repetidos somem', await store.vendedores.obter('v_ce8'), undefined);
+  igual('quem ela confirmou como vendedor volta a vender', ce.naoVende, false);
+
+  const doCarlos = (await store.nfs.listar()).filter((x) => x.vendedorId === 'v_ce');
+  igual('todas as 18 notas ficam com uma pessoa só', doCarlos.length, 18);
+
+  /**
+   * O TESTE QUE FAZ ISSO VALER A PENA: o próximo arquivo com a grafia antiga
+   * já cai no lugar certo. Sem isso, ela juntaria os nomes hoje e amanhã teria
+   * as mesmas trezentas e quarenta e uma de volta.
+   */
+  await importar('nfs', 'nfs-nome.csv', `Número da nota;Data;Razão social;Total;Situação;Vendedor
+7777;20/10/2026;CLIENTE NOVO;3.000,00;Autorizada;CARLOS EDUARDO 8`);
+  await link.recalcular();
+  const nova = (await store.nfs.listar()).find((x) => x.numero === '7777');
+  igual('a grafia antiga num arquivo novo já cai no cadastro certo', nova?.vendedorId, 'v_ce');
+  igual('sem criar um cadastro repetido de novo',
+    (await store.vendedores.listar()).filter((v) => /EDUARDO/.test(v.nome)).length, 1);
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const x of await store.vendedores.listar()) await store.vendedores.remover(x.id);
+  for (const x of await store.pendencias.listar()) await store.pendencias.remover(x.id);
+  for (const x of guardados.vendedores) await store.vendedores.salvar(x);
+  for (const x of guardados.nfs) await store.nfs.salvar(x);
+  for (const x of guardados.pendencias) await store.pendencias.salvar(x);
+  await link.recalcular();
+}
+
+console.log('\n▶ Todo campo que o app lê tem uma coluna que o alimenta');
+{
+  /**
+   * O IRMÃO DA COLUNA FANTASMA — pelo avesso.
+   *
+   * O guarda antigo pegava coluna de relatório apontando para um campo que não
+   * existia. Este pega o contrário: um campo que o construtor LÊ e que nenhuma
+   * coluna declara. O efeito é pior, porque é silencioso — o arquivo traz o
+   * dado, o app ignora, e ninguém vê nada errado na tela.
+   *
+   * Foi o que aconteceu com o VENDEDOR DA NOTA FISCAL. O construtor sempre leu
+   * `d.vendedorNome`, mas a fonte 'nfs' não declarava a coluna: o relatório
+   * dela trazia o vendedor e ele caía no chão. Sem ele, a nota só ganhava dono
+   * se alguma ponte fechasse, e o que não fechava virava uma pergunta por nota.
+   * Trezentas e quarenta e uma.
+   *
+   * Dois campos são exceção de verdade: `chave` e `operacao` da nota só existem
+   * no XML, que monta o registro por outro caminho. Qualquer outro é bug.
+   */
+  const SO_DO_XML = { nfs: ['chave', 'operacao'] };
+
+  const fonte = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'logic', 'ingest.js'), 'utf8');
+  const construtores = [...fonte.matchAll(/if \(fonteId === '(\w+)'\) return (\w+)\(/g)]
+    .map((m) => ({ fonteId: m[1], fn: m[2] }));
+  ok('o app tem um construtor por fonte tabular', construtores.length >= 10, String(construtores.length));
+
+  const corpoDe = (nome) => {
+    const i = fonte.indexOf(`function ${nome}(`);
+    if (i < 0) return '';
+    const j = fonte.indexOf('\n}\n', i);
+    return fonte.slice(i, j < 0 ? undefined : j);
+  };
+
+  const orfaos = [];
+  for (const { fonteId, fn } of construtores) {
+    const lidos = [...new Set([...corpoDe(fn).matchAll(/\bd\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
+    const declarados = new Set((FONTES[fonteId]?.campos || []).map((c) => c.chave));
+    const isentos = new Set(SO_DO_XML[fonteId] || []);
+    for (const campo of lidos) {
+      if (!declarados.has(campo) && !isentos.has(campo)) orfaos.push(`${fonteId}.${campo}`);
+    }
+  }
+  igual('nenhum campo fica esperando uma coluna que ninguém declarou', orfaos, []);
+
+  /* e o caso que começou tudo, verificado de ponta a ponta */
+  const mapeado = ingest.sugerirMapeamento('nfs',
+    ['Número da nota', 'Data', 'Razão social', 'Total', 'Situação', 'Vendedor']);
+  igual('a coluna VENDEDOR do relatório de notas é reconhecida sozinha',
+    mapeado.vendedorNome, 'Vendedor');
+
+  const guardadas = await store.nfs.listar();
+  for (const x of guardadas) await store.nfs.remover(x.id);
+  await importar('nfs', 'nfs-vend.csv', `Número da nota;Data;Razão social;Total;Situação;Vendedor
+7801;05/10/2026;CLIENTE VEND;5.000,00;Autorizada;VENDEDOR DA NOTA`);
+  await link.recalcular();
+  const nova = (await store.nfs.listar()).find((x) => x.numero === '7801');
+  igual('e o nome chega na nota', nova?.vendedorNome, 'VENDEDOR DA NOTA');
+  ok('com o vendedor já ligado, sem pergunta nenhuma', !!nova?.vendedorId, JSON.stringify(nova));
+  igual('ligado pelo nome que veio no arquivo', nova?.vendedorOrigem, 'nf');
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const v of await store.vendedores.listar()) {
+    if (v.nome === 'VENDEDOR DA NOTA') await store.vendedores.remover(v.id);
+  }
+  for (const x of guardadas) await store.nfs.salvar(x);
+  await link.recalcular();
+}
+
 console.log('\n▶ Pasta do mês');
 {
   const p = await dossie.pasta('2026-09');
