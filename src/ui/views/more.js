@@ -28,6 +28,8 @@ export async function moreView() {
     h('div.stack.stack--sm',
       sectionTitle('Saúde e acompanhamento'),
       menuRow({ icon: '🦵', title: 'Joelho esquerdo', sub: kneeSub, to: '/joelho' }),
+      menuRow({ icon: '💪', title: 'Fortalecimento do joelho', sub: 'Exercícios, progressão e biblioteca', to: '/joelho/fortalecimento' }),
+      menuRow({ icon: '📄', title: 'Relatório semanal do joelho', sub: 'Exportar PDF para ortopedista/fisioterapeuta', to: '/joelho/relatorio' }),
       menuRow({
         icon: '🩺',
         title: 'Orientações médicas',
@@ -43,6 +45,7 @@ export async function moreView() {
 
     h('div.stack.stack--sm',
       sectionTitle('Treino'),
+      menuRow({ icon: '💍', title: 'Projeto Casamento — 8 semanas', sub: 'Supinos, puxada, remada, ombros, medidas e fotos', to: '/projeto' }),
       menuRow({ icon: '📚', title: 'Biblioteca de exercícios', sub: 'Como identificar e executar cada exercício', to: '/biblioteca' }),
       menuRow({ icon: '🏭', title: 'Minha academia', sub: `${equipment.length} máquina(s) com foto`, to: '/academia' }),
       menuRow({ icon: '❤️', title: 'Planos de cardio', sub: 'Fases da esteira', to: '/cardio-planos' }),

@@ -6,7 +6,7 @@
  */
 
 export const DB_NAME = 'kao-training';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 /** Definição das object stores e seus índices. */
 export const STORES = {
@@ -31,6 +31,8 @@ export const STORES = {
   // alimentação: um registro por alimento consumido, e a tabela de alimentos
   meals: { keyPath: 'id', indexes: [['byDate', 'date'], ['byFood', 'foodId']] },
   foods: { keyPath: 'id', indexes: [['byGroup', 'group']] },
+  // resposta do joelho por exercício (durante/depois) e no dia seguinte
+  kneeResponses: { keyPath: 'id', indexes: [['byDate', 'date'], ['byExercise', 'exerciseId'], ['bySession', 'sessionId']] },
 };
 
 let dbPromise = null;

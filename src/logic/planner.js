@@ -13,7 +13,7 @@
 import * as store from '../core/store.js';
 import { dayKey, addDays, DAY_LABEL, today } from '../core/format.js';
 import { EQUIP_LABEL } from '../data/exercises.js';
-import { exercisePermission } from './knee.js';
+import { exercisePermission, kneeStatus } from './knee.js';
 
 export const BLOCK_KIND = {
   strength: { label: 'Musculação', icon: '🏋️', accent: 'volt' },
@@ -131,6 +131,10 @@ export async function planForDate(date) {
 
   const blocks = [];
   for (const raw of chosen.sort((a, b) => (a.order || 0) - (b.order || 0))) {
+    // ordem dentro do dia: musculação antes do cardio, porque é ela que exige
+    // força e técnica. A exceção é o dia em que o cardio É o treino principal
+    // (domingo de intervalado) — aí os acessórios vêm depois, com `cardioFirst`.
+    const beforeCount = blocks.length;
     const tpl = annotate(raw);
     if (tpl.kind === 'football') {
       blocks.push({ type: 'football', templateId: tpl.id, title: tpl.name, subtitle: tpl.subtitle, icon: '⚽', accent: 'ball', minMinutes: 30 });
@@ -162,6 +166,11 @@ export async function planForDate(date) {
           icon: tpl.kind === 'recovery' ? '🧘' : '❤️',
           accent: tpl.kind === 'recovery' ? 'recover' : 'cardio',
         });
+        if (tpl.cardioFirst) {
+          // o cardio é o treino principal do dia: sobe para a frente dos acessórios
+          const cardioBlock = blocks.pop();
+          blocks.splice(beforeCount, 0, cardioBlock);
+        }
       }
     }
   }
@@ -191,10 +200,35 @@ export async function planForDate(date) {
   const needsKneeCheck = await requiresKneeCheck(blocks);
 
   /* ---------- avisos de planejamento ---------- */
+  // fortalecimento do joelho em dia de pernas: segue, mas a progressão
+  // depende do estado do joelho (nenhum número é autorização automática)
+  if (needsKneeCheck && !blocks.some((b) => b.type === 'football') && await blockHasHeavyLegs(blocks)) {
+    const knee = await kneeStatus(date);
+    if (knee.stopProgression) {
+      notes.push('Joelho: os registros pedem interromper a progressão e procurar orientação profissional. Se treinar pernas hoje, só cargas que não aumentem a dor.');
+    } else if (knee.level === 'caution') {
+      notes.push('Joelho em cautela: o fortalecimento continua, sem progressão — amplitude confortável e cargas de manutenção.');
+    }
+  }
   if (key === 'wed') {
     const hasHeavyLegs = await blockHasHeavyLegs(blocks);
     if (hasHeavyLegs) {
       notes.push('Atenção: há treino pesado de pernas na quarta, véspera do futebol de quinta. Considere mover para outro dia.');
+    }
+  }
+
+  // Cardio forte na véspera de jogo é como se chega cansado no primeiro tempo —
+  // e é onde as lesões sem contato acontecem.
+  const hardCardio = blocks.find((b) => b.plan && isHardPlan(b.plan));
+  if (hardCardio) {
+    const tomorrowIsFootball = key === 'wed'
+      || (key === 'sat' && (sundayPlan?.football ?? null) === true);
+    if (tomorrowIsFootball) {
+      notes.push(`"${hardCardio.plan.name}" é uma sessão forte e amanhã tem jogo. Chegar cansado no jogo rende menos e cansa mais o joelho — vale trocar por Zona 2 ou recuperação ativa hoje, e deixar o intervalado para um dia sem futebol na sequência.`);
+    }
+    const playedToday = blocks.some((b) => b.type === 'football');
+    if (playedToday) {
+      notes.push('Hoje já tem futebol, que é a sessão intensa do dia. Somar um cardio forte em cima não acrescenta condicionamento — acrescenta fadiga.');
     }
   }
 
@@ -264,4 +298,18 @@ export async function planForWeek(anyDateInWeek = today()) {
   const { weekDates } = await import('../core/format.js');
   const dates = weekDates(anyDateInWeek);
   return Promise.all(dates.map((d) => planForDate(d)));
+}
+
+/**
+ * Um plano de cardio é "forte" quando o RPE passa de 5.
+ * Lê o número do próprio texto do plano, então planos que você criar ou editar
+ * entram na conta sem precisar de lista alguma.
+ */
+export function isHardPlan(plan) {
+  // o texto é do tipo "8–9 / 10 nos blocos": só o que vem antes da barra é o
+  // RPE; o 10 depois dela é o tamanho da escala, não a intensidade
+  const scale = String(plan?.rpe || '').split('/')[0];
+  const nums = scale.match(/\d+/g);
+  if (!nums) return false;
+  return Math.max(...nums.map(Number)) >= 6;
 }

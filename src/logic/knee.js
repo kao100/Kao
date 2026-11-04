@@ -33,28 +33,82 @@ export const PAIN_CONTEXTS = {
   'post-lower': 'Depois do treino de pernas',
   'pre-football': 'Antes do futebol',
   'post-football': 'Depois do futebol',
+  'pre-cardio': 'Antes do cardio',
+  'post-cardio': 'Depois do cardio',
   'pre-workout': 'Antes do treino',
   'post-workout': 'Depois do treino',
+  'next-day': 'Dia seguinte ao treino/jogo',
   daily: 'Registro do dia',
   other: 'Outro momento',
 };
 
+/** Onde dói — só para descrever ao profissional, não para diagnosticar. */
+export const PAIN_LOCATIONS = [
+  { value: 'below-patella', label: 'Abaixo da patela (tendão)' },
+  { value: 'above-patella', label: 'Acima da patela' },
+  { value: 'patella', label: 'Na patela / em volta' },
+  { value: 'inner', label: 'Parte interna' },
+  { value: 'outer', label: 'Parte externa' },
+  { value: 'back', label: 'Atrás do joelho' },
+  { value: 'diffuse', label: 'Difusa / não sei dizer' },
+];
+
+/** Respostas rápidas por exercício e no dia seguinte. */
+export const KNEE_RESPONSES = {
+  during: [
+    { value: 'none', label: 'Exercício realizado sem dor', short: 'sem dor', tone: 'ok' },
+    { value: 'mild', label: 'Desconforto leve', short: 'desconforto leve', tone: 'warn' },
+    { value: 'worse', label: 'Dor aumentou', short: 'dor aumentou', tone: 'danger' },
+  ],
+  after: [
+    { value: 'none', label: 'Sem dor depois', short: 'sem dor depois', tone: 'ok' },
+    { value: 'mild', label: 'Desconforto leve depois', short: 'desconforto leve', tone: 'warn' },
+    { value: 'worse', label: 'Dor aumentou após o treino', short: 'dor aumentou após', tone: 'danger' },
+  ],
+  'next-day': [
+    { value: 'better', label: 'Joelho melhor no dia seguinte', short: 'melhor no dia seguinte', tone: 'ok' },
+    { value: 'same', label: 'Igual ao normal', short: 'igual', tone: 'neutral' },
+    { value: 'worse', label: 'Pior no dia seguinte', short: 'pior no dia seguinte', tone: 'danger' },
+  ],
+};
+
+export function responseLabel(phase, value) {
+  return KNEE_RESPONSES[phase]?.find((r) => r.value === value)?.short || value;
+}
+
 /**
  * Situação atual do joelho comparada ao próprio padrão recente.
+ *
+ * Duas regras de fundo:
+ *  - nenhum número é "autorização". Dor baixa não libera aumento de carga
+ *    por si só: a progressão também depende da resposta em 24 h, do que você
+ *    mudou na última sessão e das orientações profissionais;
+ *  - melhora nos registros não é recuperação completa. O app comemora a
+ *    tendência, mas continua pedindo progressão de uma variável por vez.
+ *
  * @returns {Promise<{
  *   level:'ok'|'attention'|'caution', latest:object|null, baseline:number|null,
- *   reason:string, avoidLoadIncrease:boolean, messages:string[]
+ *   reason:string, avoidLoadIncrease:boolean, stopProgression:boolean,
+ *   seekProfessional:boolean, trend:object, messages:string[]
  * }>}
  */
 export async function kneeStatus(referenceDate = today()) {
-  const logs = (await store.painLogs.all()).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const [allLogs, responses, guidance] = await Promise.all([
+    store.painLogs.all(),
+    store.kneeResponses.all(),
+    store.activeMedicalGuidance(),
+  ]);
+  const logs = allLogs.filter((l) => l.date <= referenceDate).sort(byNewest);
   const messages = [];
+  const trend = computeTrend(logs, referenceDate);
+  const progressionBlockedByGuidance = guidance?.strengthening?.allowProgression === 'no';
 
   if (!logs.length) {
     return {
-      level: 'ok', latest: null, baseline: null, avoidLoadIncrease: false,
+      level: 'ok', latest: null, baseline: null, avoidLoadIncrease: progressionBlockedByGuidance,
+      stopProgression: false, seekProfessional: false, trend,
       reason: 'Ainda não há registros de dor no joelho.',
-      messages: ['Registre a dor antes dos treinos de perna e do futebol para acompanhar a evolução.'],
+      messages: ['Registre a dor antes dos treinos de perna, do cardio e do futebol para acompanhar a evolução.'],
     };
   }
 
@@ -65,44 +119,109 @@ export async function kneeStatus(referenceDate = today()) {
 
   let level = 'ok';
   let avoidLoadIncrease = false;
+  let stopProgression = false;
+  let seekProfessional = false;
   const reasons = [];
+  const raise = (to) => { if (rank(to) > rank(level)) level = to; };
 
   if (latest.score >= 5) {
-    level = 'caution';
+    raise('caution');
     avoidLoadIncrease = true;
     reasons.push(`Você registrou dor ${latest.score}/10 (${PAIN_LABELS[latest.score]}) em ${formatDate(latest.date, 'full')}.`);
   } else if (baseline != null && latest.score >= baseline + 2 && latest.score >= 3) {
-    level = 'caution';
+    raise('caution');
     avoidLoadIncrease = true;
     reasons.push(`A dor de hoje (${latest.score}/10) está acima do seu padrão das últimas semanas (média ${baseline.toFixed(1)}/10).`);
   } else if (latest.score >= 3) {
-    level = 'attention';
+    raise('attention');
     avoidLoadIncrease = true;
     reasons.push(`Dor perceptível registrada (${latest.score}/10).`);
   }
 
   if (latest.swelling) {
-    level = 'caution';
+    raise('caution');
     avoidLoadIncrease = true;
+    stopProgression = true;
     reasons.push('Inchaço registrado no último check.');
   }
   if (latest.instability) {
-    level = 'caution';
+    raise('caution');
     avoidLoadIncrease = true;
+    stopProgression = true;
     reasons.push('Sensação de instabilidade registrada no último check.');
+  }
+  if (latest.stiffness) {
+    raise('attention');
+    avoidLoadIncrease = true;
+    reasons.push('Rigidez registrada no último check.');
+  }
+  if (latest.stairsDifficulty) {
+    raise('attention');
+    avoidLoadIncrease = true;
+    reasons.push('Dificuldade para caminhar ou subir escadas registrada.');
   }
   if (latest.painDuringMovement && latest.score >= 3) {
     avoidLoadIncrease = true;
     reasons.push('Dor durante o movimento no último check.');
   }
 
+  // aumento persistente: os três últimos registros acima do seu padrão
+  const last3 = logs.slice(0, 3);
+  if (last3.length === 3 && baseline != null && window.length >= 3
+    && last3.every((l) => l.score >= 3 && l.score >= baseline + 1)) {
+    raise('caution');
+    avoidLoadIncrease = true;
+    stopProgression = true;
+    reasons.push('Os três últimos registros ficaram acima do seu padrão — a dor está persistindo.');
+  }
+
+  // resposta no dia seguinte (os últimos 7 dias)
+  const weekAgo = addDays(referenceDate, -7);
+  const worseNextDay = responses.filter((r) => r.phase === 'next-day' && r.value === 'worse' && r.date >= weekAgo && r.date <= referenceDate);
+  const worseDuring = responses.filter((r) => (r.phase === 'during' || r.phase === 'after') && r.value === 'worse' && r.date >= weekAgo && r.date <= referenceDate);
+  if (worseNextDay.length >= 2) {
+    raise('caution');
+    avoidLoadIncrease = true;
+    stopProgression = true;
+    reasons.push(`O joelho acordou pior ${worseNextDay.length} vezes nesta semana depois de treino ou jogo.`);
+  } else if (worseNextDay.length === 1) {
+    raise('attention');
+    avoidLoadIncrease = true;
+    reasons.push('O joelho acordou pior no dia seguinte a um treino ou jogo recente.');
+  }
+  if (worseDuring.length >= 2) {
+    raise('attention');
+    avoidLoadIncrease = true;
+    reasons.push('Você marcou "dor aumentou" em exercícios mais de uma vez nesta semana.');
+  }
+
+  if (trend.direction === 'worse') {
+    raise('attention');
+    avoidLoadIncrease = true;
+    reasons.push(`A média das duas últimas semanas subiu (${trend.recent} contra ${trend.previous}/10).`);
+  }
+
+  if (stopProgression || (level === 'caution' && (latest.swelling || latest.instability || trend.direction === 'worse'))) {
+    seekProfessional = true;
+  }
+  if (progressionBlockedByGuidance) avoidLoadIncrease = true;
+
+  if (stopProgression) {
+    messages.push('Interrompa a progressão do fortalecimento por enquanto e procure seu ortopedista/fisioterapeuta: aumento persistente da dor, inchaço ou instabilidade pedem avaliação.');
+  }
   if (level === 'caution') {
     messages.push('Hoje o app não vai sugerir aumento de carga.');
     messages.push('Prefira exercícios sem dor, amplitude confortável e menos carga. Se a dor for importante, piorar ou vier acompanhada de inchaço ou instabilidade, procure seu ortopedista/fisioterapeuta.');
   } else if (level === 'attention') {
-    messages.push('Sinal de atenção: mantenha a carga e observe como o joelho responde durante e depois do treino.');
+    messages.push('Sinal de atenção: mantenha a carga e observe como o joelho responde durante, depois e no dia seguinte.');
   } else {
-    messages.push('Sem sinais de alerta nos seus registros recentes. Continue registrando antes e depois dos treinos de perna e do futebol.');
+    messages.push('Sem sinais de alerta nos seus registros recentes. Isso não é alta nem autorização para aumentar a intensidade: siga progredindo uma variável por vez e continue registrando.');
+  }
+  if (trend.direction === 'better' && level !== 'caution') {
+    messages.push('Seus registros mostram melhora — ótimo sinal. Melhora de sintoma ainda não é recuperação completa: a tolerância do tendão cresce mais devagar que a dor diminui.');
+  }
+  if (progressionBlockedByGuidance) {
+    messages.push('Sua orientação profissional ativa pede para não progredir as cargas do fortalecimento agora.');
   }
 
   return {
@@ -110,9 +229,42 @@ export async function kneeStatus(referenceDate = today()) {
     latest,
     baseline: baseline != null ? Number(baseline.toFixed(1)) : null,
     avoidLoadIncrease,
+    stopProgression,
+    seekProfessional,
+    trend,
     reason: reasons.join(' ') || 'Sem sinais de alerta nos registros recentes.',
     messages,
   };
+}
+
+function byNewest(a, b) {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  return (b.ts || 0) - (a.ts || 0);
+}
+
+function rank(level) {
+  return { ok: 0, attention: 1, caution: 2 }[level] ?? 0;
+}
+
+/**
+ * Tendência: média dos últimos 14 dias contra os 14 anteriores.
+ * Precisa de pelo menos 3 registros em cada janela — menos que isso é ruído.
+ * Diferença de 1 ponto ou mais conta como mudança.
+ */
+export function computeTrend(logs, referenceDate = today()) {
+  const recentFrom = addDays(referenceDate, -13);
+  const prevFrom = addDays(referenceDate, -27);
+  const recent = logs.filter((l) => l.date >= recentFrom && l.date <= referenceDate);
+  const previous = logs.filter((l) => l.date >= prevFrom && l.date < recentFrom);
+  if (recent.length < 3 || previous.length < 3) {
+    return { direction: 'insufficient', label: 'registros insuficientes para tendência', recent: null, previous: null };
+  }
+  const r = Math.round(avg(recent, (l) => l.score) * 10) / 10;
+  const p = Math.round(avg(previous, (l) => l.score) * 10) / 10;
+  const diff = r - p;
+  if (diff <= -1) return { direction: 'better', label: 'tendência de melhora', recent: r, previous: p };
+  if (diff >= 1) return { direction: 'worse', label: 'tendência de piora', recent: r, previous: p };
+  return { direction: 'stable', label: 'estável', recent: r, previous: p };
 }
 
 /**

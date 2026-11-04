@@ -9,9 +9,23 @@ import { formatDate, num } from '../../core/format.js';
 import { exportJSON, exportCSV, importBackup, CSV_EXPORTS } from '../../logic/backup.js';
 import { page, topbar, sectionTitle, menuRow, safetyNote } from '../shell.js';
 import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
-import { stepper } from '../components/inputs.js';
+import { stepper, segmented } from '../components/inputs.js';
 import { toastOk, toastError, toast } from '../components/toast.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from '../../core/version.js';
+
+export const LEVEL_LABEL = {
+  iniciante: 'Iniciante — primeiros meses',
+  intermediario: 'Intermediário — já tem base',
+  avancado: 'Avançado',
+};
+
+/** Só um palpite inicial: quem manda é o que você escolher. */
+export function levelFromMonths(months) {
+  if (months == null) return null;
+  if (months < 3) return 'iniciante';
+  if (months < 24) return 'intermediario';
+  return 'avancado';
+}
 
 const HOME_EQUIPMENT = [
   ['pullUpBar', '🏋️ Barra fixa'],
@@ -44,8 +58,10 @@ export async function settingsView() {
         row('Peso', profile?.weightKg ? `${num(profile.weightKg, 1)} kg` : '—'),
         row('Altura', profile?.heightM ? `${num(profile.heightM, 2)} m` : '—'),
         row('Experiência', profile?.experienceMonths != null ? `${profile.experienceMonths} meses de treino consistente` : '—'),
+        row('Nível', LEVEL_LABEL[profile?.level] || (profile?.experienceMonths != null ? LEVEL_LABEL[levelFromMonths(profile.experienceMonths)] : '—')),
         row('Abordagem', '100% natural — sem esteroides ou similares'),
         row('Promessa diária', `${profile?.promiseMinutes || 30} minutos`),
+        row('Tempo por treino (padrão)', `${profile?.sessionMinutes || 60} minutos — mude no dia pelo seletor do Início`),
         row('Futebol', [
           profile?.football?.thursdayFixed ? 'quinta fixo' : null,
           profile?.football?.sundayOptional ? 'domingo opcional' : null,
@@ -53,6 +69,25 @@ export async function settingsView() {
         row('Condição em acompanhamento', profile?.conditions?.[0]?.label || 'nenhuma'),
       ),
     ),
+
+    /* projeto */
+    menuRow({
+      icon: '💍',
+      title: profile?.project?.name || 'Projeto Casamento — 8 semanas',
+      sub: profile?.project?.startDate
+        ? `${profile.project.active === false ? 'Oculto do Início' : 'Ativo'} · início ${formatDate(profile.project.startDate, 'full')}`
+        : 'Configurar início e data do casamento',
+      onClick: async () => {
+        if (profile?.project?.active === false) {
+          const { saveProject } = await import('../../logic/project.js');
+          await saveProject({ active: true });
+          refresh();
+          return;
+        }
+        const { openProjectSheet } = await import('./project.js');
+        openProjectSheet(profile?.project || null);
+      },
+    }),
 
     /* treino */
     h('div.card',
@@ -72,6 +107,29 @@ export async function settingsView() {
             onChange: (v) => store.settings.save({ restIsolationSec: v }),
           }),
         ),
+        h('div.field',
+          h('label.field__label', 'Descanso ao TROCAR de exercício'),
+          stepper({
+            value: settings?.restBetweenExercisesSec ?? 60, step: 15, min: 0, max: 180, unit: 'seg', decimals: 0,
+            onChange: (v) => store.settings.save({ restBetweenExercisesSec: v }),
+          }),
+          h('div.list-item__sub',
+            'É o tempo entre o fim de um exercício e o começo do próximo — trocar de aparelho, regular o banco. Não é o descanso entre séries.'),
+        ),
+        h('div.field',
+          h('label.field__label', 'Ritmo entre séries'),
+          segmented({
+            value: String(settings?.restPace ?? 1),
+            options: [
+              { value: '1', label: 'Programado' },
+              { value: '0.75', label: 'Mais rápido' },
+              { value: '0.5', label: 'Bem rápido' },
+            ],
+            onChange: (v) => store.settings.save({ restPace: Number(v) }),
+          }),
+          h('div.list-item__sub',
+            'Encurta o descanso entre as séries do mesmo exercício. Vale saber o custo: em exercício pesado (supino, puxada, leg press), descanso curto derruba a carga que você aguenta na série seguinte, e carga é o que puxa o crescimento. Em isolador (rosca, elevação lateral, panturrilha) o custo é pequeno. Se for encurtar, encurte os pequenos.'),
+        ),
         h('div.grid-2',
           h('div.field',
             h('label.field__label', 'Incremento de carga'),
@@ -90,7 +148,8 @@ export async function settingsView() {
         ),
         toggle('Iniciar descanso automaticamente', settings?.restAutoStart !== false, (v) => store.settings.save({ restAutoStart: v })),
         toggle('Perguntar recuperação antes do treino', settings?.askRecoveryBeforeWorkout !== false, (v) => store.settings.save({ askRecoveryBeforeWorkout: v })),
-        toggle('Perguntar do joelho antes de pernas/futebol', settings?.askKneeBeforeLegsAndFootball !== false, (v) => store.settings.save({ askKneeBeforeLegsAndFootball: v })),
+        toggle('Perguntar do joelho antes de pernas, cardio e futebol', settings?.askKneeBeforeLegsAndFootball !== false, (v) => store.settings.save({ askKneeBeforeLegsAndFootball: v })),
+        toggle('Preparação antes do treino (aquecimento guiado)', settings?.prepEnabled !== false, (v) => store.settings.save({ prepEnabled: v })),
         toggle('Manter a tela acesa durante o treino', settings?.keepScreenAwake !== false, (v) => store.settings.save({ keepScreenAwake: v })),
         toggle('Sons de cronômetro', settings?.soundEnabled !== false, (v) => store.settings.save({ soundEnabled: v })),
       ),
@@ -242,7 +301,29 @@ async function editProfile(profile) {
       { key: 'weightKg', label: 'Peso (kg)', type: 'number', value: profile?.weightKg ?? '', step: '0.1' },
       { key: 'heightM', label: 'Altura (m)', type: 'number', value: profile?.heightM ?? '', step: '0.01' },
       { key: 'experienceMonths', label: 'Meses de treino', type: 'number', value: profile?.experienceMonths ?? '', step: '1' },
+      {
+        key: 'level',
+        label: 'Nível',
+        type: 'select',
+        value: profile?.level || levelFromMonths(profile?.experienceMonths) || 'intermediario',
+        options: Object.entries(LEVEL_LABEL).map(([value, label]) => ({ value, label })),
+        hint: 'Muda o tom das orientações e o cardio que o app propõe por padrão.',
+      },
       { key: 'promiseMinutes', label: 'Minutos da promessa diária', type: 'number', value: profile?.promiseMinutes ?? 30, step: '5' },
+      {
+        key: 'sessionMinutes',
+        label: 'Tempo padrão por treino (min)',
+        type: 'select',
+        value: String(profile?.sessionMinutes ?? 60),
+        options: [
+          { value: '30', label: '30 minutos' },
+          { value: '40', label: '40 minutos' },
+          { value: '60', label: '1 hora' },
+          { value: '90', label: '1h30' },
+          { value: '120', label: '2 horas' },
+        ],
+        hint: 'É o tempo que vem marcado no seletor do Início. No dia, é só tocar em outro.',
+      },
       {
         key: 'conditionLabel',
         label: 'Condição em acompanhamento',
@@ -254,6 +335,7 @@ async function editProfile(profile) {
   });
   if (!data) return;
   const { conditionLabel, ...rest } = data;
+  if (rest.sessionMinutes != null) rest.sessionMinutes = Number(rest.sessionMinutes) || 60;
   const current = profile?.conditions?.[0];
   const conditions = conditionLabel?.trim()
     ? [{ ...(current || { id: 'cond-1', status: 'em acompanhamento', note: '', followUp: '' }), label: conditionLabel.trim() }]

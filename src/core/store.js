@@ -123,6 +123,18 @@ export const measurements = repo('measurements', 'ms');
 export const photos = repo('photos', 'ph');
 export const painLogs = repo('painLogs', 'pain');
 export const recovery = repo('recovery', 'rec');
+
+/**
+ * Resposta do joelho, em palavras — o que a escala 0–10 não pega:
+ *   phase 'during'   → no exercício: sem dor / desconforto leve / dor aumentou
+ *   phase 'after'    → depois do treino ou do jogo
+ *   phase 'next-day' → como acordou: melhor / igual / pior
+ */
+export const kneeResponses = {
+  ...repo('kneeResponses', 'kr'),
+  byExercise: (exerciseId) => db.getAllByIndex('kneeResponses', 'byExercise', exerciseId),
+  bySession: (sessionId) => db.getAllByIndex('kneeResponses', 'bySession', sessionId),
+};
 export const medical = repo('medical', 'med');
 /**
  * Equipamentos ("Minha academia").
@@ -287,6 +299,15 @@ export const dayPlan = {
     return next;
   },
 };
+
+/**
+ * Quanto tempo há para treinar numa data: o que você escolheu no seletor do
+ * dia (30 / 40 / 60 / 90 / 120) ou, sem escolha, o padrão do perfil.
+ */
+export async function dayBudget(date) {
+  const [plan, prof] = await Promise.all([db.get('dayPlan', date), getKV(KV.PROFILE)]);
+  return Number(plan?.budgetMin) || Number(prof?.sessionMinutes) || 60;
+}
 
 /* ------------------------------------------------------------------ */
 /* Consultas usadas pelas telas                                         */

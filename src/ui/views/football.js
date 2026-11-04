@@ -11,6 +11,7 @@ import { toastOk } from '../components/toast.js';
 import { openKneeCheckSheet } from './knee.js';
 import { exerciseFigure } from '../components/figure.js';
 import { illustration } from '../../data/illustrations.js';
+import { FOOTBALL_PREP, DRILLS } from '../../data/warmup.js';
 
 export async function footballView({ query }) {
   const date = query.date || today();
@@ -69,7 +70,16 @@ export async function footballView({ query }) {
           onClick: () => openKneeCheckSheet({ context: 'pre-football', date }),
         }, kneeBefore ? 'Atualizar check do joelho' : 'Registrar como o joelho está'),
       ),
-      safetyNote('Faça alguns minutos de aquecimento antes do jogo: caminhada, trote leve e mobilidade sem dor.'),
+      h('div.field__label', { style: { marginTop: '12px' } }, 'Aquecimento de campo — 10 min'),
+      h('ol.prep__steps', { style: { marginTop: '6px' } },
+        ...FOOTBALL_PREP.map((st) => h('li',
+          h('span.grow',
+            h('div', `${st.title} — ${st.minutes} min`),
+            h('div.list-item__sub', st.drills.map((id) => `${DRILLS[id].name} (${DRILLS[id].dose})`).join(' · ')),
+          ),
+        )),
+      ),
+      safetyNote('O futebol já é carga alta para o tendão patelar — acelerações, frenagens, saltos e mudanças de direção. Comece as acelerações e frenagens suaves e só aumente quando o corpo estiver quente.'),
     ),
 
     h('div.stack.stack--sm',

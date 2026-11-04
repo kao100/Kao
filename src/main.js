@@ -25,11 +25,14 @@ import { dayView } from './ui/views/promise.js';
 import { progressView, exerciseProgressView } from './ui/views/progress.js';
 import { bodyView } from './ui/views/body.js';
 import { kneeView } from './ui/views/knee.js';
+import { kneeStrengthView, kneeReportView } from './ui/views/knee-strength.js';
+import { projectView } from './ui/views/project.js';
 import { medicalView } from './ui/views/medical.js';
 import { gymView } from './ui/views/gym.js';
 import { supplementsView } from './ui/views/supplements.js';
 import { foodView } from './ui/views/food.js';
 import { cycleView } from './ui/views/cycle.js';
+import { extrasView } from './ui/views/extras.js';
 import { weeklyView } from './ui/views/weekly.js';
 import { settingsView } from './ui/views/settings.js';
 import { moreView } from './ui/views/more.js';
@@ -45,6 +48,7 @@ const ROUTES = [
   { name: 'library', path: '/biblioteca', view: libraryView },
   { name: 'program', path: '/programa', view: programView },
   { name: 'cycle', path: '/ciclo', view: cycleView },
+  { name: 'extras', path: '/complementos', view: extrasView },
   { name: 'template', path: '/programa/:templateId', view: templateEditView },
   { name: 'calendar', path: '/calendario', view: calendarView },
   { name: 'day', path: '/dia/:date', view: dayView },
@@ -52,6 +56,9 @@ const ROUTES = [
   { name: 'exerciseProgress', path: '/progresso/:exerciseId', view: exerciseProgressView },
   { name: 'body', path: '/fisico', view: bodyView },
   { name: 'knee', path: '/joelho', view: kneeView },
+  { name: 'kneeStrength', path: '/joelho/fortalecimento', view: kneeStrengthView },
+  { name: 'kneeReport', path: '/joelho/relatorio', view: kneeReportView },
+  { name: 'project', path: '/projeto', view: projectView },
   { name: 'medical', path: '/medico', view: medicalView },
   { name: 'gym', path: '/academia', view: gymView },
   { name: 'supplements', path: '/suplementos', view: supplementsView },
