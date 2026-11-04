@@ -10,11 +10,12 @@ import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import { today, formatDate, addDays } from '../../core/format.js';
 import { uid, toCSV, downloadFile } from '../../core/util.js';
-import { kneeStatus, painSeries, painWithContext, painByExercise, PAIN_LABELS, PAIN_CONTEXTS, PAIN_FLAG_TEXT } from '../../logic/knee.js';
+import { kneeStatus, painSeries, painWithContext, painByExercise, PAIN_LABELS, PAIN_CONTEXTS, PAIN_FLAG_TEXT, PAIN_LOCATIONS, KNEE_RESPONSES } from '../../logic/knee.js';
+import { painVsLoad, kneeExercisesWithData, footballResponse, weeklyVolumeVsPain } from '../../logic/knee-strength.js';
 import { page, topbar, sectionTitle, safetyNote, emptyState, menuRow } from '../shell.js';
 import { openSheet } from '../components/sheet.js';
-import { scale, yesNo } from '../components/inputs.js';
-import { lineChart, legend } from '../components/chart.js';
+import { scale, yesNo, chips, segmented } from '../components/inputs.js';
+import { lineChart, barChart, legend } from '../components/chart.js';
 import { toastOk, toast } from '../components/toast.js';
 
 /* ------------------------------------------------------------------ */
@@ -25,22 +26,28 @@ export function openKneeCheckSheet({ context = 'daily', date = today() } = {}) {
   return new Promise((resolve) => {
     let done = false;
     openSheet({
-      title: 'Como está seu joelho esquerdo hoje?',
+      title: 'COMO ESTÁ SEU JOELHO HOJE?',
       onClose: () => { if (!done) resolve('cancel'); },
       content: (close) => {
         const painCtl = scale({ from: 0, to: 10, value: null, labels: ['0 — sem dor', '10 — máxima'] });
         const duringCtl = yesNo({ value: null });
         const swellCtl = yesNo({ value: null });
         const instabCtl = yesNo({ value: null });
+        const stiffCtl = yesNo({ value: null });
+        const stairsCtl = yesNo({ value: null });
+        const locationCtl = chips({ options: PAIN_LOCATIONS, multi: true });
         const notes = h('textarea.textarea', { rows: 2, placeholder: 'Observação (opcional): em qual movimento doeu, quando começou…' });
         const legendEl = h('p.muted', { style: { fontSize: '12.5px' } },
           '0 sem dor · 1 mínima · 2 leve · 3 perceptível · 4 moderada · 5 importante · 6–10 progressivamente mais intensa');
 
         return h('div.stack',
           h('div.field', h('label.field__label', `Dor agora — ${PAIN_CONTEXTS[context] || 'registro'}`), painCtl, legendEl),
+          h('div.field', h('label.field__label', 'Onde dói? (opcional — toque em um ou mais)'), locationCtl),
           h('div.field', h('label.field__label', 'Dor durante o movimento?'), duringCtl),
           h('div.field', h('label.field__label', 'Algum inchaço?'), swellCtl),
+          h('div.field', h('label.field__label', 'Rigidez?'), stiffCtl),
           h('div.field', h('label.field__label', 'Alguma sensação de instabilidade?'), instabCtl),
+          h('div.field', h('label.field__label', 'Dificuldade para caminhar ou subir escadas?'), stairsCtl),
           notes,
           safetyNote('Este registro é só um diário para acompanhar a evolução e mostrar ao seu ortopedista/fisioterapeuta. Ele não substitui avaliação profissional.'),
           h('div.btn-row',
@@ -57,13 +64,18 @@ export function openKneeCheckSheet({ context = 'daily', date = today() } = {}) {
                   painDuringMovement: duringCtl.getValue() === true,
                   swelling: swellCtl.getValue() === true,
                   instability: instabCtl.getValue() === true,
+                  stiffness: stiffCtl.getValue() === true,
+                  stairsDifficulty: stairsCtl.getValue() === true,
+                  locations: locationCtl.getValue(),
                   notes: notes.value,
                   ts: Date.now(),
                 });
                 done = true;
                 close();
                 const status = await kneeStatus(date);
-                if (status.level === 'caution') {
+                if (status.stopProgression) {
+                  toast('Registro salvo. O padrão dos seus registros pede interromper a progressão e procurar orientação profissional.', { type: 'warn', ms: 6500 });
+                } else if (status.level === 'caution') {
                   toast('Registro salvo. Hoje o app não vai sugerir aumento de carga — priorize execução sem dor.', { type: 'warn', ms: 5200 });
                 } else {
                   toastOk('Registro do joelho salvo');
@@ -75,6 +87,50 @@ export function openKneeCheckSheet({ context = 'daily', date = today() } = {}) {
         );
       },
     });
+  });
+}
+
+/**
+ * "Como o joelho acordou hoje?" — a resposta em 24 h, que é o que mais
+ * importa para saber se a carga de ontem foi tolerada.
+ */
+export function openNextDaySheet(pending, date = today()) {
+  return new Promise((resolve) => {
+    let done = false;
+    openSheet({
+      title: 'Como o joelho acordou hoje?',
+      onClose: () => { if (!done) resolve('cancel'); },
+      content: (close) => {
+        const answer = async (value) => {
+          await saveKneeResponse({ date, phase: 'next-day', value, refDate: pending?.refDate, source: pending?.source });
+          done = true;
+          close();
+          toastOk(value === 'worse' ? 'Registrado. Hoje sem progressão nas pernas.' : 'Resposta do dia seguinte salva');
+          resolve(value);
+        };
+        return h('div.stack',
+          h('p.muted', pending ? `Depois de ${pending.label}.` : 'Comparado ao seu normal.'),
+          ...KNEE_RESPONSES['next-day'].map((r) => h(`button.btn.btn--block.${r.tone === 'danger' ? 'btn--danger' : r.tone === 'ok' ? 'btn--primary' : 'btn--ghost'}`,
+            { onClick: () => answer(r.value) }, r.label)),
+          h('button.btn.btn--quiet.btn--block', {
+            onClick: async () => {
+              done = true;
+              close();
+              await openKneeCheckSheet({ context: 'next-day', date });
+              resolve('detailed');
+            },
+          }, 'Registrar com nota de 0 a 10'),
+          safetyNote('A resposta no dia seguinte é o melhor sinal de que a carga foi tolerada. "Pior" duas vezes na semana faz o app interromper a progressão.', 'info'),
+        );
+      },
+    });
+  });
+}
+
+/** Grava uma resposta rápida do joelho (durante, depois ou no dia seguinte). */
+export async function saveKneeResponse({ date = today(), phase, value, exerciseId = null, sessionId = null, refDate = null, source = null, extra = {} }) {
+  return store.kneeResponses.save({
+    id: uid('kr'), date, phase, value, exerciseId, sessionId, refDate, source, ts: Date.now(), ...extra,
   });
 }
 
@@ -92,7 +148,12 @@ export async function kneeView() {
     store.profile.get(),
   ]);
 
-  const byExercise = await painByExercise({ days: 120 });
+  const [byExercise, loadOptions, games, weekly] = await Promise.all([
+    painByExercise({ days: 120 }),
+    kneeExercisesWithData(120),
+    footballResponse(120),
+    weeklyVolumeVsPain(8),
+  ]);
 
   const condition = profile?.conditions?.[0];
   const levelPill = {
@@ -120,8 +181,22 @@ export async function kneeView() {
       settings?.nextAppointment
         ? h('div.pill.pill--cardio', { style: { marginTop: '6px' } }, `🩺 Retorno: ${formatDate(settings.nextAppointment, 'full')}`)
         : null,
+      status.trend?.direction && status.trend.direction !== 'insufficient'
+        ? h('div', { class: `pill ${status.trend.direction === 'better' ? 'pill--ok' : status.trend.direction === 'worse' ? 'pill--warn' : ''}`, style: { marginTop: '6px' } },
+          `Tendência: ${status.trend.label} (${status.trend.previous} → ${status.trend.recent})`)
+        : null,
+      status.seekProfessional
+        ? safetyNote('Aumento relevante ou persistente da dor, inchaço ou instabilidade: interrompa a progressão e procure seu ortopedista/fisioterapeuta.', 'danger')
+        : null,
       h('button.btn.btn--primary.btn--block.mt', { onClick: async () => { await openKneeCheckSheet({ context: 'daily' }); refresh(); } },
         '＋ Registrar como está agora'),
+      h('button.btn.btn--ghost.btn--block', { onClick: async () => { await openNextDaySheet(null); refresh(); } },
+        'Como o joelho acordou hoje?'),
+    ),
+
+    h('div.stack.stack--sm',
+      menuRow({ icon: '💪', title: 'Fortalecimento do joelho', sub: 'Exercícios, progressão e volume da semana', to: '/joelho/fortalecimento' }),
+      menuRow({ icon: '📄', title: 'Relatório semanal (PDF)', sub: 'Para mostrar ao ortopedista ou fisioterapeuta', to: '/joelho/relatorio' }),
     ),
 
     guidance
@@ -183,6 +258,12 @@ export async function kneeView() {
 
     exerciseSection(byExercise),
 
+    painLoadSection(loadOptions),
+
+    footballSection(games),
+
+    weeklySection(weekly),
+
     safetyNote('Se a dor for importante, piorar, vier com inchaço, travamento ou sensação de instabilidade, procure seu ortopedista/fisioterapeuta. Dor em tendão e articulação não é a mesma coisa que o desconforto muscular normal do treino.', 'danger'),
   );
 }
@@ -204,6 +285,9 @@ async function exportKneeHistory() {
     dor_durante_movimento: r.painDuringMovement ? 'sim' : 'não',
     inchaco: r.swelling ? 'sim' : 'não',
     instabilidade: r.instability ? 'sim' : 'não',
+    rigidez: r.stiffness ? 'sim' : 'não',
+    dificuldade_escadas: r.stairsDifficulty ? 'sim' : 'não',
+    local: (r.locations || []).map((v) => PAIN_LOCATIONS.find((l) => l.value === v)?.label || v).join(' | '),
     futebol_no_dia: r.football ? 'sim' : 'não',
     volume_pernas_kg: r.legVolume,
     volume_total_kg: r.totalVolume,
@@ -238,6 +322,8 @@ function exerciseSection(report) {
             h('div.list-item__title', r.name),
             h('div.list-item__sub',
               `média ${r.avgPain} · pico ${r.maxPain} · ${r.sets} séries em ${r.sessions} treinos`),
+            h('div.bar', { style: { marginTop: '6px' } },
+              h(`div.bar__fill${r.avgPain >= 3 ? '.bar__fill--flame' : ''}`, { style: { width: `${Math.min(100, r.avgPain * 10)}%` } })),
           ),
           h('span', {
             class: flag.tone === 'warn' ? 'pill pill--warn' : flag.tone === 'ok' ? 'pill pill--ok' : 'pill',
@@ -261,6 +347,80 @@ function exerciseSection(report) {
     withReading.some((r) => r.flag === 'above' || r.flag === 'high')
       ? h('div.safety',
         'Um exercício aparecer acima do seu normal não quer dizer que ele é o culpado, nem que você deva parar por conta própria. Quer dizer que vale mostrar esta tela na próxima consulta — e que o app não vai sugerir aumento de carga nele enquanto o quadro estiver assim.')
+      : null,
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Dor × carga · Dor × futebol · Dor × volume semanal                   */
+/* ------------------------------------------------------------------ */
+
+function painLoadSection(options) {
+  const box = h('div.stack.stack--sm');
+  const paint = async (exerciseId) => {
+    const rows = await painVsLoad(exerciseId, 120);
+    box.replaceChildren(
+      h('div.field__label', 'Carga (kg) por sessão'),
+      lineChart({ points: rows.map((r) => ({ date: r.date, value: r.topWeight })), color: 'volt', formatValue: (v) => String(Math.round(v)), emptyText: 'Sem cargas registradas.' }),
+      h('div.field__label', 'Dor média nas séries (0–10)'),
+      lineChart({ points: rows.map((r) => ({ date: r.date, value: r.avgPain, marker: r.maxPain >= 4 ? 'alert' : null })), color: 'flame', yMin: 0, yMax: 10, formatValue: (v) => String(Math.round(v)), emptyText: 'Sem dor registrada nas séries.' }),
+      h('p.muted', { style: { fontSize: '12.5px' } }, 'Se a carga sobe e a dor fica parada (ou cai), o tendão está tolerando a progressão. Se as duas sobem juntas, é o momento de segurar e conversar com o profissional.'),
+    );
+  };
+
+  if (!options.length) {
+    return h('div.card',
+      h('div.card__title', 'Dor × carga'),
+      emptyState('🏋️', 'Registre carga e dor nas séries de perna para ver esta comparação.'));
+  }
+  const picker = segmented({
+    options: options.slice(0, 4).map((o) => ({ value: o.id, label: o.name.split(' (')[0] })),
+    value: options[0].id,
+    onChange: (id) => paint(id),
+  });
+  paint(options[0].id);
+  return h('div.card',
+    h('div.card__title', 'Dor × carga'),
+    h('p.muted', { style: { fontSize: '12.5px', margin: '4px 0 10px' } }, 'Os exercícios de perna em que você mais registrou séries.'),
+    picker,
+    h('div', { style: { marginTop: '10px' } }, box),
+  );
+}
+
+function footballSection(games) {
+  const withData = games.filter((g) => g.pre != null || g.post != null || g.nextDay || g.nextDayScore != null);
+  return h('div.card',
+    h('div.card__title', 'Dor × futebol'),
+    h('p.muted', { style: { fontSize: '12.5px', margin: '4px 0 10px' } },
+      'O futebol já é carga alta para o tendão patelar: acelerações, frenagens, saltos e mudanças de direção. Antes → depois → dia seguinte, jogo a jogo.'),
+    withData.length
+      ? h('div.stack.stack--sm', ...withData.slice(-8).reverse().map((g) => h('div.report-line',
+        h('span', `⚽ ${formatDate(g.date, 'full')}${g.minutes ? ` · ${g.minutes} min` : ''}`),
+        h('span.report-line__v',
+          `${g.pre ?? '–'} → ${g.post ?? '–'}${g.nextDayScore != null ? ` → ${g.nextDayScore}` : ''}${g.nextDay ? ` (${({ better: 'melhor', same: 'igual', worse: 'pior' })[g.nextDay]})` : ''}`),
+      )))
+      : emptyState('⚽', 'Registre o joelho antes e depois das partidas para ver a resposta ao futebol.'),
+  );
+}
+
+function weeklySection(weeks) {
+  const any = weeks.some((w) => w.legSets || w.avgPain != null);
+  return h('div.card',
+    h('div.card__title', 'Dor × volume semanal'),
+    h('p.muted', { style: { fontSize: '12.5px', margin: '4px 0 10px' } },
+      'Barras: séries de perna por semana. A cor mostra a dor média da semana — verde até 2, amarelo 2–3,9, vermelho 4 ou mais.'),
+    any
+      ? barChart({
+        data: weeks.map((w) => ({
+          label: w.label,
+          value: w.legSets,
+          color: w.avgPain == null ? 'cardio' : w.avgPain >= 4 ? 'danger' : w.avgPain >= 2 ? 'warn' : 'ball',
+        })),
+      })
+      : emptyState('📊', 'Ainda sem semanas registradas.'),
+    any ? legend([{ color: 'ball', label: 'dor < 2' }, { color: 'warn', label: '2–3,9' }, { color: 'danger', label: '≥ 4' }, { color: 'cardio', label: 'sem registro' }]) : null,
+    any && weeks.some((w) => w.football)
+      ? h('p.muted', { style: { fontSize: '12.5px' } }, `Jogos por semana: ${weeks.map((w) => w.football).join(' · ')}`)
       : null,
   );
 }

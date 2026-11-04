@@ -330,3 +330,15 @@
   font-size: 14px;
 }
 .empty__icon { font-size: 30px; margin-bottom: 6px; }
+
+/* ---------------- fichas (chips) ---------------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  appearance: none; border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--text-2); border-radius: 999px; padding: 9px 13px; font: inherit;
+  font-size: 13.5px; font-weight: 600; min-height: 40px; cursor: pointer;
+}
+.chip--active { background: color-mix(in srgb, var(--volt) 16%, transparent); border-color: var(--volt); color: var(--text); }
+.chip--active[data-tone="ok"] { background: color-mix(in srgb, var(--ok) 16%, transparent); border-color: var(--ok); }
+.chip--active[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 16%, transparent); border-color: var(--warn); }
+.chip--active[data-tone="danger"] { background: color-mix(in srgb, var(--danger) 16%, transparent); border-color: var(--danger); }

@@ -7,11 +7,64 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v12';
-export const APP_DATE = '2026-09-12';
+export const APP_VERSION = 'kao-v17';
+export const APP_DATE = '2026-11-04';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v17',
+    date: '2026-11-04',
+    items: [
+      'Seletor de tempo no treino de hoje: 30 MIN, 40 MIN, 1 HORA, 1H30 e 2 HORAS. O tempo é dividido em preparação, musculação e cardio — com pouco tempo, sai primeiro o acessório; descanso e técnica não são cortados.',
+      'PREPARAÇÃO PARA O TREINO: antes da primeira série, aquecimento específico (bicicleta, mobilidade, ativação e séries preparatórias calculadas da sua última carga), com imagens, instruções e cronômetro.',
+      'FORTALECIMENTO DO JOELHO: amplitude e posição registradas nas séries de perna, resposta do joelho ao fim de cada exercício e no dia seguinte, e progressão de uma variável por vez.',
+      'Joelho: local da dor, rigidez, dificuldade em escadas, tendência de melhora/piora e gráficos de dor × carga, × futebol e × volume semanal. Relatório semanal em PDF para o ortopedista/fisioterapeuta.',
+      'Projeto Casamento — 8 semanas: supinos, puxada, remada, desenvolvimento, medidas de peito/braço/abdômen e fotos no Início. Peito passa a ter 3 estímulos por semana; costas fica em 16 séries.',
+      'Cardio: bicicleta e caminhada como opções, inclinação máxima individual na esteira e histórico de sintomas.',
+    ],
+  },
+  {
+    version: 'kao-v16',
+    date: '2026-09-15',
+    items: [
+      'Complementos: ao terminar o treino, o app pergunta se você quer somar um bloco extra — abdômen, braço, ombro, panturrilha, costas ou cardio.',
+      'A sugestão é do dia: leva em conta o que você já treinou, o joelho, o jogo de amanhã e o tempo que sobrou. O que não cabe hoje aparece com o motivo.',
+      'O complemento que rende mais sobe na lista: o grupo com menor volume da sua semana, desde que hoje não seja o dia dele.',
+      'Se o mesmo complemento aparecer 3× em 7 dias, o app avisa que virou volume fixo e sugere pô-lo no programa, onde a progressão o enxerga.',
+    ],
+  },
+  {
+    version: 'kao-v15',
+    date: '2026-09-13',
+    items: [
+      'Corrigido: ao terminar um exercício o app disparava o descanso longo da série antes do exercício seguinte. Agora troca de exercício tem tempo próprio — 1 min por padrão.',
+      'Ajustes ganhou "Ritmo entre séries" (programado / mais rápido / bem rápido), com o custo explicado.',
+      'Sábado ficou mais pesado: quadríceps subiu de 8 para 12 séries na semana, panturrilha de 6 para 10, e entrou braço direto.',
+      'Domingo sem futebol virou intervalado + acessórios de baixa fadiga, nessa ordem — nada ali atrapalha a segunda.',
+    ],
+  },
+  {
+    version: 'kao-v14',
+    date: '2026-09-13',
+    items: [
+      'Abdômen no chão: dois exercícios novos (elevação de pernas no solo e abdominal bicicleta) e core em TODOS os treinos de casa — três deles não tinham nenhum.',
+      'Cardio em elíptico e simulador de escadas: cada plano diz como fazer em cada aparelho, e a escolha fica salva.',
+      'Tempo por treino no perfil. O card de hoje mostra "~X min" e avisa quando passa do seu tempo — sugerindo encurtar descanso antes de cortar série.',
+    ],
+  },
+  {
+    version: 'kao-v13',
+    date: '2026-09-13',
+    items: [
+      'Cardio com intensidade de verdade: intervalos 4×4, limiar de 20 min, 10-20-30 e Zona 2 longa de 50 min. Antes nenhum plano passava de RPE 4.',
+      'Domingo sem futebol virou a sessão forte da semana (4×4). Nas semanas com jogo, o jogo continua sendo ela.',
+      'Core em todos os cinco treinos: 10 → 25 séries por semana, com 6 exercícios novos e progressão do fácil ao difícil.',
+      'Tríceps subiu de 5 para 10 séries e bíceps de 7 para 9 — estavam abaixo da faixa que produz crescimento.',
+      'Aviso quando um cardio forte cai na véspera de jogo, ou no mesmo dia dele.',
+      'Perfil ganhou "Nível": o app deixa de supor que você é iniciante.',
+    ],
+  },
   {
     version: 'kao-v12',
     date: '2026-09-12',

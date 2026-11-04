@@ -7,6 +7,7 @@ import { today, dayKey, DAY_LABEL, DAY_KEYS, formatMinutes } from '../../core/fo
 import { uid } from '../../core/util.js';
 import { planForWeek } from '../../logic/planner.js';
 import { cycleState } from '../../logic/cycle.js';
+import { estimateTemplateMinutes } from '../../logic/duration.js';
 import { page, topbar, sectionTitle, emptyState, safetyNote, menuRow } from '../shell.js';
 import { openSheet, confirmSheet, formSheet } from '../components/sheet.js';
 import { stepper, segmented, textInput } from '../components/inputs.js';
@@ -80,7 +81,7 @@ function templateRows(list) {
       h('div.list-item__thumb', { style: { fontSize: '20px' } }, tpl.icon || '🏋️'),
       h('div.grow',
         h('div.list-item__title', tpl.name),
-        h('div.list-item__sub', `${DAY_LABEL[tpl.dayKey]} · ${tpl.items?.length || 0} exercícios${tpl.cardioPlanId ? ' + cardio' : ''}`),
+        h('div.list-item__sub', `${DAY_LABEL[tpl.dayKey]} · ${tpl.items?.length || 0} exercícios${tpl.cardioPlanId ? ' + cardio' : ''}${tpl.items?.length ? ` · ~${estimateTemplateMinutes(tpl)} min` : ''}`),
       ),
       tpl.provisional ? h('span.pill.pill--warn', 'provisório') : null,
       h('span.muted', '›'),

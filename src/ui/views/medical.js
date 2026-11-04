@@ -17,6 +17,7 @@ import { uid } from '../../core/util.js';
 import { page, topbar, sectionTitle, emptyState, safetyNote } from '../shell.js';
 import { openSheet, confirmSheet } from '../components/sheet.js';
 import { toastOk } from '../components/toast.js';
+import { segmented } from '../components/inputs.js';
 
 export async function medicalView() {
   const [records, exercises, settings] = await Promise.all([
@@ -68,6 +69,12 @@ export async function medicalView() {
           rec.limits ? kv('Limites', rec.limits) : null,
           rec.guidance ? kv('Orientações', rec.guidance) : null,
           rec.physioNotes ? kv('Fisioterapia', rec.physioNotes) : null,
+          rec.strengthening?.allowProgression
+            ? kv('Fortalecimento — progressão de carga', rec.strengthening.allowProgression === 'no' ? 'Não liberada: manter cargas' : 'Liberada, uma variável por vez')
+            : null,
+          rec.strengthening?.frequency ? kv('Fortalecimento — frequência', rec.strengthening.frequency) : null,
+          rec.strengthening?.romNotes ? kv('Fortalecimento — amplitude e carga', rec.strengthening.romNotes) : null,
+          rec.strengthening?.footballReturn ? kv('Futebol', rec.strengthening.footballReturn) : null,
           h('div.btn-row.mt',
             h('button.btn.btn--sm.btn--ghost', { onClick: () => openGuidanceSheet(rec, exercises) }, 'Editar'),
             h('button.btn.btn--sm.btn--quiet', {
@@ -109,6 +116,22 @@ function openGuidanceSheet(existing, exercises) {
       const physio = h('textarea.textarea', { rows: 3, placeholder: 'Orientações do fisioterapeuta' });
       physio.value = existing?.physioNotes || '';
 
+      const st = existing?.strengthening || {};
+      const progression = segmented({
+        options: [
+          { value: '', label: 'Não informado' },
+          { value: 'yes', label: 'Pode progredir' },
+          { value: 'no', label: 'Manter cargas' },
+        ],
+        value: st.allowProgression || '',
+      });
+      const frequency = h('input.input', { placeholder: 'Ex.: 2× por semana, dias de perna' });
+      frequency.value = st.frequency || '';
+      const romNotes = h('textarea.textarea', { rows: 2, placeholder: 'Ex.: extensora só de 90° a 45°; isometria 5×45 s; leg press até 90°' });
+      romNotes.value = st.romNotes || '';
+      const footballReturn = h('input.input', { placeholder: 'Ex.: liberado, evitar 2 jogos na mesma semana' });
+      footballReturn.value = st.footballReturn || '';
+
       const allowed = new Set(existing?.allowedExerciseIds || []);
       const forbidden = new Set(existing?.forbiddenExerciseIds || []);
 
@@ -147,6 +170,14 @@ function openGuidanceSheet(existing, exercises) {
         h('div.field', h('label.field__label', 'Limites'), limits),
         h('div.field', h('label.field__label', 'Orientações do ortopedista'), guidance),
         h('div.field', h('label.field__label', 'Orientações do fisioterapeuta'), physio),
+        h('div.card.card--tight',
+          h('div.card__title', 'Fortalecimento do joelho'),
+          h('p.muted', { style: { fontSize: '12.5px', margin: '4px 0 10px' } }, 'O app usa estas respostas para decidir se sugere progredir carga nos exercícios de perna.'),
+          h('div.field', h('label.field__label', 'Progressão de carga'), progression),
+          h('div.field', h('label.field__label', 'Frequência'), frequency),
+          h('div.field', h('label.field__label', 'Amplitude, ângulos e cargas'), romNotes),
+          h('div.field', h('label.field__label', 'Futebol'), footballReturn),
+        ),
         h('button.btn.btn--primary.btn--block', {
           onClick: async () => {
             await store.medical.save({
@@ -157,6 +188,12 @@ function openGuidanceSheet(existing, exercises) {
               limits: limits.value,
               guidance: guidance.value,
               physioNotes: physio.value,
+              strengthening: {
+                allowProgression: progression.getValue() || '',
+                frequency: frequency.value,
+                romNotes: romNotes.value,
+                footballReturn: footballReturn.value,
+              },
               allowedExerciseIds: [...allowed],
               forbiddenExerciseIds: [...forbidden],
               active: existing?.active !== false,

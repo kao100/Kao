@@ -15,11 +15,11 @@ limitação · ⏳ estrutura pronta, faltando dados/uso · ❌ não implementado
 | 8 | Upper A (8 exercícios, séries/faixas) | ✅ | `tpl-upper-a` |
 | 9 | Lower A provisório, sem assumir agachamento/avanço/búlgaro | ✅ | `tpl-lower-a`, itens marcados `provisional` |
 | 10 | Upper B com ênfase em costas | ✅ | `tpl-upper-b` |
-| 11 | Cardio de quarta com as 4 fases, RPE 3–4, talk test, controles | ✅ | `cardio-zona2-30` + tela de cardio guiado |
+| 11 | Cardio de quarta com as 4 fases, RPE 3–4, talk test, controles | ✅ | `cardio-zona2-30` + tela de cardio guiado. Na v13 o RPE subiu para 4–5 a seu pedido: 3–4 era caminhada, não Zona 2 |
 | 12 | Quinta: futebol com duração, intensidade, gols, distância, calorias, joelho antes/depois; conta para a promessa | ✅ | `/futebol` |
 | 13 | Upper C | ✅ | `tpl-upper-c` |
 | 14 | Sábado condicional (Lower B + cardio leve OU recuperação) | ✅ | `planner` + `tpl-lower-b` / `tpl-recuperacao` |
-| 15 | Domingo condicional (futebol ou Zona 2 30–40 min) | ✅ | `tpl-domingo-*` |
+| 15 | Domingo condicional (futebol ou Zona 2 30–40 min) | ✅ | `tpl-domingo-*`. Na v13 o domingo sem futebol virou intervalado 4×4, a sessão forte da semana |
 | 16 | Ficha visual completa por exercício (todos os campos pedidos) | ✅ | `data/exercises.js` + `/exercicio/:id` |
 | 17 | Imagens: sem copyright/hotlinking; licença, crédito, fonte e fallback | ⚠️ | O app **não baixa imagens da internet**. Ele usa ilustrações SVG próprias (offline, sem licença de terceiros) e permite cadastrar imagem externa informando URL, fonte, crédito e licença — com fallback automático para a ilustração própria se a imagem falhar (`data/media.js`, botão "Imagem externa"). Busca automática por imagens ficou de fora de propósito: quase todo resultado tem direito autoral. |
 | 18 | "Minha academia": fotos das máquinas, marca/modelo, substituir imagem genérica | ✅ | `/academia`, prioridade em `resolveExerciseMedia` |
@@ -203,6 +203,193 @@ Regras da rotação (`logic/cycle.js`), em ordem:
 
 Nada é aplicado sozinho: a troca é um toque seu, e o histórico do exercício
 antigo continua salvo — voltando a ele, as cargas antigas estão lá.
+
+## Cardio de intensidade, core e volume (décima primeira rodada)
+
+Você corrigiu duas coisas: não é iniciante (treina há 3–4 meses) e o cardio
+estava fraco. O áudit do programa confirmou, e foi pior do que parecia.
+
+**Cardio — nenhum plano passava de RPE 4/10.** Não havia nada de limiar nem
+intervalado no app inteiro. Para quem joga futebol toda semana, é subdosado.
+Entraram quatro sessões:
+
+| plano | RPE | para quê |
+|---|---|---|
+| Intervalos 4×4 — 40 min | 8–9 nos blocos | VO₂máx. A mais forte da semana |
+| Limiar (tempo) — 35 min | 6–7 | 20 min de ritmo forte constante |
+| 10-20-30 — 30 min | 5 a 9 | intervalado curto, quando o tempo aperta |
+| Zona 2 longa — 50 min | 4–5 | base aeróbica |
+
+A Zona 2 de quarta também subiu de RPE 3–4 para 4–5 e de 30 para 35 min: o que
+estava lá era caminhada, não Zona 2. O domingo sem futebol passou de Zona 2 a
+intervalado 4×4 — nas semanas **com** jogo, o próprio jogo é a sessão forte, e o
+planejador agora avisa quando um cardio forte cai na véspera de jogo ou no mesmo
+dia dele (`isHardPlan`, que lê o RPE do próprio plano — planos que você criar
+entram na conta sozinhos).
+
+Todos os planos fortes trazem a versão sem impacto (bicicleta, elíptico, remo)
+com o mesmo RPE, por causa do joelho.
+
+**Core — a causa do problema era estrutural.** "Abdominal na polia" e "elevação
+de joelhos na barra" existiam na biblioteca e **não estavam em nenhum treino**.
+Core saiu de 10 para 25 séries por semana, presente nos cinco treinos, com seis
+exercícios novos: prancha lateral, elevação de pernas na barra, pallof press
+(anti-rotação — o que mais transfere para o futebol), abdominal infra, rollout e
+hollow hold. As alternativas ligam todos numa progressão do mais fácil ao mais
+difícil.
+
+**Volume — duas lacunas reais.** Tríceps tinha 5 séries por semana e o Upper B
+não tinha exercício de tríceps nenhum; bíceps tinha 7. A faixa que produz
+crescimento é ~10–20. Tríceps foi para 10 e bíceps para 9. Costas (19), ombros
+(15) e peito (11) já estavam bem e não foram mexidos.
+
+**Nível no perfil** (`iniciante` / `intermediario` / `avancado`): o app deixa de
+supor que você está começando.
+
+Migração v5: só reescreve o treino que ainda está idêntico ao de fábrica.
+Verificado com um banco onde o Upper C havia sido editado — ele ficou intocado
+enquanto os outros quatro receberam o core novo.
+
+## Tempo, core no chão e cardio fora da esteira (décima segunda rodada)
+
+**Tempo por treino.** Você disse que tem 1h por dia, no mínimo 30 min. O perfil
+ganhou `sessionMinutes` (padrão 60) e `logic/duration.js` estima cada treino
+série a série: tempo de execução + descanso + 1 min de transição por exercício.
+O card de hoje mostra "⏱ ~X min" e, quando passa, diz o que fazer — e a ordem
+importa: **encurtar descanso de isolador primeiro, cortar série por último**, e
+nunca a do primeiro exercício, que é o que mais rende. A lista em Programa
+mostra a duração de cada treino.
+
+Como ficou (orçamento de 60 min): Upper A 60, Lower A 52, Upper B 46 + 35 de
+cardio, Upper C 47, Lower B 44 + 25 de cardio. Quarta e sábado passam de 1h por
+causa do cardio — é o dia de escolher entre encurtar descanso ou fazer o cardio
+em outro momento.
+
+**Core no chão.** Você pediu abdômen fora das máquinas. Dois exercícios novos
+(elevação de pernas no solo e abdominal bicicleta) e, mais importante, **os três
+treinos de casa que não tinham core nenhum passaram a ter** — o Upper A, B e C
+em casa estavam sem abdômen. Dos 12 exercícios de core, 10 são de chão ou barra
+e só 2 dependem de máquina; todo item de máquina tem o equivalente de chão no
+topo das alternativas.
+
+**Cardio fora da esteira.** `CARDIO_MACHINES` descreve esteira, elíptico e
+simulador de escadas: impacto, como regular e o que isso significa para o
+joelho. Cada plano forte traz instrução específica por aparelho, e a tela de
+cardio ganhou o seletor — a escolha fica salva. O elíptico é apontado como
+primeira opção em dia de joelho sensível (zero impacto), e a escada leva o aviso
+de não se apoiar no corrimão, que falseia o esforço.
+
+## Descanso e fim de semana (décima terceira rodada)
+
+**O descanso de 2:30 entre exercícios era um bug meu.** O modo treino disparava
+o mesmo cronômetro ao terminar a última série de um exercício, antes do
+seguinte. Você via 2:30 parado só para trocar de aparelho. Agora são duas coisas
+separadas:
+
+- **entre séries do mesmo exercício** — continua o tempo do programa (180 s no
+  supino, 150 s na puxada…), porque é ele que sustenta a carga na série
+  seguinte;
+- **ao trocar de exercício** — `restBetweenExercisesSec`, **1 min por padrão**,
+  ajustável de 0 a 3 min.
+
+Ajustes também ganhou **"Ritmo entre séries"** (programado / mais rápido / bem
+rápido), que multiplica o descanso entre séries por 1, 0,75 ou 0,5. O texto na
+tela diz o custo com franqueza: em exercício pesado, descanso curto derruba a
+carga da série seguinte, e carga é o que puxa o crescimento; em isolador o custo
+é pequeno. Quem encurta, encurta os pequenos.
+
+**Sábado e domingo mais pesados**, já que nesses dias você não tem hora. Usei o
+espaço para fechar a lacuna real do programa, que era quadríceps:
+
+| músculo | antes | depois |
+|---|---|---|
+| Quadríceps | 8 | **12** |
+| Panturrilha | 6 | **10** |
+| Ombros | 15 | **18** |
+| Tríceps | 10 | **13** |
+| Bíceps | 9 | **12** |
+| Glúteos | 9 | **12** |
+| Core | 25 | **31** |
+
+Sábado (Lower B) foi de 44 para 68 min: entrou cadeira extensora em repetições
+altas — volume de quadríceps sem carga pesada no joelho —, uma série a mais de
+leg press e de panturrilha, e braço direto, que em sábado não atrapalha dia
+nenhum.
+
+Domingo sem futebol deixou de ser só cardio: virou **intervalado + acessórios**,
+nessa ordem. Os acessórios são de baixa fadiga de propósito (posterior de ombro,
+abdutora, panturrilha, pallof, prancha lateral) — nenhum deles compromete o
+Upper A de segunda. A ordem é garantida pela flag `cardioFirst` no template, que
+faz o planejador pôr o cardio na frente quando ele é o treino principal do dia.
+
+## Complementos do dia (décima quarta rodada)
+
+Sua proposta: ter o treino do dia fixo, e ao terminar poder somar um bloco
+extra — cardio, abdômen — no dia em que sobra tempo. É uma boa separação, e
+resolve um problema que o app tinha: sem ela, "sobrou tempo hoje" só podia
+virar mudança permanente no programa, que é o que atrapalha a progressão.
+
+Duas coisas passam a ser distintas:
+
+- **treino do dia** — fixo, progride com carga, sustenta o ciclo de blocos. É
+  nele que a progressão dupla funciona, porque você repete o mesmo exercício
+  semana após semana e compara;
+- **complemento** — do dia e só do dia. Entra quando sobrou tempo, sai quando
+  não sobrou, e não muda o programa.
+
+Onze blocos em `data/extras.js`: três de abdômen (chão, barra, anti-rotação),
+braço, ombro/posterior, panturrilha, costas, três de cardio e mobilidade. Cada
+um declara o que treina, quanto dura, o que exige e um custo de fadiga de 0 a 3.
+
+`logic/extras.js` filtra o que faz sentido **hoje**, e nesta ordem:
+
+1. joelho fora do padrão → fora tudo que carrega o joelho;
+2. jogo amanhã → fora fadiga ≥ 2;
+3. jogou hoje → fora fadiga ≥ 2;
+4. já fez cardio hoje → só mobilidade;
+5. grupo que o dia já cobre desce para o fim — e essa regra **ganha** da de
+   ponto fraco: um grupo pode ser o mais fraco da semana e ainda assim ser o
+   pior lugar para pôr volume hoje, se hoje já é o dia dele;
+6. o grupo com menor volume semanal sobe, quando hoje não o treina.
+
+O que não cabe hoje **aparece assim mesmo**, com o motivo. Esconder a razão
+transforma o app em caixa-preta, e o motivo costuma ser a informação mais útil.
+
+**Guarda-corpo contra volume escondido.** Se o mesmo complemento aparece 3× em
+7 dias, o app avisa: deixou de ser complemento e virou volume fixo — que, por
+estar fora do programa, a progressão de carga não enxerga e o ciclo de blocos
+não conta. A sugestão é promovê-lo a exercício do programa.
+
+As séries do complemento são gravadas como quaisquer outras: contam para
+volume, recordes, relatório semanal e promessa do dia. A sessão fica marcada
+com `extraId` e sem `templateId`, então não interfere na progressão programada.
+
+## Aquecimento inteligente, joelho e Projeto Casamento (décima quinta rodada)
+
+| # | Pedido | Status | Onde |
+|---|---|---|---|
+| 1 | Preparação específica por tipo de treino (peito, costas, ombros, braços, pernas) | ✅ | `logic/warmup.js`, `data/warmup.js` |
+| 2 | Temporizadores de aquecimento, imagens e instruções por etapa | ✅ | `ui/views/prep.js` (ANTES DE COMEÇAR → INICIAR PREPARAÇÃO → PREPARAÇÃO CONCLUÍDA → INICIAR MUSCULAÇÃO) |
+| 3 | Séries preparatórias com cargas menores | ✅ | calculadas da última carga (40/60/80 %), marcáveis, fora do volume |
+| 4 | Integração com 30 / 40 / 60 / 90 / 120 min | ✅ | `logic/budget.js` + seletor no Início. Ex.: Upper B em 60 min → 7 preparação · 41 musculação · 12 cardio; Lower A → 10 · 42 · 5 de volta à calma |
+| 5 | Biblioteca visual de fortalecimento | ✅ | 11 exercícios novos (isometria na extensora, parede, agachamento espanhol, declive, leg press unilateral, panturrilha sentada/unilateral, coice e abdução na polia, miniband, concha) com ilustração própria; `/joelho/fortalecimento` |
+| 6 | Registro de dor: 0–10, local, durante/após/dia seguinte, inchaço, rigidez, instabilidade, escadas | ✅ | check do joelho ampliado + respostas rápidas por exercício e no dia seguinte |
+| 7 | Gráficos dor × data, × exercício, × carga, × futebol, × volume semanal | ✅ | `/joelho` |
+| 8 | Recomendar interromper a progressão com piora relevante/persistente | ✅ | `kneeStatus` (`stopProgression`, `seekProfessional`); nenhuma nota de dor vira autorização |
+| 9 | Progressão gradual, uma variável por vez | ✅ | `evaluateKneeExercise` + aviso quando carga e amplitude sobem juntas |
+| 10 | Futebol: quinta fixo, domingo opcional, quarta sem perna pesada, sábado ajusta | ✅ | regras já existentes + aquecimento de campo e resposta pós-jogo |
+| 11 | Cardio adaptado: caminhada, bicicleta, esteira com inclinação individual | ✅ | seletor de aparelho, teto de inclinação, histórico de sintomas, check antes do cardio |
+| 12 | Relatório semanal em PDF | ✅ | `/joelho/relatorio`, gerador próprio em `core/pdf.js` |
+| 13 | Atualizar orientações médicas | ✅ | `/medico` ganhou progressão liberada/não, frequência, amplitude/carga, futebol |
+| 14 | Projeto Casamento + indicadores do tronco no Início | ✅ | `logic/project.js`, `/projeto`: supinos, puxada, remada, desenvolvimento, peito, braço, abdômen, fotos |
+| 15 | 3 estímulos de superiores; peito 10–14 e costas 12–16 séries | ✅ | peito 11 → 13 (Upper B ganha crucifixo), costas 19 → 16 (sai a puxada unilateral, remada do Upper C 3 → 2), posterior de ombro no Upper C |
+| 16 | Persistência e preservação dos dados | ✅ | IndexedDB v4 (store `kneeResponses`), migração v7 só reescreve treino não editado — testada com banco da versão anterior |
+
+Decisão sobre os exemplos de tempo: o exemplo "60 min de superiores = 7 + 40 +
+13 de cardio" vale para a quarta (Upper B tem cardio programado). Na segunda e
+na sexta, sem cardio no programa, o tempo vai para a musculação e o cardio
+entra como opcional a partir de 1h30 — cortar 20 min de tronco para encaixar
+cardio iria contra a prioridade estética do projeto.
 
 ## Pendências assumidas nesta versão
 
