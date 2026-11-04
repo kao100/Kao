@@ -72,6 +72,7 @@ src/
     format.js         datas (sempre locais), números, durações
     util.js           ids, csv, download, redimensionar imagem
     audio.js          bipes do cronômetro + wake lock
+    pdf.js            gerador de PDF mínimo (relatório do joelho), sem dependências
   data/               conteúdo (sementes)
     exercises.js      biblioteca de exercícios com ficha completa
     program.js        programa semanal inicial + planos de cardio
@@ -80,6 +81,11 @@ src/
     seed.js           primeira execução (programa, exercícios, migrações)
   logic/              regras de negócio, sem DOM
     planner.js        que treino aparece em cada dia (futebol, sábado, joelho)
+    warmup.js         PREPARAÇÃO PARA O TREINO: etapas, tempos e séries preparatórias
+    budget.js         seletor 30/40/60/90/120 min: divide o tempo e ajusta os exercícios
+    session-plan.js   junta preparação + divisão do tempo com os dados do dia
+    knee-strength.js  fortalecimento do joelho: progressão, gráficos e relatório semanal
+    project.js        Projeto Casamento — 8 semanas (indicadores do tronco)
     progression.js    progressão dupla
     knee.js           status do joelho, orientações médicas, séries de dor
     readiness.js      check-in de recuperação (🟢🟡🔴)
@@ -121,7 +127,8 @@ sincronizar com um servidor) mexe só em `core/db.js` + `core/store.js`.
 | `meals` | um registro por alimento consumido: data, refeição, medida, gramas e macros |
 | `foods` | tabela de alimentos — os 75 que vêm no app e os que você cadastrar do rótulo |
 | `dailyLog` | minutos do dia e promessa cumprida |
-| `dayPlan` | resposta de "vai ter futebol?" por data |
+| `dayPlan` | resposta de "vai ter futebol?", local (academia/casa) e tempo escolhido (`budgetMin`) por data |
+| `kneeResponses` | resposta do joelho por exercício (sem dor / desconforto leve / dor aumentou), depois do treino e no dia seguinte (melhor / igual / pior) |
 
 Sessões guardam uma **cópia** do treino: editar o programa depois não reescreve o histórico.
 
@@ -158,6 +165,32 @@ Sessões guardam uma **cópia** do treino: editar o programa depois não reescre
   dá para desmarcar, e o app passa a apontar as alternativas sem barra.
 
 ---
+
+### Tempo do dia, preparação e joelho (v17)
+
+- **Seletor de tempo** no card de hoje: 30 MIN · 40 MIN · 1 HORA · 1H30 · 2 HORAS.
+  A preparação é reservada primeiro e nunca encolhe para caber o treino; com
+  pouco tempo saem os acessórios (core, braço, isoladores) e depois séries dos
+  exercícios de menor prioridade. Descanso entre séries não é cortado. Nos dias
+  de superiores, peito, costas e ombros têm prioridade; nos de pernas,
+  quadríceps, posteriores e glúteos. Tempo sobrando vira cardio opcional e
+  complementos — o app não inventa volume.
+- **ANTES DE COMEÇAR**: o modo treino abre com a preparação do dia — superiores
+  5–8 min (mobilidade, ativação específica para peito/costas/ombros/braços,
+  séries preparatórias), pernas 8–12 min (bicicleta leve, mobilidade de
+  quadril/tornozelo/joelho, ativação de glúteo, séries preparatórias com
+  amplitude crescente). Joelho em atenção/cautela ou recuperação baixa deixam a
+  preparação mais longa. Cada etapa tem ilustração, instruções e cronômetro.
+  As séries preparatórias saem da sua última carga e não contam como série.
+- **Fortalecimento do joelho**: as séries de perna registram amplitude (e
+  posição dos pés no leg press); ao fim de cada exercício o app pergunta como o
+  joelho respondeu; no dia seguinte, como ele acordou. A carga só sobe com
+  sessão anterior sem dor, joelho bem no dia seguinte, nada alterado na última
+  vez e orientação profissional permitindo — e uma variável por vez
+  (repetições → amplitude → carga). Piora persistente, inchaço, instabilidade
+  ou "pior no dia seguinte" 2× na semana interrompem a progressão e indicam
+  procurar o profissional.
+- **Relatório semanal do joelho** em `/joelho/relatorio`, exportável em PDF.
 
 ## Segurança e limites
 

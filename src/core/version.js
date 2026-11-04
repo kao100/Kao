@@ -7,11 +7,23 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v16';
-export const APP_DATE = '2026-09-15';
+export const APP_VERSION = 'kao-v17';
+export const APP_DATE = '2026-11-04';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v17',
+    date: '2026-11-04',
+    items: [
+      'Seletor de tempo no treino de hoje: 30 MIN, 40 MIN, 1 HORA, 1H30 e 2 HORAS. O tempo é dividido em preparação, musculação e cardio — com pouco tempo, sai primeiro o acessório; descanso e técnica não são cortados.',
+      'PREPARAÇÃO PARA O TREINO: antes da primeira série, aquecimento específico (bicicleta, mobilidade, ativação e séries preparatórias calculadas da sua última carga), com imagens, instruções e cronômetro.',
+      'FORTALECIMENTO DO JOELHO: amplitude e posição registradas nas séries de perna, resposta do joelho ao fim de cada exercício e no dia seguinte, e progressão de uma variável por vez.',
+      'Joelho: local da dor, rigidez, dificuldade em escadas, tendência de melhora/piora e gráficos de dor × carga, × futebol e × volume semanal. Relatório semanal em PDF para o ortopedista/fisioterapeuta.',
+      'Projeto Casamento — 8 semanas: supinos, puxada, remada, desenvolvimento, medidas de peito/braço/abdômen e fotos no Início. Peito passa a ter 3 estímulos por semana; costas fica em 16 séries.',
+      'Cardio: bicicleta e caminhada como opções, inclinação máxima individual na esteira e histórico de sintomas.',
+    ],
+  },
   {
     version: 'kao-v16',
     date: '2026-09-15',

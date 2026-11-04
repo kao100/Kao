@@ -5,8 +5,15 @@ import { today, formatDate, formatMinutes, weekDates, kg, dayLabel } from '../..
 import { planForDate, planForWeek, answerFootball, blockSummary, setLocation } from '../../logic/planner.js';
 import { kneeStatus } from '../../logic/knee.js';
 import { targetsFor, dayTotals } from '../../logic/nutrition.js';
-import { fitsBudget } from '../../logic/duration.js';
+import { buildDayPlan, setDayBudget } from '../../logic/session-plan.js';
+import { DURATION_OPTIONS } from '../../logic/budget.js';
+import { stepLine } from '../../logic/warmup.js';
+import { pendingNextDayCheck } from '../../logic/knee-strength.js';
+import { KNEE_RESPONSES } from '../../logic/knee.js';
 import { extrasPrompt } from './extras.js';
+import { allocationStrip } from './prep.js';
+import { projectCard } from './project.js';
+import { saveKneeResponse, openNextDaySheet } from './knee.js';
 import { page, topbar, iconAction, sectionTitle, safetyNote } from '../shell.js';
 import { startWorkoutFlow } from './workout.js';
 import { openDayActivitySheet } from './promise.js';
@@ -25,7 +32,9 @@ export async function dashboardView() {
     kneeStatus(date),
   ]);
 
-  const [foodTargets, foodTotals] = await Promise.all([targetsFor(date), dayTotals(date)]);
+  const [foodTargets, foodTotals, dayInfo, nextDay] = await Promise.all([
+    targetsFor(date), dayTotals(date), buildDayPlan(plan, date), pendingNextDayCheck(date),
+  ]);
 
   const minutes = log?.minutes || 0;
   const goal = profile?.promiseMinutes || 30;
@@ -41,9 +50,13 @@ export async function dashboardView() {
 
     plan.question ? footballQuestion(plan.question) : null,
 
-    todayCard(plan, date, profile?.sessionMinutes || 60),
+    nextDay ? nextDayCard(nextDay, date) : null,
+
+    todayCard(plan, date, dayInfo),
 
     knee.level !== 'ok' ? kneeAlert(knee) : null,
+
+    await projectCard(date),
 
     await weekStats(weekPlans, date),
 
@@ -118,34 +131,56 @@ function footballQuestion(question) {
 
 /* ---------------------------- treino de hoje ---------------------------- */
 
-export function todayCard(plan, date, budget = null) {
+export function todayCard(plan, date, dayInfo = null) {
   const main = plan.blocks[0];
   const accent = main?.accent || 'volt';
-  const cardioMin = plan.blocks.filter((b) => b.plan).reduce((s, b) => s + (b.plan.totalMin || 0), 0);
-  const time = main?.template ? fitsBudget(main.template, budget, { cardioMin }) : null;
+  const strength = plan.blocks.find((b) => b.type === 'strength');
+  const alloc = dayInfo?.alloc || null;
+  const items = alloc ? alloc.items : (strength?.template?.items || []);
+  const reducedIds = new Map((alloc?.reduced || []).map((r) => [r.exerciseId, r]));
 
   return h('section.today-card', { style: { '--accent-color': `var(--${accent})` } },
     h('div.today-card__kicker', `${plan.dayLabel} · treino de hoje`),
     h('div.today-card__title', main?.title || 'Dia livre'),
     h('div.today-card__meta',
       ...plan.blocks.map((b, i) => h(`span.pill.pill--${b.accent}`,
-        i === 0 ? `${b.icon} ${blockSummary(b) || b.title}` : `${b.icon} ${b.title}`)),
-      time ? h('span.pill', `⏱ ~${time.total} min`) : null,
+        i === 0 ? `${b.icon} ${blockSummaryFor(b, alloc) || b.title}`
+          : `${b.icon} ${b.title}${alloc && (b.type === 'cardio' || b.type === 'recovery') ? ` · ${blockSummaryFor(b, alloc)}` : ''}`)),
       plan.blocks.some((b) => b.provisional) ? h('span.pill.pill--warn', 'provisório') : null,
     ),
-    time && !time.fits ? h('div.safety', { style: { marginTop: '10px' } }, time.advice) : null,
-    main?.template?.items?.length
+
+    dayInfo ? durationPicker(date, dayInfo.budget) : null,
+    alloc ? allocationStrip(alloc) : null,
+
+    dayInfo?.prep
+      ? h('div.prep-preview',
+        h('div.prep-preview__head', `🔥 Antes de começar · preparação ${dayInfo.prep.minutes} min`),
+        h('div.prep-preview__steps', dayInfo.prep.steps.map(stepLine).join(' · ')),
+      )
+      : null,
+
+    items.length && strength
       ? h('ul.today-card__list',
-        ...main.template.items.slice(0, 5).map((it, i) => h('li',
-          h('span.today-card__idx', String(i + 1)),
-          h('span.grow', it.exerciseName || itemName(main.template, i)),
-          h('span.muted.num', it.timeBased ? `${it.sets}×${it.durationSec}s` : `${it.sets}×${it.repMin}–${it.repMax}`),
-        )),
-        main.template.items.length > 5
-          ? h('li', h('span.muted', `+ ${main.template.items.length - 5} exercícios`))
+        ...items.slice(0, 6).map((it, i) => {
+          const red = reducedIds.get(it.exerciseId);
+          return h('li',
+            h('span.today-card__idx', String(i + 1)),
+            h('span.grow', it.exerciseName || it.exerciseId),
+            h('span.muted.num', `${red ? `${red.from}→` : ''}${it.timeBased ? `${it.sets}×${it.durationSec}s` : `${it.sets}×${it.repMin}–${it.repMax}`}`),
+          );
+        }),
+        items.length > 6
+          ? h('li', h('span.muted', `+ ${items.length - 6} exercícios`))
           : null,
       )
       : null,
+
+    alloc?.removed?.length
+      ? h('div.list-item__sub', { style: { marginTop: '8px' } },
+        `Fica de fora hoje: ${alloc.removed.map((r) => r.name).join(', ')} — volta quando houver mais tempo.`)
+      : null,
+    ...(alloc?.notes || []).slice(0, 1).map((n) => h('div.safety.safety--info', { style: { marginTop: '10px' } }, n)),
+
     plan.notes.length ? safetyNote(plan.notes[0], 'info') : null,
     locationSwitch(plan, date),
     h('div.btn-row', { style: { marginTop: '14px' } },
@@ -157,8 +192,48 @@ export function todayCard(plan, date, budget = null) {
   );
 }
 
-function itemName(template, index) {
-  return template.items[index]?.exerciseName || template.items[index]?.exerciseId || '';
+function blockSummaryFor(block, alloc) {
+  if (block.type === 'strength' && alloc) {
+    const n = alloc.items.length;
+    return `${n} exercício${n === 1 ? '' : 's'} · ${alloc.strengthMin} min`;
+  }
+  if ((block.type === 'cardio' || block.type === 'recovery') && alloc) {
+    return alloc.cardioMin ? `hoje ${alloc.cardioMin} min` : 'não cabe no tempo de hoje';
+  }
+  return blockSummary(block);
+}
+
+/** 30 MIN · 40 MIN · 1 HORA · 1H30 · 2 HORAS — o tempo de hoje. */
+function durationPicker(date, current) {
+  const choose = async (min) => {
+    await setDayBudget(date, min);
+    refresh();
+  };
+  return h('div.duration', { style: { marginTop: '12px' } },
+    h('div.duration__label', 'Quanto tempo você tem hoje?'),
+    h('div.duration__opts',
+      ...DURATION_OPTIONS.map((o) => h(`button.duration__opt${o.min === current ? '.duration__opt--active' : ''}`,
+        { type: 'button', onClick: () => choose(o.min) }, o.label)),
+    ),
+  );
+}
+
+/** "Como o joelho acordou?" — pergunta do dia seguinte a perna ou futebol. */
+function nextDayCard(pending, date) {
+  const answer = async (value) => {
+    await saveKneeResponse({ date, phase: 'next-day', value, refDate: pending.refDate, source: pending.source });
+    toastOk(value === 'worse' ? 'Registrado — hoje sem progressão de carga nas pernas.' : 'Obrigado — isso orienta a próxima progressão.');
+    refresh();
+  };
+  return h('section.card',
+    h('div.card__title', '🦵 Como o joelho acordou hoje?'),
+    h('p.muted', { style: { fontSize: '13px', margin: '4px 0 10px' } }, `Depois de ${pending.label}. É a resposta em 24 h que diz se a carga foi bem tolerada.`),
+    h('div.btn-row', { style: { flexWrap: 'wrap' } },
+      ...KNEE_RESPONSES['next-day'].map((r) => h(`button.btn.btn--sm.${r.tone === 'danger' ? 'btn--danger' : r.tone === 'ok' ? 'btn--primary' : 'btn--ghost'}`,
+        { onClick: () => answer(r.value) }, { better: 'Melhor', same: 'Igual', worse: 'Pior' }[r.value])),
+    ),
+    h('button.btn.btn--sm.btn--quiet.btn--block', { style: { marginTop: '6px' } , onClick: async () => { await openNextDaySheet(pending, date); refresh(); } }, 'Registrar com nota de 0 a 10'),
+  );
 }
 
 /** Alternador academia × casa — para o dia em que não dá para ir treinar fora. */

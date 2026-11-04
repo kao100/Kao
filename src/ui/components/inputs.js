@@ -137,3 +137,34 @@ export function numberInput({ value = '', placeholder = '', step = '0.1' } = {})
   input.value = value ?? '';
   return input;
 }
+
+/**
+ * Fichas para tocar (uma ou várias). Usadas onde a resposta é uma palavra:
+ * local da dor, resposta do joelho, amplitude.
+ */
+export function chips({ options, value = null, multi = false, onChange } = {}) {
+  let current = multi ? new Set(Array.isArray(value) ? value : []) : value;
+  const buttons = options.map((opt) => {
+    const btn = h('button.chip', { type: 'button', 'data-tone': opt.tone || '' }, opt.label);
+    btn.addEventListener('click', () => {
+      if (multi) {
+        if (current.has(opt.value)) current.delete(opt.value); else current.add(opt.value);
+      } else {
+        current = current === opt.value ? null : opt.value;
+      }
+      sync();
+      haptic(8);
+      onChange?.(node.getValue());
+    });
+    return btn;
+  });
+  const sync = () => buttons.forEach((b, i) => {
+    const v = options[i].value;
+    b.classList.toggle('chip--active', multi ? current.has(v) : current === v);
+  });
+  const node = h('div.chips', ...buttons);
+  node.getValue = () => (multi ? [...current] : current);
+  node.setValue = (v) => { current = multi ? new Set(v || []) : v; sync(); };
+  sync();
+  return node;
+}

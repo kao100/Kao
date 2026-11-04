@@ -22,6 +22,13 @@ import { openKneeCheckSheet } from './knee.js';
 import { extrasPrompt } from './extras.js';
 import { openReadinessSheet } from './readiness.js';
 import { checkSetRecords, checkSessionRecords, celebrationText, sessionAchievements, RECORD_TYPES } from '../../logic/records.js';
+import { buildDayPlan } from '../../logic/session-plan.js';
+import { evaluateKneeExercise, isKneeTracked } from '../../logic/knee-strength.js';
+import { KNEE_RESPONSES } from '../../logic/knee.js';
+import { kneeInfo, ROM_OPTIONS, romRank } from '../../data/exercises.js';
+import { chips } from '../components/inputs.js';
+import { renderPrep, inPrep, stopPrepTimer } from './prep.js';
+import { saveKneeResponse } from './knee.js';
 
 /* ------------------------------------------------------------------ */
 /* Início do treino                                                     */
@@ -50,7 +57,12 @@ export async function startWorkoutFlow(plan, date = today()) {
   }
 
   if (strength) {
-    const session = await createSession(strength.template, date);
+    // tempo escolhido no dia → preparação + exercícios que cabem
+    const dayPlan = await buildDayPlan(plan, date);
+    const session = await createSession(strength.template, date, {
+      dayPlan,
+      withPrep: settings.prepEnabled !== false,
+    });
     navigate(`/treinar/${session.id}`);
     return;
   }
@@ -59,15 +71,20 @@ export async function startWorkoutFlow(plan, date = today()) {
   toast('Nenhum treino programado para hoje.');
 }
 
-/** Cria a sessão a partir de um template (snapshot: editar o template depois não altera o histórico). */
-export async function createSession(template, date = today()) {
+/**
+ * Cria a sessão a partir de um template (snapshot: editar o template depois
+ * não altera o histórico). Com `dayPlan`, a sessão já nasce ajustada ao tempo
+ * escolhido e com a preparação do dia.
+ */
+export async function createSession(template, date = today(), { dayPlan = null, withPrep = true } = {}) {
   const existing = (await store.sessions.byDate(date)).find(
     (s) => s.templateId === template.id && s.status === 'active',
   );
   if (existing) return existing;
 
   const exMap = await store.exercises.map();
-  const items = (template.items || []).map((it, i) => ({
+  const sourceItems = dayPlan?.alloc?.items?.length ? dayPlan.alloc.items : (template.items || []);
+  const items = sourceItems.map((it, i) => ({
     ...it,
     order: i,
     exerciseName: exMap.get(it.exerciseId)?.namePt || it.exerciseId,
@@ -88,6 +105,16 @@ export async function createSession(template, date = today()) {
     items,
     cursor: { itemIndex: 0, setIndex: 0 },
     notes: '',
+    budgetMin: dayPlan?.budget || null,
+    alloc: dayPlan ? {
+      segments: dayPlan.alloc.segments.map(({ plan, ...rest }) => ({ ...rest, planId: plan?.id || null })),
+      removed: dayPlan.alloc.removed,
+      reduced: dayPlan.alloc.reduced,
+      notes: dayPlan.alloc.notes,
+      cardioPlanId: dayPlan.alloc.cardioPlan?.id || null,
+      cardioMin: dayPlan.alloc.cardioMin,
+    } : null,
+    prep: withPrep && dayPlan?.prep ? { ...dayPlan.prep, status: 'pending', stepIndex: 0, rampDone: {} } : null,
   });
 }
 
@@ -103,12 +130,13 @@ export async function workoutView({ params }) {
   }
   if (session.status === 'done') return workoutSummaryView(session);
 
-  const [exMap, gymEquipment, settings, knee, sessionSets] = await Promise.all([
+  const [exMap, gymEquipment, settings, knee, sessionSets, guidance] = await Promise.all([
     store.exercises.map(),
     store.equipment.all(),
     store.settings.get(),
     kneeStatus(session.date),
     store.sets.bySession(session.id),
+    store.activeMedicalGuidance(),
   ]);
 
   if (settings?.keepScreenAwake !== false) keepAwake(true);
@@ -124,7 +152,7 @@ export async function workoutView({ params }) {
   };
 
   const rerender = async () => {
-    const node = await renderTrainer(state, { exMap, gymEquipment, settings, knee, rerender });
+    const node = await renderTrainer(state, { exMap, gymEquipment, settings, knee, guidance, rerender });
     root.replaceChildren(node);
   };
 
@@ -137,6 +165,12 @@ async function renderTrainer(state, ctx) {
   const items = session.items || [];
   const item = items[state.itemIndex];
 
+  // ANTES DE COMEÇAR: a preparação vem antes da primeira série
+  if (inPrep(session, state.sets.length)) {
+    return renderPrep(state, ctx, { onExit: () => confirmExit(state, ctx) });
+  }
+  stopPrepTimer(state);
+
   if (!item) return finishPrompt(state, ctx);
 
   const exercise = ctx.exMap.get(item.exerciseId);
@@ -145,7 +179,7 @@ async function renderTrainer(state, ctx) {
   const setNumber = Math.min(doneSets.length + 1, totalSets + 3);
 
   const last = await store.lastPerformance(item.exerciseId, { beforeSessionId: session.id });
-  const progression = analyzeProgression({
+  let progression = analyzeProgression({
     item,
     last,
     settings: ctx.settings,
@@ -154,6 +188,23 @@ async function renderTrainer(state, ctx) {
       ? { avoidLoadIncrease: true, reason: ctx.knee.reason }
       : null,
   });
+
+  // Fortalecimento do joelho: a carga só sobe quando a última sessão foi sem
+  // dor, o joelho acordou bem no dia seguinte e nada mais mudou. Uma variável
+  // por vez — repetições, depois amplitude, por último carga.
+  const kInfo = kneeInfo(item.exerciseId);
+  const kneeEval = kInfo && isKneeTracked(exercise)
+    ? await evaluateKneeExercise(item.exerciseId, { item, knee: ctx.knee, guidance: ctx.guidance, beforeSessionId: session.id })
+    : null;
+  if (kneeEval && !kneeEval.allowLoadIncrease && progression.status === 'ready') {
+    progression = {
+      ...progression,
+      status: 'building',
+      title: 'Carga: manter por enquanto',
+      message: 'As repetições chegaram ao topo, mas em exercício de joelho a carga só sobe quando os outros sinais deixam — veja abaixo.',
+      suggestedWeight: last?.topWeight ?? progression.suggestedWeight,
+    };
+  }
 
   const media = exercise ? resolveExerciseMedia(exercise, ctx.gymEquipment) : null;
 
@@ -168,6 +219,10 @@ async function renderTrainer(state, ctx) {
   const rirInput = stepper({ value: startRir ?? 2, step: 1, min: 0, max: 5, unit: 'RIR', decimals: 0 });
   const painInput = stepper({ value: lastSetHere?.pain ?? 0, step: 1, min: 0, max: 10, unit: 'dor', decimals: 0 });
   const timeInput = item.timeBased ? stepper({ value: lastSetHere?.durationSec ?? item.durationSec ?? 40, step: 5, min: 5, max: 600, unit: 'seg', decimals: 0 }) : null;
+  const lastRom = lastSetHere?.rom ?? last?.sets?.find((s) => s.rom)?.rom ?? null;
+  const lastPos = lastSetHere?.position ?? last?.sets?.find((s) => s.position)?.position ?? null;
+  const romCtl = kInfo?.trackRom ? chips({ options: ROM_OPTIONS.map((o) => ({ value: o.value, label: o.label })), value: lastRom }) : null;
+  const posCtl = kInfo?.positions ? chips({ options: kInfo.positions.map((p) => ({ value: p, label: p })), value: lastPos }) : null;
 
   const finishSet = async () => {
     unlockAudio();
@@ -183,10 +238,22 @@ async function renderTrainer(state, ctx) {
       durationSec: item.timeBased ? timeInput.getValue() : null,
       rir: item.timeBased ? null : rirInput.getValue(),
       pain: painInput.getValue(),
+      rom: romCtl ? romCtl.getValue() : null,
+      position: posCtl ? posCtl.getValue() : null,
       warmup: false,
       ts: Date.now(),
     };
     await store.sets.save(row);
+
+    // carga E amplitude subindo juntas: avisa (uma variável por vez)
+    if (kInfo && doneSets.length === 0 && last) {
+      const lastMaxRom = Math.max(0, ...(last.sets || []).map((s) => romRank(s.rom) || 0));
+      const romUp = romRank(row.rom) && lastMaxRom && romRank(row.rom) > lastMaxRom;
+      const loadUp = (Number(row.weight) || 0) > (Number(last.topWeight) || 0);
+      if (romUp && loadUp) {
+        toast('Carga e amplitude subiram ao mesmo tempo. Para o tendão, progrida uma coisa por vez — volte uma delas ao valor anterior.', { type: 'warn', ms: 6500 });
+      }
+    }
     state.sets.push(row);
     haptic([12, 40, 12]);
 
@@ -214,6 +281,9 @@ async function renderTrainer(state, ctx) {
     // Entre exercícios você troca de aparelho, regula o banco e muda de músculo
     // — aqui o tempo longo é só tempo parado.
     const trocouDeExercicio = nowDone >= totalSets;
+    if (trocouDeExercicio && exercise && isKneeTracked(exercise)) {
+      askKneeResponse(item, session);
+    }
     const pausa = trocouDeExercicio
       ? (ctx.settings?.restBetweenExercisesSec ?? 60)
       : Math.round((item.restSec || 0) * (ctx.settings?.restPace ?? 1));
@@ -308,6 +378,10 @@ async function renderTrainer(state, ctx) {
     h(`div.card.card--tight${progression.status === 'ready' ? '.card--accent' : ''}`,
       h('div.card__title', progression.title),
       h('p.muted', { style: { margin: '6px 0 0', fontSize: '13.5px' } }, progression.message),
+      kneeEval
+        ? h(`div.safety${kneeEval.status === 'reduce' || kneeEval.status === 'blocked' ? '.safety--danger' : kneeEval.status === 'progress' ? '.safety--info' : ''}`,
+          { style: { marginTop: '8px' } }, `🦵 ${kneeEval.title}: ${kneeEval.message}`)
+        : null,
       progression.status === 'ready'
         ? h('button.btn.btn--sm.btn--primary.mt', {
           onClick: () => { weightInput.setValue(progression.suggestedWeight); toastOk(`Carga sugerida: ${num(progression.suggestedWeight, 1)} kg`); },
@@ -327,6 +401,8 @@ async function renderTrainer(state, ctx) {
         ),
       ),
     item.timeBased ? h('div', h('div.field__label', 'Dor (0–10)'), painInput) : null,
+    romCtl ? h('div', h('div.field__label', kInfo.load === 'isometric' ? 'Ângulo / amplitude' : 'Amplitude usada'), romCtl) : null,
+    posCtl ? h('div', h('div.field__label', 'Posição dos pés'), posCtl) : null,
 
     item.notes ? h('div.safety.safety--info', item.notes) : null,
 
@@ -597,6 +673,31 @@ async function openSwapSheet(state, ctx) {
   });
 }
 
+/**
+ * "Como o joelho respondeu?" ao fim de cada exercício de perna.
+ * Três toques possíveis — e pular é sempre uma opção.
+ */
+function askKneeResponse(item, session) {
+  openSheet({
+    title: 'Como o joelho respondeu?',
+    content: (close) => h('div.stack',
+      h('p.muted', item.exerciseName || ''),
+      ...KNEE_RESPONSES.during.map((r) => h(`button.btn.btn--block.${r.tone === 'danger' ? 'btn--danger' : r.tone === 'ok' ? 'btn--primary' : 'btn--ghost'}`, {
+        onClick: async () => {
+          await saveKneeResponse({ date: session.date, phase: 'during', value: r.value, exerciseId: item.exerciseId, sessionId: session.id });
+          close();
+          if (r.value === 'worse') {
+            toast('Registrado. Nos próximos exercícios, reduza carga ou amplitude — e se a dor seguir subindo, pare as pernas por hoje.', { type: 'warn', ms: 6500 });
+          } else {
+            toastOk('Resposta do joelho salva');
+          }
+        },
+      }, r.label)),
+      h('button.btn.btn--quiet.btn--block', { onClick: close }, 'Pular'),
+    ),
+  });
+}
+
 async function confirmExit(state, ctx) {
   const ok = await confirmSheet({
     title: 'Sair do treino?',
@@ -604,6 +705,7 @@ async function confirmExit(state, ctx) {
     confirmLabel: 'Sair e continuar depois',
   });
   if (ok) {
+    stopPrepTimer(state);
     clearInterval(state.restTimer);
     keepAwake(false);
     await store.sessions.save(state.session);
@@ -612,6 +714,7 @@ async function confirmExit(state, ctx) {
 }
 
 async function finishSession(state, ctx) {
+  stopPrepTimer(state);
   clearInterval(state.restTimer);
   keepAwake(false);
   const session = state.session;
@@ -654,7 +757,13 @@ export async function workoutSummaryView(session) {
   ]);
 
   const volume = setsVolume(sessionSets);
-  const cardioBlock = plan.blocks.find((b) => b.type === 'cardio' || b.type === 'recovery');
+  const plannedCardio = plan.blocks.find((b) => b.type === 'cardio' || b.type === 'recovery');
+  // o tempo do dia pode ter trocado o plano (ou tirado o cardio)
+  const cardioBlock = session.alloc
+    ? (session.alloc.cardioPlanId && plannedCardio
+      ? { ...plannedCardio, planId: session.alloc.cardioPlanId, title: `${plannedCardio.title}${session.alloc.cardioMin ? ` · ${session.alloc.cardioMin} min` : ''}` }
+      : null)
+    : plannedCardio;
   const footballBlock = plan.blocks.find((b) => b.type === 'football');
   const doneCardio = (await store.cardio.byDate(session.date)).length > 0;
   const promiseMet = log?.promiseMet;
@@ -710,8 +819,30 @@ export async function workoutSummaryView(session) {
 
     await extrasPrompt(session.date, { title: 'Quer complementar hoje?' }),
 
-    h('button.btn.btn--ghost.btn--block', { onClick: () => openKneeCheckSheet({ context: 'post-workout', date: session.date }) },
-      '🦵 Registrar como o joelho ficou'),
+    session.alloc?.removed?.length
+      ? h('div.card.card--tight',
+        h('div.card__title', 'Ficou de fora hoje pelo tempo'),
+        h('p.muted', { style: { fontSize: '13px', marginTop: '6px' } },
+          `${session.alloc.removed.map((r) => r.name).join(', ')}. Se sobrar tempo, dá para fazer como complemento; senão, eles voltam na próxima semana.`),
+      )
+      : null,
+
+    sessionSets.some((s) => isKneeTracked(exMap.get(s.exerciseId)))
+      ? h('div.card',
+        h('div.card__title', '🦵 E o joelho, depois do treino?'),
+        h('p.muted', { style: { fontSize: '13px', margin: '6px 0 10px' } }, 'Amanhã o app vai perguntar como ele acordou — é essa resposta que decide a próxima progressão.'),
+        h('div.stack.stack--sm', ...KNEE_RESPONSES.after.map((r) => h(`button.btn.btn--sm.btn--block.${r.tone === 'danger' ? 'btn--danger' : r.tone === 'ok' ? 'btn--primary' : 'btn--ghost'}`, {
+          onClick: async (e) => {
+            await saveKneeResponse({ date: session.date, phase: 'after', value: r.value, sessionId: session.id });
+            e.target.closest('.card').querySelectorAll('button').forEach((b) => { b.disabled = true; });
+            toastOk('Registrado');
+          },
+        }, r.label))),
+        h('button.btn.btn--ghost.btn--block.mt', { onClick: () => openKneeCheckSheet({ context: 'post-lower', date: session.date }) },
+          'Registrar com nota de 0 a 10'),
+      )
+      : h('button.btn.btn--ghost.btn--block', { onClick: () => openKneeCheckSheet({ context: 'post-workout', date: session.date }) },
+        '🦵 Registrar como o joelho ficou'),
 
     h('button.btn.btn--quiet.btn--block', { onClick: () => navigate('/') }, 'Voltar ao início'),
   );

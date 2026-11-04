@@ -874,6 +874,199 @@ const SCENES = {
       ${poly([[152, 146], [130, 172], [126, 198]], C.cardio)}
       ${poly([[152, 146], [178, 170], [190, 196]], C.cardio)}`,
   },
+  /* ================= PREPARAÇÃO E FORTALECIMENTO DO JOELHO ================= */
+
+  /* ---------- Bicicleta ergométrica ---------- */
+  bike: {
+    machine: () => `
+      ${floor()}
+      ${rect(84, 198, 170, 10, C.frame, 4)}
+      ${line(150, 198, 146, 124, C.frame, 10)}
+      ${rect(124, 114, 46, 11, C.pad, 5)}
+      ${line(214, 198, 226, 102, C.frame, 9)}
+      ${rect(214, 94, 40, 9, C.pad, 4)}
+      ${circle(204, 172, 24, C.frame)}
+      ${circle(204, 172, 8, C.frameLine)}`,
+    athlete: () => `
+      ${head(186, 66)}
+      ${poly([[148, 112], [178, 80]], C.cardio)}
+      ${poly([[178, 84], [222, 98]], C.cardio)}
+      ${poly([[148, 114], [190, 138], [196, 176]], C.cardio)}
+      ${poly([[148, 114], [176, 152], [214, 164]], C.cardio)}
+      ${arrow(262, 182, 282, 160)}`,
+  },
+
+  /* ---------- Círculos de braço / mobilidade de ombro ---------- */
+  armCircles: {
+    machine: () => `${floor()}`,
+    athlete: () => `
+      ${head(160, 62)}
+      ${poly([[160, 74], [160, 140]])}
+      ${poly([[160, 140], [146, 208]])}
+      ${poly([[160, 140], [174, 208]])}
+      ${poly([[160, 90], [106, 90]])}
+      ${poly([[160, 90], [214, 90]])}
+      <circle cx="94" cy="90" r="15" fill="none" stroke="${C.arrow}" stroke-width="3.5" stroke-dasharray="7 5"/>
+      <circle cx="226" cy="90" r="15" fill="none" stroke="${C.arrow}" stroke-width="3.5" stroke-dasharray="7 5"/>`,
+  },
+
+  /* ---------- Afastar o elástico (band pull-apart) ---------- */
+  bandPullApart: {
+    machine: () => `${floor()}`,
+    athlete: () => `
+      ${head(160, 62)}
+      ${poly([[160, 74], [160, 140]])}
+      ${poly([[160, 140], [148, 208]])}
+      ${poly([[160, 140], [172, 208]])}
+      ${poly([[160, 92], [112, 98]])}
+      ${poly([[160, 92], [208, 98]])}
+      ${line(112, 98, 208, 98, C.arrow, 3)}
+      ${arrow(104, 126, 70, 126)}
+      ${arrow(216, 126, 250, 126)}`,
+  },
+
+  /* ---------- Balanço de perna (mobilidade de quadril) ---------- */
+  legSwing: {
+    machine: () => `
+      ${floor()}
+      ${rect(246, 50, 14, 162, C.frame)}`,
+    athlete: () => `
+      ${head(200, 64)}
+      ${poly([[200, 76], [204, 140]])}
+      ${poly([[202, 92], [246, 102]])}
+      ${poly([[204, 140], [208, 208]])}
+      ${poly([[204, 140], [158, 188]])}
+      ${arrow(118, 196, 112, 150)}`,
+  },
+
+  /* ---------- Mobilidade de tornozelo (joelho em direção à parede) ---------- */
+  ankleRock: {
+    machine: () => `
+      ${floor()}
+      ${rect(262, 40, 14, 172, C.frame)}`,
+    athlete: () => `
+      ${head(196, 88)}
+      ${poly([[196, 100], [194, 150]])}
+      ${poly([[196, 112], [258, 120]])}
+      ${poly([[194, 150], [236, 168], [234, 208]])}
+      ${poly([[194, 150], [170, 178], [150, 208]])}
+      ${arrow(236, 132, 256, 150)}`,
+  },
+
+  /* ---------- Isometria na parede ---------- */
+  wallSit: {
+    machine: () => `
+      ${floor()}
+      ${rect(232, 40, 16, 172, C.frame)}`,
+    athlete: () => `
+      ${head(214, 82)}
+      ${poly([[220, 94], [222, 150]])}
+      ${poly([[222, 150], [172, 152], [170, 208]])}
+      ${poly([[220, 106], [194, 132]])}
+      ${rect(100, 112, 9, 34, C.arrow, 3)}
+      ${rect(116, 112, 9, 34, C.arrow, 3)}`,
+  },
+
+  /* ---------- Agachamento espanhol ---------- */
+  spanishSquat: {
+    machine: () => `
+      ${floor()}
+      ${rect(60, 50, 16, 162, C.frame)}
+      ${line(76, 150, 148, 150, C.arrow, 4)}`,
+    athlete: () => `
+      ${head(196, 76)}
+      ${poly([[194, 88], [204, 140]])}
+      ${poly([[204, 140], [150, 150], [156, 208]])}
+      ${poly([[196, 100], [150, 112]])}
+      ${rect(254, 112, 9, 34, C.arrow, 3)}
+      ${rect(270, 112, 9, 34, C.arrow, 3)}`,
+  },
+
+  /* ---------- Agachamento no declive ---------- */
+  declineSquat: {
+    machine: () => `
+      ${floor()}
+      <polygon points="96,212 232,212 232,184" fill="${C.pad}"/>`,
+    athlete: () => `
+      ${head(168, 80)}
+      ${poly([[168, 92], [178, 142]])}
+      ${poly([[178, 142], [140, 160], [176, 196]])}
+      ${poly([[170, 104], [130, 112]])}
+      ${arrow(260, 116, 260, 160)}`,
+  },
+
+  /* ---------- Panturrilha sentada ---------- */
+  seatedCalf: {
+    machine: () => `
+      ${floor()}
+      ${rect(66, 150, 84, 14, C.pad, 6)}
+      ${line(108, 164, 108, 208, C.frame, 8)}
+      ${rect(160, 126, 64, 14, C.pad, 6)}
+      ${line(232, 126, 232, 208, C.frame, 8)}
+      ${rect(168, 196, 56, 10, C.frame, 3)}`,
+    athlete: () => `
+      ${head(94, 92)}
+      ${poly([[96, 104], [108, 150]])}
+      ${poly([[108, 150], [178, 146]])}
+      ${poly([[178, 146], [184, 194]])}
+      ${arrow(266, 192, 266, 150)}`,
+  },
+
+  /* ---------- Coice de glúteo na polia ---------- */
+  cableKickback: {
+    machine: () => `
+      ${floor()}
+      ${rect(36, 40, 24, 172, C.frame)}
+      ${line(60, 198, 234, 142, C.cable, 3)}`,
+    athlete: () => `
+      ${head(106, 82)}
+      ${poly([[114, 92], [150, 132]])}
+      ${poly([[118, 98], [62, 110]])}
+      ${poly([[150, 132], [146, 208]])}
+      ${poly([[150, 132], [200, 150], [234, 142]])}
+      ${arrow(248, 176, 282, 146)}`,
+  },
+
+  /* ---------- Abdução de quadril na polia ---------- */
+  cableAbduction: {
+    machine: () => `
+      ${floor()}
+      ${rect(36, 40, 24, 172, C.frame)}
+      ${line(60, 204, 212, 196, C.cable, 3)}`,
+    athlete: () => `
+      ${head(156, 62)}
+      ${poly([[156, 74], [158, 140]])}
+      ${poly([[156, 90], [62, 100]])}
+      ${poly([[158, 140], [150, 208]])}
+      ${poly([[158, 140], [212, 196]])}
+      ${arrow(232, 160, 268, 176)}`,
+  },
+
+  /* ---------- Caminhada lateral com miniband ---------- */
+  lateralWalk: {
+    machine: () => `${floor()}`,
+    athlete: () => `
+      ${head(160, 78)}
+      ${poly([[160, 90], [164, 140]])}
+      ${poly([[162, 102], [138, 124]])}
+      ${poly([[164, 140], [136, 170], [130, 208]])}
+      ${poly([[164, 140], [192, 170], [198, 208]])}
+      ${line(138, 168, 190, 168, C.arrow, 4)}
+      ${arrow(222, 112, 282, 112)}`,
+  },
+
+  /* ---------- Concha (clamshell) ---------- */
+  clamshell: {
+    machine: () => `
+      ${floor()}
+      ${rect(46, 196, 228, 12, C.pad, 6)}`,
+    athlete: () => `
+      ${head(74, 172)}
+      ${poly([[86, 178], [160, 186]])}
+      ${poly([[160, 188], [204, 176], [232, 192]])}
+      ${poly([[160, 182], [204, 140], [232, 186]])}
+      ${arrow(212, 132, 222, 100)}`,
+  },
 };
 
 const FALLBACK = {

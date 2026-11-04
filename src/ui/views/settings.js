@@ -61,7 +61,7 @@ export async function settingsView() {
         row('Nível', LEVEL_LABEL[profile?.level] || (profile?.experienceMonths != null ? LEVEL_LABEL[levelFromMonths(profile.experienceMonths)] : '—')),
         row('Abordagem', '100% natural — sem esteroides ou similares'),
         row('Promessa diária', `${profile?.promiseMinutes || 30} minutos`),
-        row('Tempo por treino', `${profile?.sessionMinutes || 60} minutos`),
+        row('Tempo por treino (padrão)', `${profile?.sessionMinutes || 60} minutos — mude no dia pelo seletor do Início`),
         row('Futebol', [
           profile?.football?.thursdayFixed ? 'quinta fixo' : null,
           profile?.football?.sundayOptional ? 'domingo opcional' : null,
@@ -69,6 +69,25 @@ export async function settingsView() {
         row('Condição em acompanhamento', profile?.conditions?.[0]?.label || 'nenhuma'),
       ),
     ),
+
+    /* projeto */
+    menuRow({
+      icon: '💍',
+      title: profile?.project?.name || 'Projeto Casamento — 8 semanas',
+      sub: profile?.project?.startDate
+        ? `${profile.project.active === false ? 'Oculto do Início' : 'Ativo'} · início ${formatDate(profile.project.startDate, 'full')}`
+        : 'Configurar início e data do casamento',
+      onClick: async () => {
+        if (profile?.project?.active === false) {
+          const { saveProject } = await import('../../logic/project.js');
+          await saveProject({ active: true });
+          refresh();
+          return;
+        }
+        const { openProjectSheet } = await import('./project.js');
+        openProjectSheet(profile?.project || null);
+      },
+    }),
 
     /* treino */
     h('div.card',
@@ -129,7 +148,8 @@ export async function settingsView() {
         ),
         toggle('Iniciar descanso automaticamente', settings?.restAutoStart !== false, (v) => store.settings.save({ restAutoStart: v })),
         toggle('Perguntar recuperação antes do treino', settings?.askRecoveryBeforeWorkout !== false, (v) => store.settings.save({ askRecoveryBeforeWorkout: v })),
-        toggle('Perguntar do joelho antes de pernas/futebol', settings?.askKneeBeforeLegsAndFootball !== false, (v) => store.settings.save({ askKneeBeforeLegsAndFootball: v })),
+        toggle('Perguntar do joelho antes de pernas, cardio e futebol', settings?.askKneeBeforeLegsAndFootball !== false, (v) => store.settings.save({ askKneeBeforeLegsAndFootball: v })),
+        toggle('Preparação antes do treino (aquecimento guiado)', settings?.prepEnabled !== false, (v) => store.settings.save({ prepEnabled: v })),
         toggle('Manter a tela acesa durante o treino', settings?.keepScreenAwake !== false, (v) => store.settings.save({ keepScreenAwake: v })),
         toggle('Sons de cronômetro', settings?.soundEnabled !== false, (v) => store.settings.save({ soundEnabled: v })),
       ),
@@ -292,11 +312,17 @@ async function editProfile(profile) {
       { key: 'promiseMinutes', label: 'Minutos da promessa diária', type: 'number', value: profile?.promiseMinutes ?? 30, step: '5' },
       {
         key: 'sessionMinutes',
-        label: 'Tempo que tenho por treino (min)',
-        type: 'number',
-        value: profile?.sessionMinutes ?? 60,
-        step: '5',
-        hint: 'O app avisa quando o treino do dia passa disso, e diz o que encurtar primeiro.',
+        label: 'Tempo padrão por treino (min)',
+        type: 'select',
+        value: String(profile?.sessionMinutes ?? 60),
+        options: [
+          { value: '30', label: '30 minutos' },
+          { value: '40', label: '40 minutos' },
+          { value: '60', label: '1 hora' },
+          { value: '90', label: '1h30' },
+          { value: '120', label: '2 horas' },
+        ],
+        hint: 'É o tempo que vem marcado no seletor do Início. No dia, é só tocar em outro.',
       },
       {
         key: 'conditionLabel',
@@ -309,6 +335,7 @@ async function editProfile(profile) {
   });
   if (!data) return;
   const { conditionLabel, ...rest } = data;
+  if (rest.sessionMinutes != null) rest.sessionMinutes = Number(rest.sessionMinutes) || 60;
   const current = profile?.conditions?.[0];
   const conditions = conditionLabel?.trim()
     ? [{ ...(current || { id: 'cond-1', status: 'em acompanhamento', note: '', followUp: '' }), label: conditionLabel.trim() }]

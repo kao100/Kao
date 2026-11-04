@@ -13,7 +13,7 @@ import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
 import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
 import { BUILTIN_FOODS } from './foods.js';
 
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -75,6 +75,16 @@ const V4_GYM_ITEMS = {
   'tpl-lower-b': ['hip-thrust', 'leg-press', 'leg-curl', 'hip-abduction', 'calf-raise', 'dead-bug'],
 };
 
+/**
+ * Composição de fábrica de Upper B e Upper C na versão 6 — a migração v7
+ * (prioridade do tronco no Projeto Casamento) só reescreve o que continua
+ * igual a isto.
+ */
+const V6_UPPER_ITEMS = {
+  'tpl-upper-b': ['lat-pulldown', 'chest-supported-row', 'unilateral-pulldown', 'reverse-fly', 'lateral-raise', 'hammer-curl', 'triceps-pushdown', 'pallof-press'],
+  'tpl-upper-c': ['incline-press', 'seated-cable-row', 'cable-crossover', 'lat-pulldown', 'lateral-raise', 'biceps-curl', 'triceps-pushdown', 'hanging-leg-raise'],
+};
+
 export const DEFAULT_SETTINGS = {
   theme: 'dark',
   restCompoundSec: 150,
@@ -90,6 +100,10 @@ export const DEFAULT_SETTINGS = {
   keepScreenAwake: true,
   askRecoveryBeforeWorkout: true,
   askKneeBeforeLegsAndFootball: true,
+  // PREPARAÇÃO PARA O TREINO antes da primeira série
+  prepEnabled: true,
+  // teto de inclinação da esteira (null = usa o do plano, nunca a máxima)
+  treadmillInclineMax: null,
   weightIncrementKg: 2.5,
   smallIncrementKg: 1,
   cardioPlans: CARDIO_PLANS,
@@ -314,6 +328,48 @@ async function migrate(fromVersion, existingEx, existingTpl) {
 
     if (skipped.length) {
       console.info('Treinos de fim de semana preservados porque foram editados:', skipped.join(', '));
+    }
+  }
+
+  if (fromVersion < 7) {
+    // v7: prioridade do tronco (Projeto Casamento) e fortalecimento do joelho.
+    //  - Upper B ganha peito (3 estímulos de peitoral na semana) e perde a
+    //    puxada unilateral (costas passa de 19 para 16 séries);
+    //  - Upper C ganha posterior de ombro e a remada vai de 3 para 2 séries.
+    // Mesma regra de sempre: só mexe no treino que você não editou.
+    const tplCatalog = new Map(ALL_TEMPLATES.map((t) => [t.id, t]));
+    const updates = [];
+    const skipped = [];
+    for (const tpl of existingTpl) {
+      const original = V6_UPPER_ITEMS[tpl.id];
+      const fresh = tplCatalog.get(tpl.id);
+      if (!original || !fresh) continue;
+      const current = (tpl.items || []).map((it) => it.exerciseId);
+      const untouched = current.length === original.length && current.every((id, i) => id === original[i]);
+      if (untouched) updates.push({ ...tpl, items: fresh.items, notes: fresh.notes });
+      else skipped.push(tpl.name);
+    }
+    if (updates.length) await store.templates.saveMany(updates);
+
+    // alternativas novas (biblioteca de fortalecimento) somadas às existentes
+    const catalog = new Map(EXERCISES.map((e) => [e.id, e]));
+    const exPatch = existingEx
+      .filter((ex) => catalog.has(ex.id))
+      .map((ex) => {
+        const merged = [...new Set([...(ex.alternatives || []), ...catalog.get(ex.id).alternatives])];
+        return merged.length !== (ex.alternatives || []).length ? { ...ex, alternatives: merged } : null;
+      })
+      .filter(Boolean);
+    if (exPatch.length) await store.exercises.saveMany(exPatch);
+
+    const settings = await store.settings.get();
+    const patch = {};
+    if (settings?.prepEnabled == null) patch.prepEnabled = true;
+    if (!('treadmillInclineMax' in (settings || {}))) patch.treadmillInclineMax = null;
+    if (Object.keys(patch).length) await store.settings.save(patch);
+
+    if (skipped.length) {
+      console.info('Treinos de superiores preservados porque foram editados:', skipped.join(', '));
     }
   }
 

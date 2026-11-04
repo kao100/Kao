@@ -48,10 +48,16 @@ export async function extrasForToday(date = today(), { plan = null } = {}) {
   const footballToday = dayPlan.blocks.some((b) => b.type === 'football');
 
   const minutesDone = done.reduce((s, x) => s + (x.durationMin || 0), 0);
-  const budget = profile?.sessionMinutes || 60;
-  const plannedMin = dayPlan.blocks
-    .filter((b) => b.template)
-    .reduce((s, b) => s + estimateTemplateMinutes(b.template), 0);
+  // o tempo escolhido no seletor do dia vale mais que o padrão do perfil
+  const budget = (await store.dayBudget(date)) || profile?.sessionMinutes || 60;
+  // com o seletor de tempo, o planejado é o que a divisão do dia ocupou
+  // (preparação + musculação + cardio); sem treino de força, a conta antiga
+  const allocated = await (await import('./session-plan.js')).buildDayPlan(dayPlan, date);
+  const plannedMin = allocated
+    ? allocated.budget - allocated.alloc.freeMin - allocated.alloc.optionalCardio
+    : dayPlan.blocks
+      .filter((b) => b.template)
+      .reduce((s, b) => s + estimateTemplateMinutes(b.template), 0);
   const minutesLeft = Math.max(0, budget - Math.max(minutesDone, plannedMin));
 
   /* ---------- amanhã tem jogo? ---------- */

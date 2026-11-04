@@ -364,6 +364,33 @@ As séries do complemento são gravadas como quaisquer outras: contam para
 volume, recordes, relatório semanal e promessa do dia. A sessão fica marcada
 com `extraId` e sem `templateId`, então não interfere na progressão programada.
 
+## Aquecimento inteligente, joelho e Projeto Casamento (décima quinta rodada)
+
+| # | Pedido | Status | Onde |
+|---|---|---|---|
+| 1 | Preparação específica por tipo de treino (peito, costas, ombros, braços, pernas) | ✅ | `logic/warmup.js`, `data/warmup.js` |
+| 2 | Temporizadores de aquecimento, imagens e instruções por etapa | ✅ | `ui/views/prep.js` (ANTES DE COMEÇAR → INICIAR PREPARAÇÃO → PREPARAÇÃO CONCLUÍDA → INICIAR MUSCULAÇÃO) |
+| 3 | Séries preparatórias com cargas menores | ✅ | calculadas da última carga (40/60/80 %), marcáveis, fora do volume |
+| 4 | Integração com 30 / 40 / 60 / 90 / 120 min | ✅ | `logic/budget.js` + seletor no Início. Ex.: Upper B em 60 min → 7 preparação · 41 musculação · 12 cardio; Lower A → 10 · 42 · 5 de volta à calma |
+| 5 | Biblioteca visual de fortalecimento | ✅ | 11 exercícios novos (isometria na extensora, parede, agachamento espanhol, declive, leg press unilateral, panturrilha sentada/unilateral, coice e abdução na polia, miniband, concha) com ilustração própria; `/joelho/fortalecimento` |
+| 6 | Registro de dor: 0–10, local, durante/após/dia seguinte, inchaço, rigidez, instabilidade, escadas | ✅ | check do joelho ampliado + respostas rápidas por exercício e no dia seguinte |
+| 7 | Gráficos dor × data, × exercício, × carga, × futebol, × volume semanal | ✅ | `/joelho` |
+| 8 | Recomendar interromper a progressão com piora relevante/persistente | ✅ | `kneeStatus` (`stopProgression`, `seekProfessional`); nenhuma nota de dor vira autorização |
+| 9 | Progressão gradual, uma variável por vez | ✅ | `evaluateKneeExercise` + aviso quando carga e amplitude sobem juntas |
+| 10 | Futebol: quinta fixo, domingo opcional, quarta sem perna pesada, sábado ajusta | ✅ | regras já existentes + aquecimento de campo e resposta pós-jogo |
+| 11 | Cardio adaptado: caminhada, bicicleta, esteira com inclinação individual | ✅ | seletor de aparelho, teto de inclinação, histórico de sintomas, check antes do cardio |
+| 12 | Relatório semanal em PDF | ✅ | `/joelho/relatorio`, gerador próprio em `core/pdf.js` |
+| 13 | Atualizar orientações médicas | ✅ | `/medico` ganhou progressão liberada/não, frequência, amplitude/carga, futebol |
+| 14 | Projeto Casamento + indicadores do tronco no Início | ✅ | `logic/project.js`, `/projeto`: supinos, puxada, remada, desenvolvimento, peito, braço, abdômen, fotos |
+| 15 | 3 estímulos de superiores; peito 10–14 e costas 12–16 séries | ✅ | peito 11 → 13 (Upper B ganha crucifixo), costas 19 → 16 (sai a puxada unilateral, remada do Upper C 3 → 2), posterior de ombro no Upper C |
+| 16 | Persistência e preservação dos dados | ✅ | IndexedDB v4 (store `kneeResponses`), migração v7 só reescreve treino não editado — testada com banco da versão anterior |
+
+Decisão sobre os exemplos de tempo: o exemplo "60 min de superiores = 7 + 40 +
+13 de cardio" vale para a quarta (Upper B tem cardio programado). Na segunda e
+na sexta, sem cardio no programa, o tempo vai para a musculação e o cardio
+entra como opcional a partir de 1h30 — cortar 20 min de tronco para encaixar
+cardio iria contra a prioridade estética do projeto.
+
 ## Pendências assumidas nesta versão
 
 1. **Imagens fotográficas dos exercícios** — o app entrega ilustrações próprias

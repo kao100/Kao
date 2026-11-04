@@ -33,12 +33,28 @@ const item = (exerciseId, sets, repMin, repMax, opts = {}) => ({
  */
 export const CARDIO_MACHINES = [
   {
+    id: 'bicicleta',
+    name: 'Bicicleta ergométrica',
+    icon: '🚴',
+    impact: 'nenhum',
+    howTo: 'Ignore velocidade e inclinação. Ajuste a resistência até o RPE da fase bater. Selim na altura do quadril: com o pedal embaixo, o joelho fica só levemente dobrado.',
+    knee: 'Sem impacto. Se incomodar, suba um pouco o selim (menos flexão do joelho) e baixe a resistência. Costuma ser a mais tolerada, mas é a sua resposta que decide.',
+  },
+  {
+    id: 'caminhada',
+    name: 'Caminhada confortável',
+    icon: '🚶',
+    impact: 'baixo',
+    howTo: 'Na esteira plana ou na rua. Ritmo que deixa a respiração mais funda sem tirar a conversa. Inclinação é opcional.',
+    knee: 'Inclinação não é automaticamente melhor para o joelho: para algumas pessoas, subida aumenta a carga no tendão. Comece plano e só incline se for confortável.',
+  },
+  {
     id: 'esteira',
     name: 'Esteira',
     icon: '🏃',
     impact: 'alto na corrida, baixo na caminhada inclinada',
     howTo: 'Use a velocidade e a inclinação escritas em cada fase. São o ponto de partida — ajuste para o RPE bater.',
-    knee: 'Correndo, é o aparelho de maior impacto. Caminhada inclinada rápida tira o impacto e mantém o esforço.',
+    knee: 'Correndo, é o aparelho de maior impacto. Caminhada inclinada tira o impacto, mas inclinação também carrega o tendão — use a inclinação que você tolera (Ajustes do cardio), não a máxima.',
   },
   {
     id: 'eliptico',
@@ -312,11 +328,11 @@ export const TEMPLATES = [
     icon: '🏋️',
     order: 1,
     cardioPlanId: 'cardio-zona2-30',
-    notes: 'Dia de prestar atenção nas costas: menos pressa, mais sensação do músculo trabalhando. Cardio depois da musculação.',
+    notes: 'Dia de prestar atenção nas costas: menos pressa, mais sensação do músculo trabalhando. Entra também um pouco de peito, para o peitoral ter três estímulos na semana. Cardio depois da musculação.',
     items: [
       item('lat-pulldown', 3, 6, 10, { rir: 2, restSec: 150 }),
       item('chest-supported-row', 3, 8, 10, { rir: 2, restSec: 150 }),
-      item('unilateral-pulldown', 2, 10, 12, { rir: 1, restSec: 90, notes: 'Um braço por vez, amplitude grande.' }),
+      item('pec-deck', 2, 10, 15, { rir: 1, restSec: 75, notes: 'Terceiro estímulo de peito na semana: isolador de baixa fadiga, foco na parte central. Não atrapalha o dia de costas.' }),
       item('reverse-fly', 3, 12, 15, { rir: 1, restSec: 60 }),
       item('lateral-raise', 3, 12, 15, { rir: 1, restSec: 60 }),
       item('hammer-curl', 3, 10, 12, { rir: 1, restSec: 60 }),
@@ -350,10 +366,11 @@ export const TEMPLATES = [
     notes: 'Amplitude completa, controle e RIR 1–2 na maior parte das séries. Não precisa buscar falha absoluta.',
     items: [
       item('incline-press', 3, 8, 12, { rir: 2, restSec: 150 }),
-      item('seated-cable-row', 3, 8, 12, { rir: 2, restSec: 120 }),
+      item('seated-cable-row', 2, 8, 12, { rir: 2, restSec: 120 }),
       item('cable-crossover', 2, 10, 15, { rir: 1, restSec: 75 }),
       item('lat-pulldown', 2, 8, 12, { rir: 2, restSec: 120 }),
       item('lateral-raise', 3, 12, 15, { rir: 1, restSec: 60 }),
+      item('reverse-fly', 2, 12, 15, { rir: 1, restSec: 60, notes: 'Posterior de ombro: largura visual vista de trás e ombro equilibrado.' }),
       item('biceps-curl', 3, 8, 12, { rir: 1, restSec: 60 }),
       item('triceps-pushdown', 4, 8, 12, { rir: 1, restSec: 60 }),
       item('hanging-leg-raise', 3, 6, 12, { rir: 1, restSec: 75 }),
@@ -578,7 +595,7 @@ export const ALL_TEMPLATES = [...TEMPLATES, ...HOME_TEMPLATES];
 export const DEFAULT_WEEK_SUMMARY = [
   { dayKey: 'mon', label: 'Upper A — força + hipertrofia' },
   { dayKey: 'tue', label: 'Lower A — treino principal de pernas' },
-  { dayKey: 'wed', label: 'Upper B (costas) + cardio Zona 2' },
+  { dayKey: 'wed', label: 'Upper B (costas + peito leve) + cardio Zona 2' },
   { dayKey: 'thu', label: 'Futebol society' },
   { dayKey: 'fri', label: 'Upper C — hipertrofia/estética' },
   { dayKey: 'sat', label: 'Lower B + cardio leve, ou recuperação se houver futebol domingo' },

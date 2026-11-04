@@ -13,7 +13,7 @@
 import * as store from '../core/store.js';
 import { dayKey, addDays, DAY_LABEL, today } from '../core/format.js';
 import { EQUIP_LABEL } from '../data/exercises.js';
-import { exercisePermission } from './knee.js';
+import { exercisePermission, kneeStatus } from './knee.js';
 
 export const BLOCK_KIND = {
   strength: { label: 'Musculação', icon: '🏋️', accent: 'volt' },
@@ -200,6 +200,16 @@ export async function planForDate(date) {
   const needsKneeCheck = await requiresKneeCheck(blocks);
 
   /* ---------- avisos de planejamento ---------- */
+  // fortalecimento do joelho em dia de pernas: segue, mas a progressão
+  // depende do estado do joelho (nenhum número é autorização automática)
+  if (needsKneeCheck && !blocks.some((b) => b.type === 'football') && await blockHasHeavyLegs(blocks)) {
+    const knee = await kneeStatus(date);
+    if (knee.stopProgression) {
+      notes.push('Joelho: os registros pedem interromper a progressão e procurar orientação profissional. Se treinar pernas hoje, só cargas que não aumentem a dor.');
+    } else if (knee.level === 'caution') {
+      notes.push('Joelho em cautela: o fortalecimento continua, sem progressão — amplitude confortável e cargas de manutenção.');
+    }
+  }
   if (key === 'wed') {
     const hasHeavyLegs = await blockHasHeavyLegs(blocks);
     if (hasHeavyLegs) {
