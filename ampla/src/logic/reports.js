@@ -66,23 +66,37 @@ export function imprimir({ titulo, subtitulo, periodo, blocos = [], rodape }) {
 }
 
 function montarBloco(bloco) {
+  /**
+   * NOVA PÁGINA ONDE O ASSUNTO MUDA.
+   *
+   * "O relatório já existe dentro da aba comercial e dentro de cada vendedor."
+   *
+   * Num relatório que reúne a empresa inteira e depois cada vendedor, o pedaço
+   * de um vendedor cortado no meio da folha é o que faz a pessoa entregar o
+   * papel errado para a pessoa errada. Cada vendedor começa numa página.
+   */
+  const classe = bloco.novaPagina ? '.folha__secao--pagina' : '';
+
   if (bloco.tipo === 'kpis') {
-    return h('section.folha__kpis',
-      ...bloco.itens.map((kpi) => h('div.folha__kpi',
-        h('span.folha__kpi-label', kpi.label),
-        h('strong.folha__kpi-valor', kpi.valor),
-        kpi.nota && h('span.folha__kpi-nota', kpi.nota))));
+    const caixa = h(`section.folha__secao${classe}`,
+      bloco.titulo && h('h2', bloco.titulo),
+      h('div.folha__kpis',
+        ...bloco.itens.map((kpi) => h('div.folha__kpi',
+          h('span.folha__kpi-label', kpi.label),
+          h('strong.folha__kpi-valor', kpi.valor),
+          kpi.nota && h('span.folha__kpi-nota', kpi.nota)))));
+    return caixa;
   }
 
   if (bloco.tipo === 'texto') {
-    return h('section.folha__secao',
+    return h(`section.folha__secao${classe}`,
       bloco.titulo && h('h2', bloco.titulo),
       h('p.folha__texto', bloco.texto));
   }
 
   if (bloco.tipo === 'barras') {
     const maior = Math.max(...bloco.itens.map((i) => Math.abs(i.valor)), 1);
-    return h('section.folha__secao',
+    return h(`section.folha__secao${classe}`,
       bloco.titulo && h('h2', bloco.titulo),
       h('div.folha__barras', ...bloco.itens.map((item) => h('div.folha__barra',
         h('span.folha__barra-nome', item.nome),
@@ -92,7 +106,7 @@ function montarBloco(bloco) {
   }
 
   // tabela — o total vai no tfoot da MESMA tabela, senão as colunas não alinham
-  return h('section.folha__secao',
+  return h(`section.folha__secao${classe}`,
     bloco.titulo && h('h2', bloco.titulo),
     h('table.folha__tabela',
       h('thead', h('tr', ...bloco.colunas.map((c) => h(`th${c.alinhar === 'direita' ? '.dir' : ''}`, c.header)))),

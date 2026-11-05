@@ -19,7 +19,9 @@
     font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   }
 
-  .folha { font-size: 10.5pt; }
+  /* meio ponto de folga à direita: a borda do último cartão da grade cai
+     exatamente na margem da página e o navegador a corta ao arredondar */
+  .folha { font-size: 10.5pt; padding-right: 0.5pt; }
 
   .folha__topo {
     display: flex;
@@ -57,12 +59,22 @@
     display: flex;
     flex-direction: column;
     gap: 1pt;
+    /* sem isto o item da grade se recusa a encolher abaixo do próprio texto, e
+       o quarto cartão sai pela margem direita da folha — foi o que aconteceu
+       na página de cada vendedor, onde os valores são mais largos */
+    min-width: 0;
   }
   .folha__kpi-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em; color: #56637a; font-weight: 700; }
-  .folha__kpi-valor { font-size: 13pt; font-weight: 800; color: #13233A; }
-  .folha__kpi-nota { font-size: 8pt; color: #6b7789; }
+  .folha__kpi-valor {
+    font-size: 12.5pt; font-weight: 800; color: #13233A;
+    overflow-wrap: break-word;
+  }
+  .folha__kpi-nota { font-size: 8pt; color: #6b7789; overflow-wrap: break-word; }
 
   .folha__secao { margin-bottom: 13pt; break-inside: avoid; }
+  /* cada vendedor começa numa folha: papel cortado no meio vira entrega errada */
+  .folha__secao--pagina { break-before: page; }
+  .folha__secao--pagina:first-of-type { break-before: auto; }
   .folha__secao h2 {
     font-size: 11pt;
     color: #0044B9;

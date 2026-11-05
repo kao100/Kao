@@ -12,8 +12,10 @@ import { origemVendedor } from '../../logic/link.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, chips, card, secao, botao, rankLinha, aviso, vazio, progresso } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
+import { imprimir, exportarExcel, colunasExcel } from '../../logic/reports.js';
+import { ok } from '../components/toast.js';
 import { lerFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
-import { dreComercial, linhasDoDre } from '../../logic/comercial.js';
+import { dreComercial, linhasDoDre, relatorioComercial } from '../../logic/comercial.js';
 import { escada } from '../components/escada.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { money, pct, num, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
@@ -65,6 +67,37 @@ export async function telaComercial({ query }) {
 
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
+
+    /**
+     * O RELATÓRIO INTEIRO NUM BOTÃO SÓ.
+     *
+     * "Quero conseguir gerar um relatório em PDF, porque o relatório já existe
+     *  dentro da aba comercial e dentro de cada vendedor."
+     *
+     * Existia espalhado: cada seção tinha o seu PDF, e montar o documento da
+     * reunião era exportar seis arquivos e grampear. Este botão reúne — a
+     * empresa primeiro, depois uma página por vendedor, com os clientes dele.
+     */
+    card('Relatório comercial completo', null,
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+        'Um documento só: faturamento, DRE comercial, meses, ranking — e depois uma página '
+        + 'por vendedor, com o faturamento dele e os clientes que o formaram. '
+        + 'É o que já está nesta tela e na de cada vendedor, reunido.'),
+      h('div.btn-linha',
+        botao('📄 Gerar PDF', {
+          tipo: 'primario',
+          onClick: async () => {
+            const r = await relatorioComercial({ ...faixa, label: busca.label });
+            imprimir(r);
+          },
+        }),
+        botao('📊 Excel (uma aba por vendedor)', {
+          onClick: async () => {
+            const r = await relatorioComercial({ ...faixa, label: busca.label });
+            exportarExcel(r.nomeArquivo, r.planilhas);
+            ok('Relatório exportado.');
+          },
+        }))),
 
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(resumo.total), icone: '🧾', cor: 'info', nota: `${resumo.notas} NFs` }),
@@ -189,6 +222,21 @@ export async function telaComercial({ query }) {
         kpi({ label: 'Devoluções', valor: String(resumo.devolucoes.quantidade), nota: money(resumo.devolucoes.valor), tamanho: 'p', cor: 'atencao' })),
       h('p.mini.muted', { style: { marginTop: '8px' } },
         'Canceladas não entram. Devoluções entram como valor negativo no mês da emissão.')));
+}
+
+const COLUNAS_CLIENTES = [
+  { header: 'Cliente', key: 'nome' },
+  { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
+  { header: 'Faturamento', key: 'valor', tipo: 'money', alinhar: 'direita' },
+  { header: '% do vendedor', key: 'participacao', tipo: 'pct', alinhar: 'direita' },
+];
+
+/** Quanto cada cliente pesa DENTRO da carteira deste vendedor. */
+function linhasDeClientes(detalhe) {
+  return detalhe.clientes.map((c) => ({
+    ...c,
+    participacao: detalhe.total ? (c.valor / detalhe.total) * 100 : null,
+  }));
 }
 
 const COLUNAS_MESES = [
@@ -320,6 +368,23 @@ export async function telaVendedor({ params, query }) {
 
     botao('‹ Voltar para o comercial', { onClick: () => navigate(href('/comercial', query)) }),
 
+    /* a folha deste vendedor, inteira: é a que ela leva para a conversa com ele */
+    card(`Relatório de ${nome}`, null,
+      h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+        'Faturamento, clientes, produtos e notas deste vendedor num documento só.'),
+      h('div.btn-linha',
+        botao('📄 Gerar PDF', {
+          tipo: 'primario',
+          onClick: () => imprimir(relatorioDoVendedor(nome, detalhe, comissao, faixa, busca.label)),
+        }),
+        botao('📊 Excel', {
+          onClick: () => {
+            const r = relatorioDoVendedor(nome, detalhe, comissao, faixa, busca.label);
+            exportarExcel(r.nomeArquivo, r.planilhas);
+            ok('Relatório exportado.');
+          },
+        }))),
+
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(detalhe.total), icone: '🧾', cor: 'info' }),
       kpi({ label: 'NFs', valor: String(detalhe.notas.length), icone: '📄' }),
@@ -359,14 +424,44 @@ export async function telaVendedor({ params, query }) {
         aoClicar: (linha) => navigate(`/produtos/${linha.produtoId}`),
       }))),
 
-    secao('Clientes', null, card(null, null, tabela({
-      colunas: [
-        { header: 'Cliente', key: 'nome' },
-        { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
-        { header: 'Faturamento', key: 'valor', tipo: 'money', alinhar: 'direita' },
-      ],
-      linhas: detalhe.clientes.slice(0, 25),
-    }))),
+    /* esta seção era a única da tela sem PDF e sem Excel — e é justamente a
+       que ela leva para a conversa com o vendedor */
+    secao('Clientes',
+      exportadores(() => ({
+        titulo: `Clientes — ${nome}`,
+        subtitulo: `${formatDate(faixa.de)} a ${formatDate(faixa.ate)}`,
+        periodo: `Faturamento ${money(detalhe.total)} · ${detalhe.notas.length} NFs`,
+        nomeArquivo: `clientes_${nome}_${faixa.de}`,
+        colunas: COLUNAS_CLIENTES,
+        linhas: linhasDeClientes(detalhe),
+        total: { nome: 'TOTAL', notas: detalhe.notas.length, valor: detalhe.total },
+        blocos: [
+          {
+            tipo: 'kpis',
+            itens: [
+              { label: 'Faturamento', valor: money(detalhe.total) },
+              { label: 'NFs', valor: String(detalhe.notas.length) },
+              { label: 'Clientes', valor: String(detalhe.clientes.length) },
+              { label: 'Ticket médio', valor: money(detalhe.ticket) },
+            ],
+          },
+          {
+            tipo: 'tabela',
+            titulo: 'Clientes',
+            colunas: COLUNAS_CLIENTES,
+            linhas: linhasDeClientes(detalhe),
+            total: { nome: 'TOTAL', notas: detalhe.notas.length, valor: detalhe.total },
+          },
+        ],
+      })),
+      card(null, null,
+        tabela({
+          colunas: COLUNAS_CLIENTES,
+          linhas: linhasDeClientes(detalhe).slice(0, 25),
+          total: { nome: 'TOTAL', notas: detalhe.notas.length, valor: detalhe.total },
+        }),
+        detalhe.clientes.length > 25 && h('p.mini.muted', { style: { marginTop: '8px' } },
+          `Mostrando os 25 maiores de ${detalhe.clientes.length}. O PDF e a planilha saem com todos.`))),
 
     secao('Notas fiscais',
       exportadores(() => ({
@@ -401,4 +496,99 @@ export async function telaVendedor({ params, query }) {
     aviso('A coluna "Vendedor via" mostra como o app chegou até você: pelo relatório de NFs, '
       + 'pelo pedido, pela ponte do contas a receber, ou porque você definiu à mão. '
       + 'Nada é atribuído por semelhança.', 'info'));
+}
+
+/**
+ * A FOLHA DE UM VENDEDOR — o que as três seções da tela dizem, num documento.
+ *
+ * A ordem é a da conversa com ele: quanto faturou, de quem veio esse
+ * faturamento, o que vendeu, e as notas que provam.
+ */
+function relatorioDoVendedor(nome, detalhe, comissao, faixa, label) {
+  const periodo = label || `${formatDate(faixa.de)} a ${formatDate(faixa.ate)}`;
+  const clientes = linhasDeClientes(detalhe);
+
+  const COL_PROD = [
+    { header: 'Produto', key: 'descricao' },
+    { header: 'Quantidade', key: 'quantidade', tipo: 'num', alinhar: 'direita' },
+    { header: 'Faturamento', key: 'valor', tipo: 'money', alinhar: 'direita' },
+  ];
+  const COL_NF = [
+    { header: 'NF', key: 'numero' },
+    { header: 'Emissão', key: 'dataEmissao', tipo: 'date' },
+    { header: 'Cliente', key: 'clienteNome' },
+    { header: 'Valor', key: 'valor', tipo: 'money', alinhar: 'direita' },
+  ];
+
+  return {
+    titulo: `Relatório — ${nome}`,
+    subtitulo: 'AMPLA',
+    periodo,
+    nomeArquivo: `relatorio_${nome}_${faixa.de}_a_${faixa.ate}`,
+    blocos: [
+      {
+        tipo: 'kpis',
+        itens: [
+          { label: 'Faturamento', valor: money(detalhe.total) },
+          { label: 'NFs', valor: String(detalhe.notas.length) },
+          { label: 'Clientes', valor: String(detalhe.clientes.length) },
+          { label: 'Ticket médio', valor: money(detalhe.ticket) },
+          ...(comissao ? [{ label: 'Comissão do mês', valor: money(comissao.comissao) }] : []),
+        ],
+      },
+      {
+        tipo: 'barras',
+        titulo: 'Clientes que formaram o faturamento',
+        itens: clientes.slice(0, 12).map((c) => ({
+          nome: c.nome, valor: c.valor,
+          rotulo: `${money(c.valor)} (${pct(c.participacao || 0, 0)})`,
+        })),
+      },
+      {
+        tipo: 'tabela',
+        titulo: 'Clientes',
+        colunas: COLUNAS_CLIENTES,
+        linhas: clientes,
+        total: { nome: 'TOTAL', notas: detalhe.notas.length, valor: detalhe.total },
+      },
+      detalhe.produtos.length > 0 && {
+        tipo: 'tabela',
+        titulo: 'Produtos vendidos',
+        novaPagina: true,
+        colunas: COL_PROD,
+        linhas: detalhe.produtos,
+        total: { descricao: 'TOTAL', valor: detalhe.total },
+      },
+      {
+        tipo: 'tabela',
+        titulo: 'Notas fiscais',
+        novaPagina: true,
+        colunas: COL_NF,
+        linhas: detalhe.notas,
+        total: { numero: `${detalhe.notas.length} NFs`, valor: detalhe.total },
+      },
+    ].filter(Boolean),
+    planilhas: [
+      {
+        name: 'Clientes',
+        title: `Clientes de ${nome} — ${periodo}`,
+        columns: colunasExcel(COLUNAS_CLIENTES),
+        rows: clientes,
+        total: { nome: 'TOTAL', notas: detalhe.notas.length, valor: detalhe.total },
+      },
+      {
+        name: 'Produtos',
+        title: `Produtos de ${nome} — ${periodo}`,
+        columns: colunasExcel(COL_PROD),
+        rows: detalhe.produtos,
+      },
+      {
+        name: 'Notas',
+        title: `Notas de ${nome} — ${periodo}`,
+        columns: colunasExcel(COL_NF),
+        rows: detalhe.notas,
+        total: { numero: `${detalhe.notas.length} NFs`, valor: detalhe.total },
+      },
+    ],
+  };
 }

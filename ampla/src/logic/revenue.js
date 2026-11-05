@@ -201,6 +201,72 @@ export async function comparar({ de, ate }) {
 }
 
 /** Detalhe de um vendedor: notas, clientes, produtos. */
+/**
+ * OS CLIENTES DE CADA VENDEDOR, NUMA PASSADA SÓ.
+ *
+ * "O relatório já existe dentro da aba comercial e dentro de cada vendedor,
+ *  sobre os clientes e o faturamento de cada."
+ *
+ * Existia — uma tela de cada vez. Para reunir tudo num PDF seria chamar
+ * detalheVendedor() uma vez por pessoa, e cada chamada relê todas as notas e
+ * todos os itens da base. Sete vendedores, sete leituras da base inteira, no
+ * telefone dela. Aqui as notas são lidas uma vez e distribuídas.
+ */
+export async function clientesPorVendedor({ de, ate }) {
+  const [notas, vendedores] = await Promise.all([
+    notasDoPeriodo(de, ate), store.vendedores.listar(),
+  ]);
+  const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
+  const validas = notas.filter(valeParaFaturamento);
+
+  const porVendedor = new Map();
+  for (const nf of validas) {
+    const vid = nf.vendedorId || 'sem';
+    if (!porVendedor.has(vid)) {
+      porVendedor.set(vid, {
+        vendedorId: nf.vendedorId || null,
+        nome: nf.vendedorId ? (nomeVendedor.get(nf.vendedorId) || 'Vendedor') : 'Sem vendedor',
+        total: 0,
+        notas: 0,
+        clientes: new Map(),
+      });
+    }
+    const v = porVendedor.get(vid);
+    const valor = valorFaturado(nf);
+    v.total += valor;
+    v.notas += 1;
+
+    const k = nf.clienteId || nf.clienteNome || 'sem';
+    if (!v.clientes.has(k)) {
+      v.clientes.set(k, {
+        clienteId: nf.clienteId || null,
+        nome: nf.clienteNome || 'Cliente não identificado',
+        valor: 0,
+        notas: 0,
+      });
+    }
+    const c = v.clientes.get(k);
+    c.valor += valor;
+    c.notas += 1;
+  }
+
+  const totalGeral = cents(sum(validas, valorFaturado));
+  return sortBy([...porVendedor.values()].map((v) => ({
+    vendedorId: v.vendedorId,
+    nome: v.nome,
+    total: cents(v.total),
+    notas: v.notas,
+    ticket: v.notas ? cents(v.total / v.notas) : 0,
+    participacao: totalGeral ? (v.total / totalGeral) * 100 : 0,
+    clientes: sortBy([...v.clientes.values()].map((c) => ({
+      ...c,
+      valor: cents(c.valor),
+      /* quanto este cliente pesa DENTRO da carteira do vendedor */
+      participacao: v.total ? (c.valor / v.total) * 100 : 0,
+    })), (c) => c.valor, 'desc'),
+  })), (v) => v.total, 'desc');
+}
+
 export async function detalheVendedor(vendedorId, { de, ate }) {
   const [notas, itens, vendedores] = await Promise.all([
     notasDoPeriodo(de, ate), store.nfItens.listar(), store.vendedores.listar(),

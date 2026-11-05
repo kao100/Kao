@@ -3118,6 +3118,105 @@ console.log('\n▶ Todo campo que o app lê tem uma coluna que o alimenta');
   await link.recalcular();
 }
 
+console.log('\n▶ O relatório comercial inteiro num documento só');
+{
+  /**
+   * "Quero conseguir gerar um relatório em PDF, porque o relatório já existe
+   *  dentro da aba comercial e dentro de cada vendedor, sobre os clientes e o
+   *  faturamento de cada."
+   *
+   * Existia espalhado: cada seção tinha o seu botão, e montar o documento da
+   * reunião era exportar seis arquivos e grampear. O risco de reunir é o de
+   * sempre — um relatório que discorda da tela de onde veio. Então o que se
+   * verifica aqui é que a conta FECHA em todos os níveis: cliente soma
+   * vendedor, vendedor soma empresa, e a empresa é o mesmo faturamento da tela
+   * Hoje.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    pedidos: await store.pedidos.listar(),
+    vendedores: await store.vendedores.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+
+  await store.vendedores.salvar({ id: 'vR1', nome: 'VENDEDOR REL UM', ativo: true });
+  await store.vendedores.salvar({ id: 'vR2', nome: 'VENDEDOR REL DOIS', ativo: true });
+
+  let k = 0;
+  const nota = (vid, cliente, valor, extra = {}) => {
+    k += 1;
+    return store.nfs.salvar({
+      id: `nfr_${k}`, numero: String(8800 + k), dataEmissao: '2026-10-07', mes: '2026-10',
+      valorTotal: valor, valorProdutos: valor, clienteId: `cli_${cliente}`, clienteNome: cliente,
+      vendedorId: vid, status: 'autorizada', operacao: 'saida',
+      devolucao: false, devolucaoDeCompra: false, ...extra,
+    });
+  };
+  await nota('vR1', 'CLIENTE ALFA', 10000);
+  await nota('vR1', 'CLIENTE ALFA', 5000);
+  await nota('vR1', 'CLIENTE BETA', 5000);
+  await nota('vR2', 'CLIENTE GAMA', 8000);
+  await nota(null, 'CLIENTE DELTA', 2000);
+
+  const faixa = { de: '2026-10-01', ate: '2026-10-31' };
+  const porVendedor = await revenue.clientesPorVendedor(faixa);
+  const hoje = await revenue.resumo(faixa);
+
+  igual('o maior vendedor vem primeiro', porVendedor[0].nome, 'VENDEDOR REL UM');
+  igual('com o faturamento dele', porVendedor[0].total, 20000);
+  igual('as duas notas do mesmo cliente viram uma linha', porVendedor[0].clientes.length, 2);
+  igual('com as duas notas contadas', porVendedor[0].clientes[0].notas, 2);
+  igual('os clientes somam o vendedor',
+    Math.round(porVendedor[0].clientes.reduce((a, c) => a + c.valor, 0) * 100) / 100, 20000);
+  igual('o peso do cliente é dentro da carteira do vendedor',
+    Math.round(porVendedor[0].clientes[0].participacao), 75);
+  ok('a nota sem vendedor não some: ela aparece com nome próprio',
+    porVendedor.some((v) => v.vendedorId === null && v.nome === 'Sem vendedor'),
+    JSON.stringify(porVendedor.map((v) => v.nome)));
+  igual('e os vendedores somam o faturamento da tela Hoje',
+    Math.round(porVendedor.reduce((a, v) => a + v.total, 0) * 100) / 100, hoje.total);
+
+  const r = await comercialMod.relatorioComercial({ ...faixa, label: 'outubro de 2026' });
+  igual('o relatório sai com o período escrito', r.periodo, 'outubro de 2026');
+
+  const tabelas = r.blocos.filter((b) => b.tipo === 'tabela');
+  const ranking = tabelas.find((b) => b.titulo === 'Faturamento por vendedor');
+  igual('o ranking fecha com o faturamento', ranking.total.total, hoje.total);
+
+  const paginas = r.blocos.filter((b) => b.novaPagina);
+  igual('cada vendedor começa numa página', paginas.length, porVendedor.length);
+  const doUm = tabelas.find((b) => b.titulo === 'Clientes de VENDEDOR REL UM');
+  ok('com a tabela de clientes dele', !!doUm, JSON.stringify(tabelas.map((b) => b.titulo)));
+  igual('somando o faturamento dele', doUm.total.valor, 20000);
+
+  const dreNoPdf = tabelas.find((b) => b.titulo === 'DRE comercial');
+  ok('o DRE comercial vai junto, como na tela', !!dreNoPdf, '');
+  ok('a folha do que ficou sem dono tem nome de gente, não "Clientes de Sem vendedor"',
+    r.blocos.some((x) => x.titulo === 'Notas ainda sem vendedor')
+      && !tabelas.some((x) => /Clientes de Sem vendedor/.test(x.titulo || '')),
+    JSON.stringify(r.blocos.map((x) => x.titulo).filter(Boolean)));
+
+  /* e o Excel sai com uma aba por vendedor, com as colunas já no tipo certo */
+  const abas = r.planilhas.map((x) => x.name);
+  ok('o Excel tem uma aba por vendedor',
+    abas.includes('VENDEDOR REL UM') && abas.includes('VENDEDOR REL DOIS'), JSON.stringify(abas));
+  ok('nenhuma aba passa do limite de nome do Excel',
+    abas.every((n) => n.length <= 31), JSON.stringify(abas));
+  ok('as colunas vão no tipo que o Excel entende',
+    r.planilhas.every((x) => x.columns.every((c) => typeof c.type === 'string')),
+    JSON.stringify(r.planilhas[0].columns));
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  await store.vendedores.remover('vR1');
+  await store.vendedores.remover('vR2');
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
 console.log('\n▶ Pasta do mês');
 {
   const p = await dossie.pasta('2026-09');

@@ -27,8 +27,10 @@
 
 import * as store from '../core/store.js';
 import { cents, sum } from '../core/util.js';
+import { money, pct, num, formatDate, monthLabelShort } from '../core/format.js';
 import * as revenue from './revenue.js';
 import { margem } from './margem.js';
+import { colunasExcel } from './reports.js';
 
 export async function dreComercial({ de, ate }) {
   const [r, m, itens] = await Promise.all([
@@ -193,4 +195,182 @@ export function linhasDoDre(d) {
       percentual: d.percentualLucroBruto,
     },
   ].filter(Boolean);
+}
+
+/* ------------------------------------------------------- relatório comercial */
+
+/**
+ * O RELATÓRIO COMERCIAL INTEIRO, NUM DOCUMENTO SÓ.
+ *
+ * "Quero conseguir gerar um relatório em PDF, porque o relatório já existe
+ *  dentro da aba comercial e dentro de cada vendedor, sobre os clientes e o
+ *  faturamento de cada."
+ *
+ * Existia — espalhado. Cada seção da tela tinha o seu botão de PDF, então
+ * montar o documento que ela leva para a reunião era exportar seis arquivos e
+ * grampear. O que faltava não era dado: era reunir.
+ *
+ * A ordem é a da conversa: primeiro a empresa (faturamento, a conta até o lucro
+ * bruto, os meses, o ranking), depois UMA PÁGINA POR VENDEDOR com o faturamento
+ * dele e os clientes que o formaram. Quem só precisa da folha de um vendedor
+ * arranca aquela página e entrega.
+ *
+ * Nada aqui é calculado de novo: sai das mesmas funções das telas. Um relatório
+ * que discorda da tela de onde veio é pior do que não existir.
+ */
+export async function relatorioComercial({ de, ate, label }) {
+  const [resumo, dreC, meses, porVendedor] = await Promise.all([
+    revenue.resumo({ de, ate }),
+    dreComercial({ de, ate }),
+    revenue.ultimosMeses(6, ate),
+    revenue.clientesPorVendedor({ de, ate }),
+  ]);
+
+  const periodo = label || `${formatDate(de)} a ${formatDate(ate)}`;
+  const linhasDre = linhasDoDre(dreC).map((l) => ({
+    conta: `${l.sinal === '−' ? '(−) ' : ''}${l.rotulo}`,
+    valor: l.valor,
+    percentual: l.percentual,
+  }));
+
+  const COL_DRE = [
+    { header: 'Conta', key: 'conta' },
+    { header: 'Valor', key: 'valor', tipo: 'money', alinhar: 'direita' },
+    { header: '% da líquida', key: 'percentual', tipo: 'pct', alinhar: 'direita' },
+  ];
+  const COL_VEND = [
+    { header: 'Vendedor', key: 'nome' },
+    { header: 'Faturamento', key: 'total', tipo: 'money', alinhar: 'direita' },
+    { header: 'Participação', key: 'participacao', tipo: 'pct', alinhar: 'direita' },
+    { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
+    { header: 'Clientes', key: 'quantosClientes', tipo: 'int', alinhar: 'direita' },
+    { header: 'Ticket médio', key: 'ticket', tipo: 'money', alinhar: 'direita' },
+  ];
+  const COL_CLI = [
+    { header: 'Cliente', key: 'nome' },
+    { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
+    { header: 'Faturamento', key: 'valor', tipo: 'money', alinhar: 'direita' },
+    { header: '% do vendedor', key: 'participacao', tipo: 'pct', alinhar: 'direita' },
+  ];
+  const COL_MES = [
+    { header: 'Mês', key: 'mesLabel' },
+    { header: 'Faturado', key: 'valor', tipo: 'money', alinhar: 'direita' },
+    { header: 'Meta', key: 'meta', tipo: 'money', alinhar: 'direita' },
+    { header: 'Diferença', key: 'diferenca', tipo: 'money', alinhar: 'direita' },
+    { header: 'NFs', key: 'notas', tipo: 'int', alinhar: 'direita' },
+  ];
+
+  const linhasVendedores = porVendedor.map((v) => ({
+    ...v, quantosClientes: v.clientes.length,
+  }));
+  const linhasMeses = meses.map((m) => ({
+    mesLabel: monthLabelShort(m.mes),
+    valor: m.valor || 0,
+    meta: m.meta || null,
+    diferenca: m.meta ? (m.valor || 0) - m.meta : null,
+    notas: m.notas ?? null,
+  }));
+
+  const blocos = [
+    {
+      tipo: 'kpis',
+      itens: [
+        { label: 'Faturamento', valor: money(resumo.total), nota: `${resumo.notas} NFs` },
+        { label: 'Vendas líquidas', valor: money(dreC.vendasLiquidas), nota: 'base da margem' },
+        { label: 'CMV', valor: money(dreC.cmv), nota: dreC.percentualCmv == null ? null : `${pct(dreC.percentualCmv, 1)} da líquida` },
+        { label: 'Lucro bruto', valor: money(dreC.lucroBruto), nota: dreC.percentualLucroBruto == null ? null : pct(dreC.percentualLucroBruto, 1) },
+        { label: 'Clientes', valor: num(resumo.clientes, 0) },
+        { label: 'Ticket médio', valor: money(resumo.ticketMedio) },
+        { label: 'Vendedores', valor: num(porVendedor.filter((v) => v.vendedorId).length, 0) },
+        { label: 'Frete cobrado', valor: money(dreC.freteCobrado), nota: 'fora da margem' },
+      ],
+    },
+    { tipo: 'tabela', titulo: 'DRE comercial', colunas: COL_DRE, linhas: linhasDre },
+    {
+      tipo: 'barras',
+      titulo: 'Participação por vendedor',
+      itens: porVendedor.map((v) => ({
+        nome: v.nome, valor: v.total, rotulo: `${money(v.total)} (${pct(v.participacao, 0)})`,
+      })),
+    },
+    {
+      tipo: 'tabela',
+      titulo: 'Faturamento por vendedor',
+      colunas: COL_VEND,
+      linhas: linhasVendedores,
+      total: { nome: 'TOTAL', total: resumo.total, notas: resumo.notas, quantosClientes: resumo.clientes },
+    },
+    { tipo: 'tabela', titulo: 'Últimos meses', colunas: COL_MES, linhas: linhasMeses },
+  ];
+
+  /* uma página por vendedor: faturamento dele e os clientes que o formaram */
+  for (const v of porVendedor) {
+    /* "Clientes de Sem vendedor" não é frase: a folha do que ficou sem dono
+       tem nome próprio, e serve de lembrete do que falta resolver */
+    const semDono = !v.vendedorId;
+    blocos.push({
+      tipo: 'kpis',
+      titulo: semDono ? 'Notas ainda sem vendedor' : v.nome,
+      novaPagina: true,
+      itens: [
+        { label: 'Faturamento', valor: money(v.total), nota: `${pct(v.participacao, 1)} do total` },
+        { label: 'NFs', valor: num(v.notas, 0) },
+        { label: 'Clientes', valor: num(v.clientes.length, 0) },
+        { label: 'Ticket médio', valor: money(v.ticket) },
+      ],
+    });
+    blocos.push({
+      tipo: 'tabela',
+      titulo: semDono ? 'Clientes destas notas' : `Clientes de ${v.nome}`,
+      colunas: COL_CLI,
+      linhas: v.clientes,
+      total: { nome: `${v.clientes.length} cliente(s)`, notas: v.notas, valor: v.total },
+    });
+  }
+
+  return {
+    titulo: 'Relatório comercial',
+    subtitulo: 'AMPLA',
+    periodo,
+    nomeArquivo: `relatorio_comercial_${de}_a_${ate}`,
+    blocos,
+    /* o mesmo conteúdo em Excel: uma aba geral e uma por vendedor. As colunas
+       vão convertidas aqui para quem exporta não precisar lembrar de converter */
+    planilhas: ([
+      {
+        name: 'Vendedores',
+        title: `Faturamento por vendedor — ${periodo}`,
+        columns: COL_VEND,
+        rows: linhasVendedores,
+        total: { nome: 'TOTAL', total: resumo.total, notas: resumo.notas },
+      },
+      {
+        name: 'DRE comercial',
+        title: `DRE comercial — ${periodo}`,
+        columns: COL_DRE,
+        rows: linhasDre,
+      },
+      {
+        name: 'Meses',
+        title: `Últimos meses — ${periodo}`,
+        columns: COL_MES,
+        rows: linhasMeses,
+      },
+      ...porVendedor.map((v) => ({
+        name: nomeDeAba(v.vendedorId ? v.nome : 'Sem vendedor'),
+        title: `${v.vendedorId ? `Clientes de ${v.nome}` : 'Clientes das notas sem vendedor'} — ${periodo}`,
+        columns: COL_CLI,
+        rows: v.clientes,
+        total: { nome: 'TOTAL', notas: v.notas, valor: v.total },
+      })),
+    ]).map((aba) => ({ ...aba, columns: colunasExcel(aba.columns) })),
+    resumo,
+    dre: dreC,
+    porVendedor,
+  };
+}
+
+/** O Excel recusa aba com mais de 31 caracteres ou com : \\ / ? * [ ] no nome. */
+function nomeDeAba(nome) {
+  return String(nome).replace(/[\\/:*?[\]]/g, '-').slice(0, 28) || 'Vendedor';
 }
