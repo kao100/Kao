@@ -7,11 +7,20 @@
  * estiver atrás do publicado, o app está desatualizado, e não é adivinhação.
  */
 
-export const APP_VERSION = 'kao-v17';
-export const APP_DATE = '2026-11-04';
+export const APP_VERSION = 'kao-v18';
+export const APP_DATE = '2026-11-05';
 
 /** Mais recente primeiro. */
 export const CHANGELOG = [
+  {
+    version: 'kao-v18',
+    date: '2026-11-05',
+    items: [
+      'Fotos da academia corrigidas: o crucifixo e o posterior de ombro mostravam a mesma máquina — que na verdade é um supino de placas, e agora aparece no "Supino reto na máquina".',
+      'Saíram 9 fotos que eram cópia de outra com nome diferente (puxada, remada, graviton, crossover, rosca, banco inclinado, leg press). Cada exercício mostra só a máquina dele.',
+      'Panturrilha sentada e coice de glúteo na máquina passaram para os exercícios certos. Quem ficou sem foto real (crucifixo, posterior de ombro, remada com apoio do peito) volta a mostrar a ilustração própria até você fotografar a máquina.',
+    ],
+  },
   {
     version: 'kao-v17',
     date: '2026-11-04',

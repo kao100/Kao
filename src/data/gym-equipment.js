@@ -26,8 +26,6 @@ export const BUILTIN_GYM_EQUIPMENT = [
   /* ---------- pernas ---------- */
   eq('leg-press-45', 'leg-press', 'leg-press-45', 'Leg press 45°',
     { note: 'O leg press vermelho, na área de inferiores.' }),
-  eq('leg-press-sentado', 'leg-press', 'leg-press-sentado', 'Leg press sentado (plataformas independentes)',
-    { primary: false, confirm: true }),
   eq('agachamento-sentado', 'leg-press', 'agachamento-sentado', 'Agachamento/hack sentado',
     { primary: false, confirm: true, note: 'Máquina de agachamento com apoio nos ombros e plataforma.' }),
   eq('maquina-extender', 'leg-press', 'maquina-extender', 'Máquina de placas "exTender" (vista de trás)',
@@ -49,7 +47,7 @@ export const BUILTIN_GYM_EQUIPMENT = [
     { brand: 'Matrix', note: 'Etiqueta "Hip Abductor". A adutora fica ao lado.' }),
   eq('abdutora-par', 'hip-abduction', 'abdutora-par', 'O par: abdutora e adutora lado a lado',
     { brand: 'Matrix', primary: false, note: 'As duas juntas, e é por isso que confundem: uma tem etiqueta "Hip Abductor" (abrir as pernas contra o peso) e a outra "Hip Adductor" (fechar). Seu treino usa a de ABRIR. Pessoas ao fundo foram desfocadas.' }),
-  eq('quadril-selim', 'hip-abduction', 'quadril-selim', 'Máquina de quadril com selim (área da rua)',
+  eq('quadril-selim', 'hip-abduction', 'quadril-selim', 'Máquina de selim com plataformas (área da rua)',
     { primary: false, confirm: true, note: 'Selim para sentar e duas plataformas para os pés, que abrem e fecham. Confira na etiqueta se é abdutora (abrir) ou adutora (fechar) — são exercícios opostos.' }),
   eq('multi-hip', 'hip-abduction', 'multi-hip', 'Multi-Hip',
     { primary: false, note: 'Etiqueta "Multi-Hip": abdução, adução e extensão de quadril em pé.' }),
@@ -60,10 +58,10 @@ export const BUILTIN_GYM_EQUIPMENT = [
     { primary: false, confirm: true }),
   eq('hip-thrust-2', 'hip-thrust', 'hip-thrust-2', 'Máquina de quadril (outra)',
     { primary: false, confirm: true }),
-  eq('gluteo-maquina', 'hip-thrust', 'gluteo-maquina', 'Glúteo na máquina',
-    { primary: false, confirm: true }),
+  eq('gluteo-maquina', 'cable-kickback', 'gluteo-maquina', 'Coice de glúteo na máquina (apoio de joelho)',
+    { confirm: true, note: 'Versão em máquina do coice: um joelho no apoio, a outra perna empurra a alavanca para trás. Mesmo movimento da polia.' }),
 
-  eq('panturrilha-sentada', 'calf-raise', 'panturrilha-sentada', 'Panturrilha sentada',
+  eq('panturrilha-sentada', 'seated-calf-raise', 'panturrilha-sentada', 'Panturrilha sentada',
     { confirm: true, note: 'Apoio sobre os joelhos e plataforma para a ponta dos pés.' }),
   eq('panturrilha-em-pe', 'calf-raise', 'panturrilha-em-pe', 'Panturrilha em pé',
     { primary: false, confirm: true }),
@@ -71,50 +69,47 @@ export const BUILTIN_GYM_EQUIPMENT = [
     { primary: false, confirm: true }),
 
   /* ---------- costas ---------- */
-  eq('puxada-alta', 'lat-pulldown', 'puxada-alta', 'Puxada alta',
-    { note: 'Assento com apoio para as coxas e barra larga acima da cabeça.' }),
-  eq('puxada-independente', 'unilateral-pulldown', 'puxada-independente', 'Puxada com braços independentes',
-    { confirm: true }),
-  eq('puxada-articulada', 'unilateral-pulldown', 'puxada-articulada', 'Puxada de braços articulados (área da rua)',
-    { primary: false, note: 'Os dois braços descem separados, com rolos travando as coxas. Ao lado fica uma puxada comum ("Lat PullDown").' }),
-  eq('remada-placas', 'chest-supported-row', 'remada-placas', 'Remada de placas com apoio para o peito',
-    { confirm: true, note: 'Sentado de frente para a máquina, peito no apoio e pés nas plataformas. Confira a etiqueta: pode ser remada alta em vez de remada com apoio do peito.' }),
+  eq('puxada-alta', 'lat-pulldown', 'puxada-alta', 'Puxada alta (a máquina da esquerda)',
+    { confirm: true, note: 'Assento com apoio para as coxas e barra larga acima da cabeça. A máquina da direita, com degraus e apoio de joelho, é a barra assistida.' }),
+  eq('puxada-independente', 'unilateral-pulldown', 'puxada-independente', 'Puxada de braços articulados (área da rua)',
+    { note: 'Os dois braços descem separados, com rolos travando as coxas.' }),
   eq('remada-sentada', 'seated-cable-row', 'remada-sentada', 'Remada sentada (polia baixa)',
     { note: 'Banco comprido com apoio para os pés e pegadores no chão ao lado.' }),
-  eq('banco-polia', 'seated-cable-row', 'banco-polia', 'Banco em frente à polia (área da rua)',
-    { primary: false, confirm: true, note: 'Torre de peso com o triângulo e a barra reta no chão ao lado. Confira o que o banco faz: pode ser remada sentada ou um banco regulável posto na frente da polia.' }),
   eq('graviton', 'pull-up', 'graviton', 'Barra fixa assistida (graviton)',
-    { note: 'Serve para treinar a barra com assistência, além da barra de casa.' }),
-  eq('graviton-duplo', 'pull-up', 'graviton-duplo', 'Duas barras assistidas lado a lado (área da rua)',
-    { primary: false, note: 'Apoio para os joelhos e degraus laterais. Quanto maior a carga escolhida, mais ajuda a máquina dá — é o contrário das outras.' }),
+    { note: 'Apoio para os joelhos e degraus laterais. Quanto maior a carga escolhida, mais ajuda a máquina dá — é o contrário das outras.' }),
 
   /* ---------- peito e ombros ---------- */
   eq('supino-inclinado', 'incline-press', 'supino-inclinado', 'Banco inclinado com barra',
     { note: 'Banco regulável com suporte de barra.' }),
   eq('smith-machine', 'box-squat', 'smith-machine', 'Barra guiada (Smith), a fileira toda',
     { primary: false, confirm: true, note: 'A barra corre em trilhos, então não cai para os lados — é a forma mais controlada de agachar na academia. Ponha um banco atrás para marcar até onde descer, como você já faz em casa. Pessoas ao fundo foram desfocadas.' }),
-  eq('banco-inclinado-barra', 'incline-press', 'banco-inclinado-barra', 'Banco inclinado com barra (outro)',
-    { primary: false, note: 'Banco regulável em frente ao suporte de barra, do lado da piscina.' }),
   eq('desenvolvimento-hammer', 'shoulder-press', 'desenvolvimento-hammer', 'Desenvolvimento de placas',
     { brand: 'Hammer Strength', confirm: true }),
-  eq('peck-deck', 'pec-deck', 'peck-deck', 'Voador / peck deck',
-    { confirm: true }),
-  eq('voador-vermelho', 'reverse-fly', 'voador-vermelho', 'Voador de braços vermelhos',
-    { confirm: true, note: 'Sentado de peito no apoio, puxando os braços para trás. Confira na etiqueta: o mesmo aparelho costuma servir para o crucifixo (voador normal) virando o assento — se for esse o caso, troque o exercício aqui.' }),
+  eq('voador-vermelho', 'machine-chest-press', 'voador-vermelho', 'Supino de placas (braços vermelhos)',
+    { confirm: true, note: 'Máquina de anilhas com encosto quase em pé e pegadores na altura do peito: é um supino sentado, não um voador. Antes ela aparecia, por engano, no crucifixo e no posterior de ombro.' }),
   eq('supino-hammer', 'incline-press', 'supino-hammer', 'Supino inclinado de placas',
     { brand: 'Hammer Strength', confirm: true, note: 'Versão de placas do supino inclinado, com braços independentes. O encosto fica bem inclinado — se estiver quase em pé, é desenvolvimento de ombros, não supino.' }),
   eq('crossover', 'cable-crossover', 'crossover', 'Polia dupla ajustável (crossover)',
     { brand: 'Alfa Fitness', note: 'Também serve para tríceps na polia e puxada unilateral.' }),
-  eq('crossover-alfa', 'cable-crossover', 'crossover-alfa', 'Crossover Alfa 2050, de frente',
-    { brand: 'Alfa Fitness', primary: false, note: 'A mesma estação vista de frente, com a etiqueta "Sistema de Polia Dupla" visível. As duas torres regulam a altura da polia de forma independente.' }),
 
   /* ---------- braços ---------- */
   eq('rosca-scott', 'biceps-curl', 'rosca-scott', 'Rosca scott / banco com apoio',
     { confirm: true }),
-  eq('rosca-maquina', 'biceps-curl', 'rosca-maquina', 'Rosca scott na máquina (área da rua)',
-    { primary: false, confirm: true, note: 'Apoio acolchoado para os braços e pegador curvo preso à torre de peso.' }),
   eq('polia-triceps', 'triceps-pushdown', 'polia-triceps', 'Polia alta (estação de cabos com barra fixa em cima)',
     { brand: 'Onix / Technogym', note: 'Prenda a barra ou a corda no carrinho de cima. A mesma estação tem barra fixa no alto e serve de crossover.' }),
 ];
 
-export const GYM_EQUIPMENT_VERSION = 1;
+export const GYM_EQUIPMENT_VERSION = 2;
+
+/**
+ * Correção das fotos (v2). Nove registros eram a MESMA foto de outro com
+ * nome diferente — o caso visível era o crucifixo e o posterior de ombro
+ * mostrando a mesma máquina, que na verdade é um supino de placas. Esses
+ * saem; três fotos mudam de exercício. Os exercícios que ficaram sem foto
+ * real da academia (crucifixo na máquina, posterior de ombro, remada com
+ * apoio do peito) voltam a mostrar a ilustração própria.
+ */
+export const REMOVED_DUPLICATE_EQUIPMENT = [
+  'eq-leg-press-sentado', 'eq-banco-polia', 'eq-graviton-duplo', 'eq-remada-placas',
+  'eq-puxada-articulada', 'eq-banco-inclinado-barra', 'eq-peck-deck', 'eq-crossover-alfa', 'eq-rosca-maquina',
+];

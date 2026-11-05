@@ -114,7 +114,7 @@ total.
 inclusive as que tinham pessoas, desfocando-as se possível. As 4 que eu havia
 descartado entraram: a fileira de barras guiadas (Smith), o par abdutora +
 adutora, a máquina "exTender" vista de trás e a foto de área ao lado da quadra.
-São **40 fotos e 40 associações** — uma para cada imagem enviada.
+São **40 fotos e 40 associações** — uma para cada imagem enviada. (Na décima sexta rodada, 9 delas se revelaram duplicadas e saíram: ver abaixo.)
 
 Sobre pessoas em quadro: o método passou a ser desfoque por região, não recorte.
 O recorte tirava junto os braços das máquinas, que é justamente o que permite
@@ -363,6 +363,28 @@ não conta. A sugestão é promovê-lo a exercício do programa.
 As séries do complemento são gravadas como quaisquer outras: contam para
 volume, recordes, relatório semanal e promessa do dia. A sessão fica marcada
 com `extraId` e sem `templateId`, então não interfere na progressão programada.
+
+## Fotos da academia revisadas (décima sexta rodada)
+
+Você encontrou o crucifixo e o posterior de ombro com a mesma foto. A revisão
+das 40 fotos achou o problema maior: **9 eram cópia exata (ou quase) de outra
+foto com nome diferente**, e por isso exercícios distintos mostravam a mesma
+máquina. Ficaram **31 fotos, uma máquina cada**:
+
+- a máquina vermelha que aparecia no crucifixo e no posterior de ombro é um
+  supino de placas (encosto em pé, pegadores na altura do peito, suporte de
+  anilhas) — foi para "Supino reto na máquina", que não tinha foto;
+- "panturrilha sentada" foi para o exercício novo de panturrilha sentada, e
+  "glúteo na máquina" (máquina de coice com apoio de joelho) para o coice;
+- sem foto real agora: crucifixo na máquina, posterior de ombro e remada com
+  apoio do peito. Eles mostram a ilustração própria do app. Não usei foto da
+  internet: quase toda foto de academia tem direito autoral, e uma foto
+  genérica mostraria outra máquina, não a da sua academia. Fotografe a
+  máquina em "Minha academia" (botão 📷 no modo treino) e ela substitui a
+  ilustração na hora.
+
+A migração apaga só os registros que vieram de fábrica e continuam como
+vieram; foto que você trocou ou reassociou fica como está.
 
 ## Aquecimento inteligente, joelho e Projeto Casamento (décima quinta rodada)
 
