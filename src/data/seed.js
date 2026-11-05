@@ -10,10 +10,10 @@
 import * as store from '../core/store.js';
 import { EXERCISES } from './exercises.js';
 import { ALL_TEMPLATES, CARDIO_PLANS } from './program.js';
-import { BUILTIN_GYM_EQUIPMENT } from './gym-equipment.js';
+import { BUILTIN_GYM_EQUIPMENT, REMOVED_DUPLICATE_EQUIPMENT } from './gym-equipment.js';
 import { BUILTIN_FOODS } from './foods.js';
 
-export const SEED_VERSION = 7;
+export const SEED_VERSION = 8;
 
 export const DEFAULT_PROFILE = {
   name: '',
@@ -370,6 +370,34 @@ async function migrate(fromVersion, existingEx, existingTpl) {
 
     if (skipped.length) {
       console.info('Treinos de superiores preservados porque foram editados:', skipped.join(', '));
+    }
+  }
+
+  if (fromVersion < 8) {
+    // v8: fotos da academia corrigidas. Apaga os registros que eram a mesma
+    // foto de outro com nome diferente e move três fotos para o exercício
+    // certo. Só mexe no que ainda está como veio de fábrica: foto trocada ou
+    // reassociada por você fica como está.
+    const all = await store.equipment.all();
+    const fresh = new Map(BUILTIN_GYM_EQUIPMENT.map((e) => [e.id, e]));
+    const OLD_EXERCISE = {
+      'eq-voador-vermelho': 'reverse-fly',
+      'eq-panturrilha-sentada': 'calf-raise',
+      'eq-gluteo-maquina': 'hip-thrust',
+    };
+    for (const row of all) {
+      if (!row.builtin) continue;
+      if (REMOVED_DUPLICATE_EQUIPMENT.includes(row.id)) {
+        const file = `./assets/gym/${row.id.replace(/^eq-/, '')}.jpg`;
+        if (row.photo === file || row.photo?.startsWith('./assets/gym/')) await store.db.remove('equipment', row.id);
+        continue;
+      }
+      const f = fresh.get(row.id);
+      if (!f) continue;
+      const untouched = row.exerciseId === f.exerciseId || row.exerciseId === OLD_EXERCISE[row.id];
+      if (untouched && row.photo === f.photo) {
+        await store.db.put('equipment', { ...row, exerciseId: f.exerciseId, model: f.model, note: f.note, useAsPrimary: f.useAsPrimary, confirm: f.confirm, updatedAt: Date.now() });
+      }
     }
   }
 
