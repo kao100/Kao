@@ -15,7 +15,7 @@
 import * as store from '../core/store.js';
 import { monthKey, today } from '../core/format.js';
 import { cents, sum, sortBy, uid, normalize } from '../core/util.js';
-import { valeParaFaturamento, valorFaturado } from './revenue.js';
+import { valeParaFaturamento, valorFaturado, daEmpresa } from './revenue.js';
 
 export const STATUS_PERIODO = {
   calculada: { label: 'Calculada', cor: 'neutro', ordem: 1 },
@@ -100,7 +100,7 @@ function contemTermo(termo, categoria, descricao) {
  * Calcula o mês inteiro. Não grava nada: é sempre recalculável a partir das
  * vendas + regras + ajustes (o que evita número "congelado" sem rastreabilidade).
  */
-export async function calcular(mes = monthKey()) {
+export async function calcular(mes = monthKey(), { empresa } = {}) {
   const [nfs, itens, produtos, vendedores, regras, ajustes, periodo, cfg, doRelatorio] = await Promise.all([
     store.nfs.listar(), store.nfItens.listar(), store.produtos.listar(), store.vendedores.listar(),
     store.regrasComissao.listar(), store.ajustesComissao.listar(), store.periodosComissao.obter(mes), store.config(),
@@ -110,7 +110,9 @@ export async function calcular(mes = monthKey()) {
   const regrasTodas = regras.length ? regras : [regraPadrao(cfg.comissao.percentualPadrao)];
   const produtoPorId = new Map(produtos.map((p) => [p.id, p]));
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
-  const doMes = nfs.filter((nf) => nf.mes === mes && valeParaFaturamento(nf));
+  /* a comissão é do VENDEDOR, não do CNPJ: ele vendeu, ele recebe — por isso
+     aqui as duas empresas entram juntas por padrão */
+  const doMes = nfs.filter((nf) => nf.mes === mes && valeParaFaturamento(nf) && daEmpresa(nf, empresa));
   const itensPorNf = new Map();
   for (const item of itens) {
     if (!itensPorNf.has(item.nfId)) itensPorNf.set(item.nfId, []);

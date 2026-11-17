@@ -56,6 +56,18 @@ export function limparCache() { cache.clear(); }
 
 export const CONFIG_PADRAO = {
   empresa: 'AMPLA',
+  /**
+   * OUTROS CNPJs QUE TAMBÉM FATURAM.
+   *
+   * "Eu tenho mais um CNPJ que acaba entrando na parte de vendas."
+   *
+   * O Gestão Click exporta só o CNPJ principal, então a venda do outro não
+   * chega por arquivo nenhum — ela é digitada. Cada empresa extra entra aqui
+   * com nome e CNPJ, e cada nota digitada guarda a qual delas pertence. A
+   * principal não mora nesta lista: nota sem empresaId é dela, o que faz toda
+   * a base existente continuar valendo sem migração nenhuma.
+   */
+  empresas: [],
   metaMensalPadrao: 0,
   metasPorMes: {},
   /**

@@ -19,7 +19,7 @@
 import * as store from '../core/store.js';
 import { monthKey, money } from '../core/format.js';
 import { cents, sum } from '../core/util.js';
-import { valeParaFaturamento, valorFaturado } from './revenue.js';
+import { valeParaFaturamento, valorFaturado, daEmpresa, EMPRESA_PRINCIPAL } from './revenue.js';
 
 const SEM_CLASSIFICACAO = 'Sem plano de contas';
 const SEM_GRUPO = 'Sem grupo';
@@ -183,7 +183,16 @@ export async function dre(mes = monthKey(new Date().toISOString().slice(0, 10)))
   const marcadas = new Set([...classificacao]
     .filter(([, grupo]) => grupo === 'mercadoria').map(([nome]) => nome));
 
-  const doMes = nfs.filter((nf) => nf.mes === mes && valeParaFaturamento(nf));
+  /**
+   * O DRE É DE UMA EMPRESA SÓ — a principal.
+   *
+   * O outro CNPJ fatura, mas os custos, os impostos e as contas a pagar que
+   * chegam por arquivo são todos do principal. Somar o faturamento dos dois
+   * aqui levantaria margem, lucro bruto e EBITDA sem o custo correspondente
+   * existir: o número ficaria maior e mais bonito, e errado.
+   */
+  const doMes = nfs.filter((nf) => nf.mes === mes && valeParaFaturamento(nf)
+    && daEmpresa(nf, EMPRESA_PRINCIPAL));
   const receitaBruta = cents(sum(doMes, (nf) => valorFaturado(nf)));
   const devolucoes = cents(sum(doMes.filter((nf) => nf.devolucao), (nf) => Math.abs(valorFaturado(nf))));
 

@@ -16,6 +16,7 @@ import { semear } from './data/seed.js';
 import { telaDiario } from './ui/views/diario.js';
 import { telaFluxo } from './ui/views/fluxo.js';
 import { telaComercial, telaVendedor } from './ui/views/comercial.js';
+import { telaVendas } from './ui/views/vendas.js';
 import { telaProdutos, telaProduto } from './ui/views/produtos.js';
 import { telaComissoes } from './ui/views/comissoes.js';
 import { telaConciliacao, telaVendedores, telaNomes } from './ui/views/conciliacao.js';
@@ -54,6 +55,8 @@ const ROTAS = [
   { path: '/fluxo', view: telaFluxo, titulo: 'Fluxo de caixa' },
   { path: '/caixa', view: telaFluxo, titulo: 'Fluxo de caixa' },
   { path: '/comercial', view: telaComercial, titulo: 'Comercial' },
+  /* antes de /comercial/:id: 'vendas' não é o id de um vendedor */
+  { path: '/comercial/vendas', view: telaVendas, titulo: 'Vendas do outro CNPJ' },
   { path: '/comercial/:id', view: telaVendedor, titulo: 'Vendedor' },
   { path: '/orcamentos', view: telaOrcamentos, titulo: 'Orçamentos' },
   { path: '/clientes', view: telaClientes, titulo: 'Clientes' },

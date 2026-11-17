@@ -32,9 +32,9 @@ import * as revenue from './revenue.js';
 import { margem } from './margem.js';
 import { colunasExcel } from './reports.js';
 
-export async function dreComercial({ de, ate }) {
+export async function dreComercial({ de, ate, empresa }) {
   const [r, m, itens] = await Promise.all([
-    revenue.resumo({ de, ate }), margem({ de, ate }), store.nfItens.listar(),
+    revenue.resumo({ de, ate, empresa }), margem({ de, ate, empresa }), store.nfItens.listar(),
   ]);
 
   const devolucoes = r.devolucoes.valor;
@@ -218,12 +218,12 @@ export function linhasDoDre(d) {
  * Nada aqui é calculado de novo: sai das mesmas funções das telas. Um relatório
  * que discorda da tela de onde veio é pior do que não existir.
  */
-export async function relatorioComercial({ de, ate, label }) {
+export async function relatorioComercial({ de, ate, label, empresa }) {
   const [resumo, dreC, meses, porVendedor] = await Promise.all([
-    revenue.resumo({ de, ate }),
-    dreComercial({ de, ate }),
+    revenue.resumo({ de, ate, empresa }),
+    dreComercial({ de, ate, empresa }),
     revenue.ultimosMeses(6, ate),
-    revenue.clientesPorVendedor({ de, ate }),
+    revenue.clientesPorVendedor({ de, ate, empresa }),
   ]);
 
   const periodo = label || `${formatDate(de)} a ${formatDate(ate)}`;

@@ -41,6 +41,7 @@ const margemMod = await import('../src/logic/margem.js');
 const comercialMod = await import('../src/logic/comercial.js');
 const caixaMod = await import('../src/logic/caixa.js');
 const comprasLog = await import('../src/logic/compras.js');
+const vendasMan = await import('../src/logic/vendas.js');
 const rtMod = await import('../src/logic/rt.js');
 const backupMod = await import('../src/logic/backup.js');
 const nuvemMod = await import('../src/logic/nuvem.js');
@@ -3212,6 +3213,157 @@ console.log('\n▶ O relatório comercial inteiro num documento só');
   for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
   await store.vendedores.remover('vR1');
   await store.vendedores.remover('vR2');
+  for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
+  for (const x of guardadas.itens) await store.nfItens.salvar(x);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+}
+
+console.log('\n▶ O outro CNPJ: entra no comercial e na comissão, fica fora do DRE');
+{
+  /**
+   * "Eu tenho mais um CNPJ que acaba entrando na parte de vendas. Queria uma
+   *  aba dentro do comercial onde eu pudesse adicionar quando o vendedor
+   *  vendeu, o valor, o frete — pra ficar certinho o faturamento e ficar mais
+   *  fácil fazer a comissão."
+   *
+   * O Gestão Click exporta só o CNPJ principal, então essa venda não chega por
+   * arquivo nenhum: ela é digitada. O risco é duplo e ia nos dois sentidos —
+   * deixar de somar no faturamento (que foi o pedido dela) ou somar no DRE,
+   * onde os custos e as contas a pagar são só do principal e a margem subiria
+   * sem o custo correspondente existir.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    itens: await store.nfItens.listar(),
+    pedidos: await store.pedidos.listar(),
+    pagar: await store.pagar.listar(),
+    cfg: await store.config(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  for (const x of guardadas.itens) await store.nfItens.remover(x.id);
+  for (const x of guardadas.pedidos) await store.pedidos.remover(x.id);
+  for (const x of guardadas.pagar) await store.pagar.remover(x.id);
+  await store.vendedores.salvar({ id: 'vCN', nome: 'VENDEDOR CNPJ', ativo: true, confirmado: true });
+
+  /* a venda do CNPJ principal, que veio por arquivo */
+  await store.nfs.salvar({
+    id: 'nfp_1', numero: '100', dataEmissao: '2027-03-05', mes: '2027-03',
+    valorTotal: 10000, valorProdutos: 10000, clienteNome: 'CLIENTE PRINCIPAL',
+    vendedorId: 'vCN', vendedorOrigem: 'manual', status: 'autorizada', operacao: 'saida',
+    devolucao: false, devolucaoDeCompra: false, pedidoNumero: '500',
+  });
+  await store.pedidos.salvar({
+    id: 'ped_500', numero: '500', data: '2027-03-04', valorTotal: 10000, valorCusto: 6000,
+  });
+  await store.nfItens.salvar({
+    id: 'itp_1', nfId: 'nfp_1', data: '2027-03-05', nfStatus: 'autorizada',
+    vendedorId: 'vCN', produtoId: 'pcim', descricao: 'CIMENTO', quantidade: 10, valorTotal: 10000,
+  });
+
+  const emp = await vendasMan.salvarEmpresa({ nome: 'OUTRA EMPRESA', cnpj: '11.222.333/0001-81' });
+  igual('a empresa nova ganha id próprio e não vira a principal',
+    emp.id === 'principal', false);
+  igual('a principal continua fora da lista das outras',
+    (await vendasMan.empresas()).length, 1);
+  igual('e o seletor mostra as duas', (await vendasMan.todasAsEmpresas()).length, 2);
+
+  await vendasMan.salvarVenda({
+    empresaId: emp.id, data: '2027-03-06', vendedorId: 'vCN', clienteNome: 'CLIENTE OUTRO',
+    numero: '7', descricao: 'CIMENTO CP II', valorProdutos: '3.000,00', valorFrete: '200,00',
+    custo: '1.800,00',
+  });
+  await vendasMan.salvarVenda({
+    empresaId: emp.id, data: '2027-03-07', vendedorId: 'vCN', clienteNome: 'CLIENTE OUTRO 2',
+    numero: '8', valorProdutos: '1.000,00',
+  });
+
+  const faixa = { de: '2027-03-01', ate: '2027-03-31' };
+  const todas = await revenue.resumo(faixa);
+  const soPrincipal = await revenue.resumo({ ...faixa, empresa: 'principal' });
+  const soOutra = await revenue.resumo({ ...faixa, empresa: emp.id });
+
+  igual('o faturamento somado é o das duas', todas.total, 14200);
+  igual('dá para ver só o principal', soPrincipal.total, 10000);
+  igual('e só o outro CNPJ', soOutra.total, 4200);
+  igual('as duas partes fecham o todo', soPrincipal.total + soOutra.total, todas.total);
+  igual('o vendedor leva as duas no ranking', todas.ranking[0].valor, 14200);
+
+  /* o valor total sai somado quando ela não digita: produtos + frete */
+  const lista = await vendasMan.lancamentos(faixa);
+  igual('a venda com frete soma sozinha',
+    lista.find((x) => x.numero === '7').valorTotal, 3200);
+  igual('e a sem frete também', lista.find((x) => x.numero === '8').valorTotal, 1000);
+  igual('a lista traz o custo quando informado', lista.find((x) => x.numero === '7').custo, 1800);
+  igual('e diz que não tem quando não informado',
+    lista.find((x) => x.numero === '8').custo, null);
+
+  /* a comissão é do vendedor, não do CNPJ */
+  const com = await commission.calcular('2027-03');
+  igual('a comissão enxerga as duas empresas', com.faturamentoAtribuido, 14200);
+
+  /* a margem: o custo informado entra pelo pedido, como qualquer venda */
+  const m = await margemMod.margem(faixa);
+  igual('a mercadoria do outro CNPJ entra na base da margem', m.total.venda, 13000);
+  igual('com o custo que ela informou', m.total.custo, 7800);
+  igual('a venda sem produto descrito fica como nota sem item',
+    m.faturamento.semItens.quantidade, 1);
+
+  /* e o DRE NÃO soma o outro CNPJ */
+  const d = await dre.dre('2027-03');
+  igual('o DRE é só do CNPJ principal', d.receita.bruta, 10000);
+  igual('e o CMV também', d.cmv.valor, 6000);
+
+  /* corrigir a venda não duplica nada */
+  const sete = lista.find((x) => x.numero === '7');
+  await vendasMan.salvarVenda({
+    id: sete.id, empresaId: emp.id, data: '2027-03-06', vendedorId: 'vCN',
+    clienteNome: 'CLIENTE OUTRO', numero: '7', descricao: 'CIMENTO CP II',
+    valorProdutos: '3.000,00', valorFrete: '500,00', custo: '1.800,00',
+  });
+  igual('corrigir atualiza a mesma venda, não cria outra',
+    (await vendasMan.lancamentos(faixa)).length, 2);
+  igual('e o faturamento acompanha a correção',
+    (await revenue.resumo(faixa)).total, 14500);
+
+  /* tirar o custo tira o pedido junto: a venda volta a ser "sem custo" */
+  await vendasMan.salvarVenda({
+    id: sete.id, empresaId: emp.id, data: '2027-03-06', vendedorId: 'vCN',
+    clienteNome: 'CLIENTE OUTRO', numero: '7', descricao: 'CIMENTO CP II',
+    valorProdutos: '3.000,00', valorFrete: '500,00', custo: '',
+  });
+  igual('sem custo informado, o pedido criado some',
+    (await store.pedidos.listar()).filter((p) => p.origem === 'manual').length, 0);
+  igual('e a margem deixa de contar aquele custo', (await margemMod.margem(faixa)).total.custo, 6000);
+
+  /* apagar leva junto o que foi criado com a venda */
+  await vendasMan.removerVenda(sete.id);
+  igual('apagar tira a venda do faturamento', (await revenue.resumo(faixa)).total, 11000);
+  igual('e tira o item que ela descreveu',
+    (await store.nfItens.listar()).filter((i) => i.origem === 'manual').length, 0);
+
+  /* a empresa não some com venda lançada em cima */
+  let recusou = false;
+  try { await vendasMan.removerEmpresa(emp.id); } catch { recusou = true; }
+  ok('a empresa não é apagada com venda lançada', recusou, '');
+
+  /* e uma venda sem empresa nem cliente é recusada antes de gravar */
+  let semEmpresa = false;
+  try {
+    await vendasMan.salvarVenda({ empresaId: '', clienteNome: 'X', valorProdutos: 10 });
+  } catch { semEmpresa = true; }
+  ok('venda sem empresa é recusada', semEmpresa, '');
+  let semCliente = false;
+  try {
+    await vendasMan.salvarVenda({ empresaId: emp.id, clienteNome: '', valorProdutos: 10 });
+  } catch { semCliente = true; }
+  ok('venda sem cliente é recusada', semCliente, '');
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const x of await store.nfItens.listar()) await store.nfItens.remover(x.id);
+  for (const x of await store.pedidos.listar()) await store.pedidos.remover(x.id);
+  await store.vendedores.remover('vCN');
+  await store.salvarConfig({ empresas: [] });
+  for (const x of guardadas.pagar) await store.pagar.salvar(x);
   for (const x of guardadas.pedidos) await store.pedidos.salvar(x);
   for (const x of guardadas.itens) await store.nfItens.salvar(x);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);

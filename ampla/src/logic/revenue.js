@@ -78,17 +78,48 @@ export function intervalo(periodo, { de, ate } = {}) {
 
 /* ------------------------------------------------------------- consultas */
 
-export async function notasDoPeriodo(de, ate) {
+/**
+ * DE QUAL EMPRESA É ESTA NOTA.
+ *
+ * "Eu tenho mais um CNPJ que acaba entrando na parte de vendas."
+ *
+ * Nota sem `empresaId` é do CNPJ principal — é o que faz as 1.223 notas que já
+ * estão na base continuarem valendo sem migração nenhuma. As digitadas à mão
+ * carregam o id da empresa a que pertencem.
+ *
+ * A regra mora num lugar só porque cinco telas precisam dela e discordar aqui
+ * seria o faturamento dando dois números outra vez.
+ */
+export const EMPRESA_PRINCIPAL = 'principal';
+
+export function empresaDaNota(nf) {
+  return nf.empresaId || EMPRESA_PRINCIPAL;
+}
+
+/**
+ * @param {string} [empresa] id da empresa, 'principal', ou nada/'todas' para
+ *   não filtrar. O DRE, o caixa e as compras passam 'principal' de propósito:
+ *   os custos, impostos e contas a pagar que chegam por arquivo são só dele, e
+ *   somar o faturamento do outro CNPJ ali inflaria margem e EBITDA.
+ */
+export function daEmpresa(nf, empresa) {
+  if (!empresa || empresa === 'todas') return true;
+  return empresaDaNota(nf) === empresa;
+}
+
+export async function notasDoPeriodo(de, ate, { empresa } = {}) {
   const nfs = await store.nfs.listar();
-  return nfs.filter((nf) => nf.dataEmissao >= de && nf.dataEmissao <= ate);
+  return nfs.filter((nf) => nf.dataEmissao >= de && nf.dataEmissao <= ate && daEmpresa(nf, empresa));
 }
 
 /**
  * Resumo de faturamento do período, já com a conferência exigida no item 4:
  * faturamento fiscal = soma do que foi atribuído aos vendedores.
  */
-export async function resumo({ de, ate }) {
-  const [todas, vendedores] = await Promise.all([notasDoPeriodo(de, ate), store.vendedores.listar()]);
+export async function resumo({ de, ate, empresa }) {
+  const [todas, vendedores] = await Promise.all([
+    notasDoPeriodo(de, ate, { empresa }), store.vendedores.listar(),
+  ]);
   const validas = todas.filter(valeParaFaturamento);
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
 
@@ -187,11 +218,13 @@ export async function ontem() {
 }
 
 /** Comparação entre dois períodos do mesmo tamanho (mês x mês anterior). */
-export async function comparar({ de, ate }) {
+export async function comparar({ de, ate, empresa }) {
   const dias = eachDay(de, ate).length;
   const deAnterior = addDays(de, -dias);
   const ateAnterior = addDays(ate, -dias);
-  const [atual, anterior] = await Promise.all([resumo({ de, ate }), resumo({ de: deAnterior, ate: ateAnterior })]);
+  const [atual, anterior] = await Promise.all([
+    resumo({ de, ate, empresa }), resumo({ de: deAnterior, ate: ateAnterior, empresa }),
+  ]);
   return {
     atual,
     anterior,
@@ -212,9 +245,9 @@ export async function comparar({ de, ate }) {
  * todos os itens da base. Sete vendedores, sete leituras da base inteira, no
  * telefone dela. Aqui as notas são lidas uma vez e distribuídas.
  */
-export async function clientesPorVendedor({ de, ate }) {
+export async function clientesPorVendedor({ de, ate, empresa }) {
   const [notas, vendedores] = await Promise.all([
-    notasDoPeriodo(de, ate), store.vendedores.listar(),
+    notasDoPeriodo(de, ate, { empresa }), store.vendedores.listar(),
   ]);
   const nomeVendedor = new Map(vendedores.map((v) => [v.id, v.nome]));
   const validas = notas.filter(valeParaFaturamento);
@@ -267,9 +300,9 @@ export async function clientesPorVendedor({ de, ate }) {
   })), (v) => v.total, 'desc');
 }
 
-export async function detalheVendedor(vendedorId, { de, ate }) {
+export async function detalheVendedor(vendedorId, { de, ate, empresa }) {
   const [notas, itens, vendedores] = await Promise.all([
-    notasDoPeriodo(de, ate), store.nfItens.listar(), store.vendedores.listar(),
+    notasDoPeriodo(de, ate, { empresa }), store.nfItens.listar(), store.vendedores.listar(),
   ]);
   const vendedor = vendedores.find((v) => v.id === vendedorId) || null;
   const minhas = notas.filter((nf) => valeParaFaturamento(nf) && nf.vendedorId === vendedorId);

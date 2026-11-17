@@ -18,6 +18,7 @@
 import { h } from '../../core/dom.js';
 import { navigate, href } from '../../core/router.js';
 import * as caixa from '../../logic/caixa.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, chips, aviso, selo } from '../components/ui.js';
 import { grafBarrasDuplas, legenda, barraHorizontal } from '../components/chart.js';
@@ -32,7 +33,7 @@ export async function telaCaixaRealizado({ query }) {
   const mes = query.m || monthKey(today());
   const de = monthStart(`${mes}-01`);
   const ate = monthEnd(`${mes}-01`);
-  const r = await caixa.realizado({ de, ate });
+  const [r, empresas] = await Promise.all([caixa.realizado({ de, ate }), todasAsEmpresas()]);
   definirTitulo('Caixa do período', monthLabel(mes));
 
   return h('div.empilha', { style: { gap: '14px' } },
@@ -64,6 +65,10 @@ export async function telaCaixaRealizado({ query }) {
      * empréstimo é depósito do banco: não passa por contas a receber e só chega
      * pelo extrato — que ela já tem ligado ao sistema por Open Finance.
      */
+    empresas.length > 1 && aviso(`Este caixa é só de ${empresas[0].nome}. O contas a receber e o `
+      + 'contas a pagar que você manda são do CNPJ principal — o dinheiro que entra e sai do '
+      + 'outro CNPJ não chega em arquivo nenhum, então ele não aparece aqui.', 'atencao'),
+
     aviso('Captação de empréstimos ainda não aparece aqui: dinheiro que o banco deposita não '
       + 'passa pelo contas a receber, então nenhum relatório que você manda hoje traz esse '
       + 'número. Com o extrato do Open Finance ele entra — e aí o saldo final fecha sozinho, '

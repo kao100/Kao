@@ -16,6 +16,7 @@ import { imprimir, exportarExcel, colunasExcel } from '../../logic/reports.js';
 import { ok } from '../components/toast.js';
 import { lerFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
 import { dreComercial, linhasDoDre, relatorioComercial } from '../../logic/comercial.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { escada } from '../components/escada.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { money, pct, num, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
@@ -23,9 +24,24 @@ import { money, pct, num, formatDate, monthLabelShort, monthKey, today } from '.
 export async function telaComercial({ query }) {
   const busca = lerFiltro(query);
   const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
+  /**
+   * O SELETOR DE EMPRESA.
+   *
+   * "Eu tenho mais um CNPJ que acaba entrando na parte de vendas."
+   *
+   * Por padrão o comercial mostra as duas juntas — é a pergunta dela ("pra
+   * ficar certinho o faturamento"), e é como a comissão do vendedor funciona:
+   * ele vendeu, ele recebe, não importa qual CNPJ emitiu. Mas dá para separar
+   * num toque, porque na hora de conferir com a contabilidade a pergunta é
+   * outra. O seletor só aparece quando existe mais de uma empresa.
+   */
+  const empresas = await todasAsEmpresas();
+  const empresa = query.e && empresas.some((e) => e.id === query.e) ? query.e : 'todas';
+  const comEmpresa = { ...faixa, empresa: empresa === 'todas' ? null : empresa };
+
   const [resumo, comparacao, mes, meses, vendedores, cadastroClientes, fornecedores] = await Promise.all([
-    revenue.resumo(faixa),
-    revenue.comparar(faixa),
+    revenue.resumo(comEmpresa),
+    revenue.comparar(comEmpresa),
     revenue.mesAtual(),
     revenue.ultimosMeses(6),
     store.vendedores.listar(),
@@ -63,10 +79,19 @@ export async function telaComercial({ query }) {
    * Duas contas separadas para o mesmo número foi exatamente o erro que ela
    * apontou — e que custou duas telas discordando do faturamento.
    */
-  const d = await dreComercial(faixa);
+  const d = await dreComercial(comEmpresa);
 
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
+
+    empresas.length > 1 && h('div.empilha', { style: { gap: '6px' } },
+      chips([{ id: 'todas', label: 'As duas empresas' },
+        ...empresas.map((e) => ({ id: e.id, label: e.nome }))], empresa,
+      (id) => navigate(href('/comercial', { ...query, e: id === 'todas' ? null : id }))),
+      h('p.mini.muted', empresa === 'todas'
+        ? 'Faturamento e comissão das duas empresas somados. O DRE gerencial, o caixa e as '
+          + 'compras continuam só com o CNPJ principal.'
+        : `Só ${empresas.find((e) => e.id === empresa)?.nome}.`)),
 
     /**
      * O RELATÓRIO INTEIRO NUM BOTÃO SÓ.
@@ -87,17 +112,24 @@ export async function telaComercial({ query }) {
         botao('📄 Gerar PDF', {
           tipo: 'primario',
           onClick: async () => {
-            const r = await relatorioComercial({ ...faixa, label: busca.label });
+            const r = await relatorioComercial({ ...comEmpresa, label: busca.label });
             imprimir(r);
           },
         }),
         botao('📊 Excel (uma aba por vendedor)', {
           onClick: async () => {
-            const r = await relatorioComercial({ ...faixa, label: busca.label });
+            const r = await relatorioComercial({ ...comEmpresa, label: busca.label });
             exportarExcel(r.nomeArquivo, r.planilhas);
             ok('Relatório exportado.');
           },
         }))),
+
+    /* a venda que não chega por arquivo nenhum entra por aqui */
+    botao(empresas.length > 1
+      ? '✍️ Lançar venda do outro CNPJ'
+      : '✍️ Tenho outro CNPJ que também vende', {
+      bloco: true, onClick: () => navigate(href('/comercial/vendas', query)),
+    }),
 
     h('div.grade.grade--4',
       kpi({ label: 'Faturamento', valor: money(resumo.total), icone: '🧾', cor: 'info', nota: `${resumo.notas} NFs` }),
@@ -348,8 +380,10 @@ function montarExportacaoDre(d, faixa) {
 export async function telaVendedor({ params, query }) {
   const busca = lerFiltro(query);
   const faixa = { de: busca.de, ate: busca.ate, label: busca.label };
+  /* o recorte de empresa acompanha o vendedor: veio do ranking com ele */
+  const empresa = query.e || null;
   const [detalhe, calculo] = await Promise.all([
-    revenue.detalheVendedor(params.id, faixa),
+    revenue.detalheVendedor(params.id, { ...faixa, empresa }),
     commission.calcular(monthKey(faixa.ate)),
   ]);
   const nome = detalhe.vendedor?.nome || 'Vendedor';

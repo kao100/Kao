@@ -13,6 +13,7 @@
 import { h } from '../../core/dom.js';
 import { navigate, href, refresh } from '../../core/router.js';
 import * as comprasMod from '../../logic/compras.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, chips, aviso, selo, progresso } from '../components/ui.js';
 import { grafBarras, barraHorizontal } from '../components/chart.js';
@@ -25,12 +26,16 @@ import {
 
 export async function telaCompras({ query }) {
   const mes = query.m || monthKey(today());
-  const r = await comprasMod.compras({ mes });
+  const [r, empresas] = await Promise.all([comprasMod.compras({ mes }), todasAsEmpresas()]);
   definirTitulo('Compras', monthLabel(mes));
   const a = r.atual;
 
   return h('div.empilha', { style: { gap: '14px' } },
     seletorDeMes(mes),
+
+    empresas.length > 1 && aviso(`Esta meta é sobre a receita de ${empresas[0].nome}. As vendas `
+      + 'lançadas no outro CNPJ não entram na base nem nas compras, porque as contas a pagar '
+      + 'que você manda são do CNPJ principal.', 'atencao'),
 
     !r.sabeOQueECompra && aviso(
       'Nenhuma conta do seu plano está marcada como COMPRA DE MERCADORIA, então o app ainda não '

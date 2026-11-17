@@ -37,6 +37,7 @@ export const MODULOS = [
  */
 export const OUTRAS = [
   { path: '/comercial', icone: '📊', label: 'Comercial', titulo: 'Comercial' },
+  { path: '/comercial/vendas', icone: '✍️', label: 'Vendas do outro CNPJ', titulo: 'Vendas do outro CNPJ' },
   { path: '/orcamentos', icone: '📝', label: 'Orçamentos', titulo: 'Orçamentos' },
   { path: '/margem', icone: '📐', label: 'Margem e frete', titulo: 'Margem e frete' },
   { path: '/dre', icone: '📋', label: 'DRE gerencial', titulo: 'DRE gerencial' },

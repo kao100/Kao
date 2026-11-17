@@ -23,6 +23,7 @@ import {
   dre, linhasDoDreGerencial, planosDeContas, sugerirGrupo,
   lerClassificacao, lerGrupos, gruposExistentes, degrauPorId, DEGRAUS,
 } from '../../logic/dre.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, aviso, chips } from '../components/ui.js';
 import { escada } from '../components/escada.js';
@@ -33,7 +34,9 @@ import { money, pct, monthKey, monthLabel, monthLabelShort, addMonths, today } f
 
 export async function telaDre({ query }) {
   const mes = query.m || monthKey(today());
-  const [d, planos, cfg] = await Promise.all([dre(mes), planosDeContas(), store.config()]);
+  const [d, planos, cfg, empresas] = await Promise.all([
+    dre(mes), planosDeContas(), store.config(), todasAsEmpresas(),
+  ]);
   definirTitulo('DRE gerencial', monthLabel(mes));
 
   const g = d.gerencial;
@@ -68,6 +71,12 @@ export async function telaDre({ query }) {
         tamanho: 'p',
         nota: notaDoPercentual(g, g.percentuais.lucroLiquido),
       })),
+
+    empresas.length > 1 && aviso(`Este DRE é só de ${empresas[0].nome}. As vendas lançadas `
+      + `em ${empresas.slice(1).map((e) => e.nome).join(', ')} somam no comercial e na comissão, `
+      + 'mas não entram aqui: os custos, os impostos e as contas a pagar que você manda por '
+      + 'arquivo são todos do CNPJ principal, e somar faturamento sem o custo correspondente '
+      + 'levantaria a margem e o EBITDA sem motivo.', 'atencao'),
 
     ...d.avisos.map((a) => aviso(a.texto, a.nivel === 'info' ? 'info' : 'atencao')),
 

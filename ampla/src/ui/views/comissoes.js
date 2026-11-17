@@ -8,6 +8,7 @@ import { h } from '../../core/dom.js';
 import { navigate, href, refresh } from '../../core/router.js';
 import * as commission from '../../logic/commission.js';
 import * as store from '../../core/store.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, vazio, aviso, selo } from '../components/ui.js';
 import { exportarExcel, imprimir } from '../../logic/reports.js';
@@ -17,13 +18,14 @@ import { money, pct, formatDate, monthKey, monthLabel, addMonths, today, timesta
 
 export async function telaComissoes({ query }) {
   const mes = query.m || monthKey(today());
-  const [calculo, regras, ajustes, vendedores, produtos, pendencias] = await Promise.all([
+  const [calculo, regras, ajustes, vendedores, produtos, pendencias, empresas] = await Promise.all([
     commission.calcular(mes),
     store.regrasComissao.listar(),
     store.ajustesComissao.listar(),
     store.vendedores.listar(),
     store.produtos.listar(),
     store.pendencias.listar(),
+    todasAsEmpresas(),
   ]);
   /**
    * A COMISSÃO É O LUGAR ONDE A NOTA REPETIDA CUSTA DINHEIRO.
@@ -75,6 +77,15 @@ export async function telaComissoes({ query }) {
         + 'contando duas vezes. Se alguma foi cancelada e reemitida, diga qual — '
         + 'a comissão deste mês muda.')),
     h('span', '›')),
+
+    /**
+     * A COMISSÃO É DO VENDEDOR, NÃO DO CNPJ. Ele vendeu, ele recebe — então as
+     * duas empresas entram juntas aqui, e a tela diz isso em vez de deixar ela
+     * descobrir pela diferença com o comercial.
+     */
+    empresas.length > 1 && aviso(`A comissão deste mês soma as ${empresas.length} empresas: `
+      + `${empresas.map((e) => e.nome).join(' e ')}. O vendedor recebe pela venda que fez, `
+      + 'independente de qual CNPJ emitiu a nota.', 'info'),
 
     /* conferência obrigatória */
     calculo.conferencia.ok

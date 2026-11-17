@@ -32,7 +32,7 @@
 import * as store from '../core/store.js';
 import { cents, sum, normalize } from '../core/util.js';
 import { monthKey } from '../core/format.js';
-import { valeParaFaturamento, valorFaturado } from './revenue.js';
+import { valeParaFaturamento, valorFaturado, daEmpresa } from './revenue.js';
 
 /**
  * A RÉGUA DO CUSTO, UMA SÓ PARA TODAS AS FONTES.
@@ -45,7 +45,7 @@ import { valeParaFaturamento, valorFaturado } from './revenue.js';
 const RAZAO_MAXIMA = 1.5;
 
 /** Margem do período, por vendedor e total. */
-export async function margem({ de, ate }) {
+export async function margem({ de, ate, empresa }) {
   const [linhas, vendedores, nfs, itens, produtos, pedidos] = await Promise.all([
     store.vendasProduto.listar(), store.vendedores.listar(), store.nfs.listar(),
     store.nfItens.listar(), store.produtos.listar(), store.pedidos.listar(),
@@ -179,7 +179,8 @@ export async function margem({ de, ate }) {
    * juntos: seria contar a mesma venda duas vezes.
    */
   // as notas do período, uma vez só: o frete por vendedor e a conferência leem daqui
-  const doPeriodo = nfs.filter((n) => valeParaFaturamento(n) && n.dataEmissao >= de && n.dataEmissao <= ate);
+  const doPeriodo = nfs.filter((n) => valeParaFaturamento(n) && n.dataEmissao >= de && n.dataEmissao <= ate
+    && daEmpresa(n, empresa));
 
   /**
    * O ITEM PERTENCE AO PERÍODO DA NOTA DELE, NÃO AO DA SUA PRÓPRIA DATA.
@@ -1096,7 +1097,7 @@ function custoDasNotasPeloPedido(notas, pedidos) {
  * zero e "não sei" são coisas diferentes, e confundir as duas aqui faria ela
  * achar que não cobra frete.
  */
-export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
+export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empresa }) {
   const [nfs, custos, vendedores, entregadores] = await Promise.all([
     recebidas ? Promise.resolve(recebidas) : store.nfs.listar(),
     store.fretes.listar(),
@@ -1194,7 +1195,8 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes }) {
     }
     return id;
   };
-  const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate);
+  const doPeriodo = nfs.filter((nf) => valeParaFaturamento(nf) && nf.dataEmissao >= de && nf.dataEmissao <= ate
+    && daEmpresa(nf, empresa));
   const comFrete = doPeriodo.filter((nf) => nf.valorFrete != null);
 
   const porVendedor = new Map();
