@@ -3369,6 +3369,69 @@ console.log('\n▶ O outro CNPJ: entra no comercial e na comissão, fica fora do
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
 }
 
+console.log('\n▶ O total abre nas notas: quem é o "sem vendedor" e o que dá para fazer');
+{
+  /**
+   * "Tem aqui uma aba sem vendedor que vendeu 40. Queria poder ver que notas
+   *  são essas, sabe, daí eu consigo ajustar."
+   *
+   * O cartão dizia quantas e quanto, e parava aí. Para chegar às notas ela
+   * tinha de ir à conciliação, que recorta por outro critério e não pelo
+   * período que ela está olhando — saía da tela e não encontrava as mesmas
+   * notas. A lista passa a vir junto do número, do MESMO recorte.
+   */
+  const guardadas = {
+    nfs: await store.nfs.listar(),
+    pendencias: await store.pendencias.listar(),
+  };
+  for (const x of guardadas.nfs) await store.nfs.remover(x.id);
+  await store.vendedores.salvar({ id: 'vSV', nome: 'VENDEDOR SV', ativo: true, confirmado: true });
+
+  const nota = (n, valor, cliente, vendedorId) => store.nfs.salvar({
+    id: `nfsv_${n}`, numero: String(n), dataEmissao: '2027-04-10', mes: '2027-04',
+    valorTotal: valor, valorProdutos: valor, clienteNome: cliente, vendedorId,
+    vendedorOrigem: vendedorId ? 'manual' : null,
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  await nota(9001, 25000, 'CLIENTE COM DONO', 'vSV');
+  await nota(9002, 30000, 'CLIENTE SEM DONO A', null);
+  await nota(9003, 10000, 'CLIENTE SEM DONO B', null);
+
+  const faixa = { de: '2027-04-01', ate: '2027-04-30' };
+  const r = await revenue.resumo(faixa);
+  igual('o total sem vendedor continua o mesmo', r.semVendedor.valor, 40000);
+  igual('e agora vem com a lista das notas', r.semVendedor.lista.length, 2);
+  igual('a maior primeiro, que é por onde ela começa',
+    r.semVendedor.lista.map((x) => x.numero), ['9002', '9003']);
+  igual('cada linha traz o que ela precisa para reconhecer a nota',
+    Object.keys(r.semVendedor.lista[0]).sort(),
+    ['clienteNome', 'dataEmissao', 'id', 'numero', 'pedidoNumero', 'valor']);
+  ok('a nota que tem dono não entra na lista',
+    !r.semVendedor.lista.some((x) => x.numero === '9001'), '');
+  igual('a soma da lista é o total do cartão',
+    Math.round(r.semVendedor.lista.reduce((a, x) => a + x.valor, 0) * 100) / 100,
+    r.semVendedor.valor);
+
+  /* e as duas saídas da folha de ações resolvem de verdade */
+  await link.definirVendedorDaNf('nfsv_9002', 'vSV', 'definido na tela');
+  const depois = await revenue.resumo(faixa);
+  igual('dizer de quem foi tira a nota da lista', depois.semVendedor.lista.length, 1);
+  igual('e o valor parado cai', depois.semVendedor.valor, 10000);
+  igual('o vendedor fica com o que era dele', depois.ranking[0].valor, 55000);
+
+  await link.cancelarNota('nfsv_9003', 'Marcada na tela');
+  const fim = await revenue.resumo(faixa);
+  igual('dizer que foi cancelada também limpa a lista', fim.semVendedor.lista.length, 0);
+  igual('e a nota sai do faturamento', fim.total, 55000);
+
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  await store.vendedores.remover('vSV');
+  for (const x of await store.pendencias.listar()) await store.pendencias.remover(x.id);
+  for (const x of guardadas.nfs) await store.nfs.salvar(x);
+  for (const x of guardadas.pendencias) await store.pendencias.salvar(x);
+  await link.recalcular();
+}
+
 console.log('\n▶ Pasta do mês');
 {
   const p = await dossie.pasta('2026-09');

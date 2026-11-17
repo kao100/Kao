@@ -161,7 +161,29 @@ export async function resumo({ de, ate, empresa }) {
     ticketMedio: validas.length ? cents(total / validas.length) : 0,
     clientes: clientes.size,
     ranking,
-    semVendedor: { valor: cents(semVendedorValor), notas: semVendedorNotas },
+    /**
+     * QUAIS SÃO ESSAS NOTAS, e não só quantas.
+     *
+     * "Tem aqui uma aba sem vendedor que vendeu 40. Queria poder ver que notas
+     *  são essas, sabe, daí eu consigo ajustar."
+     *
+     * O cartão dizia o total e parava aí: para chegar às notas ela tinha de ir
+     * à conciliação, que recorta por outro critério e não pelo período que ela
+     * está olhando. A lista vem junto do número, do mesmo recorte, porque é
+     * dali que ela vai agir.
+     */
+    semVendedor: {
+      valor: cents(semVendedorValor),
+      notas: semVendedorNotas,
+      lista: sortBy(validas.filter((nf) => !nf.vendedorId).map((nf) => ({
+        id: nf.id,
+        numero: nf.numero,
+        dataEmissao: nf.dataEmissao,
+        clienteNome: nf.clienteNome || 'cliente não identificado',
+        valor: valorFaturado(nf),
+        pedidoNumero: nf.pedidoNumero || null,
+      })), (nf) => Math.abs(nf.valor), 'desc'),
+    },
     canceladas: { quantidade: canceladas.length, valor: cents(sum(canceladas, (n) => n.valorTotal)) },
     devolucoes: { quantidade: devolucoes.length, valor: cents(sum(devolucoes, (n) => Math.abs(n.valorTotal))) },
     conferencia: {

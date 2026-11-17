@@ -17,6 +17,7 @@ import { ok } from '../components/toast.js';
 import { lerFiltro, descrever, listaDePessoas } from '../../logic/filtro.js';
 import { dreComercial, linhasDoDre, relatorioComercial } from '../../logic/comercial.js';
 import { todasAsEmpresas } from '../../logic/vendas.js';
+import { listaDeNotas } from '../components/nota.js';
 import { escada } from '../components/escada.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { money, pct, num, formatDate, monthLabelShort, monthKey, today } from '../../core/format.js';
@@ -240,8 +241,27 @@ export async function telaComercial({ query }) {
           sub: `${v.notas} NFs · ${v.clientes} clientes · ticket ${money(v.ticket)} · ${pct(v.participacao, 1)}`,
           onClick: () => navigate(href(`/comercial/${v.vendedorId}`, query)),
         }))),
+        /**
+         * O TOTAL ABRE NAS NOTAS.
+         *
+         * "Tem aqui uma aba sem vendedor que vendeu 40. Queria poder ver que
+         *  notas são essas, daí eu consigo ajustar."
+         *
+         * Antes este botão levava à conciliação, que recorta por outro critério
+         * e não pelo período que ela está olhando — ela saía da tela e não
+         * encontrava as mesmas notas. Agora ele abre exatamente estas, as do
+         * recorte da tela, cada uma com as duas saídas: de quem foi, ou foi
+         * cancelada.
+         */
         resumo.semVendedor.notas > 0 && h('button.aviso.aviso--atencao', {
-          style: { width: '100%', marginTop: '10px' }, onClick: () => navigate('/conciliacao'),
+          style: { width: '100%', marginTop: '10px' },
+          onClick: () => listaDeNotas({
+            titulo: `${resumo.semVendedor.notas} nota(s) sem vendedor`,
+            texto: `${money(resumo.semVendedor.valor)} de ${busca.label} que não estão no `
+              + 'ranking de ninguém e não geram comissão.',
+            motivoDaNota: 'Esta nota não está no ranking de ninguém e não gera comissão.',
+            notas: resumo.semVendedor.lista,
+          }),
         },
         h('div.crescer', { style: { textAlign: 'left' } },
           h('strong', `${resumo.semVendedor.notas} NF(s) sem vendedor`),

@@ -3,7 +3,7 @@
  * Os dados vivem no IndexedDB do aparelho e nunca passam por aqui.
  */
 
-const CACHE = 'ampla-v78';
+const CACHE = 'ampla-v79';
 const BASE = new URL('./', self.registration.scope).pathname;
 
 const APP_SHELL = [
@@ -25,7 +25,7 @@ const APP_SHELL = [
   'src/ui/shell.js', 'src/ui/nuvem-ui.js',
   'src/ui/components/ui.js', 'src/ui/components/sheet.js', 'src/ui/components/toast.js',
   'src/ui/components/chart.js', 'src/ui/components/table.js', 'src/ui/components/filtro.js',
-  'src/ui/components/marca.js', 'src/ui/components/escada.js',
+  'src/ui/components/marca.js', 'src/ui/components/escada.js', 'src/ui/components/nota.js',
   'src/ui/views/comercial.js', 'src/ui/views/produtos.js', 'src/ui/views/comissoes.js',
   'src/ui/views/conciliacao.js', 'src/ui/views/arquivos.js', 'src/ui/views/ajustes.js',
   'src/ui/views/fechamento.js', 'src/ui/views/orcamentos.js', 'src/ui/views/diario.js',

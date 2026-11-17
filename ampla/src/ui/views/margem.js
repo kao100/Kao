@@ -16,6 +16,7 @@ import * as store from '../../core/store.js';
 import * as margemLogica from '../../logic/margem.js';
 import { lerFiltro, descrever } from '../../logic/filtro.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
+import { abrirNota } from '../components/nota.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, secao, botao, vazio, aviso, selo } from '../components/ui.js';
 import { tabela, exportadores, exportarPlanilha } from '../components/table.js';
@@ -620,12 +621,32 @@ export async function telaMargem({ query }) {
           { header: 'Custo do pedido', key: 'custo', tipo: 'money', alinhar: 'direita' },
           { header: 'Custo/venda', key: 'vezes', alinhar: 'direita' },
           {
-            header: 'Custo real',
+            /**
+             * DUAS RESPOSTAS, PORQUE SÃO DUAS PERGUNTAS DIFERENTES.
+             *
+             * "Tem uma outra nota aqui que ele tá pedindo pra eu fazer. Essa
+             *  nota tá cancelada."
+             *
+             * O app presumia que o custo descartado sempre terminava em
+             * "informe o custo real". Quando a nota foi cancelada, informar
+             * custo é responder a pergunta errada — e a linha ficava ali para
+             * sempre, pedindo uma coisa que não era para ser feita.
+             */
+            header: 'O que fazer',
             key: 'acao',
             alinhar: 'direita',
-            formatar: (_v, linha) => (linha.pedidoId
-              ? botao('Informar', { pequeno: true, onClick: () => informarCusto(linha) })
-              : h('span.mini.muted', 'sem pedido')),
+            formatar: (_v, linha) => h('div.btn-linha', { style: { justifyContent: 'flex-end' } },
+              linha.pedidoId
+                ? botao('Informar custo', { pequeno: true, onClick: () => informarCusto(linha) })
+                : h('span.mini.muted', 'sem pedido'),
+              linha.nfId && botao('Nota cancelada', {
+                pequeno: true,
+                onClick: () => abrirNota(linha.nfId, {
+                  motivo: 'O custo deste pedido foi descartado por ser maior que a venda. '
+                    + 'Se a nota foi cancelada, marque aqui: ela sai da conta inteira e esta '
+                    + 'linha some sozinha.',
+                }),
+              })),
           },
         ],
         linhas: r.custoSuspeito.linhas.map((x) => ({
