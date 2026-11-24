@@ -2998,21 +2998,54 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
   const familias = await link.familiasDeNomes();
   igual('os nomes se juntam em duas pessoas, não em seis', familias.length, 2);
 
-  const eduardo = familias.find((f) => f.destino.id === 'v_ce');
-  ok('quem fica é o cadastro confirmado com mais notas', !!eduardo, JSON.stringify(familias.map((f) => f.destino.nome)));
-  igual('com os outros dois na família', eduardo.membros.map((m) => m.nome).sort(),
+  const familiaBento = familias.find((f) => f.destino.id === 'v_ce');
+  ok('quem fica é o cadastro confirmado com mais notas', !!familiaBento, JSON.stringify(familias.map((f) => f.destino.nome)));
+  igual('com os outros dois na família', familiaBento.membros.map((m) => m.nome).sort(),
     ['ANTONIO BENTO 8', 'PAULO BENTO']);
 
-  const ce8 = eduardo.membros.find((m) => m.nome === 'ANTONIO BENTO 8');
+  const ce8 = familiaBento.membros.find((m) => m.nome === 'ANTONIO BENTO 8');
   igual('o nome inteiro dentro do outro é quase certo', ce8.certeza, 'contido');
   igual('e traz as notas dele para ela ver', ce8.notas, 5);
 
-  const le = eduardo.membros.find((m) => m.nome === 'PAULO BENTO');
+  /**
+   * O MEMBRO QUE ENTROU PELO ELO DO MEIO.
+   *
+   * A família se forma por corrente: A divide um pedaço com B, B divide outro
+   * com C, e os três caem juntos. Existe então membro que não tem UMA palavra
+   * em comum com quem fica — e a tela dizia "só  se repete", com o pedaço em
+   * branco, bem na linha em que ela precisa entender por que aquela pessoa está
+   * ali para NÃO marcar. Acontece com dois vendedores que dividem o sobrenome.
+   */
+  await vend('v_md', 'LUCAS PEREIRA DOMINGOS');
+  await vend('v_ad', 'ALBERTO AMARAL DOMINGOS');
+  await nota('v_md', 'LUCAS PEREIRA DOMINGOS', 1, 100);
+  await nota('v_ad', 'ALBERTO AMARAL DOMINGOS', 1, 100);
+  await vend('v_lp', 'LUCAS PEREIRA');
+  await nota('v_lp', 'LUCAS PEREIRA', 30, 900);
+
+  const pereira = (await link.familiasDeNomes()).find((f) => f.destino.nome === 'LUCAS PEREIRA');
+  ok('o sobrenome em comum arrasta o terceiro nome para a família', !!pereira,
+    JSON.stringify((await link.familiasDeNomes()).map((f) => f.destino.nome)));
+  const comprido = pereira.membros.find((m) => m.nome === 'LUCAS PEREIRA DOMINGOS');
+  igual('o nome inteiro dentro do outro continua quase certo', comprido.certeza, 'contido');
+  const terceiro = pereira.membros.find((m) => m.nome === 'ALBERTO AMARAL DOMINGOS');
+  igual('quem entrou pelo elo não vem marcado', terceiro.certeza, 'pedaco');
+  igual('e não divide pedaço nenhum com quem fica', terceiro.pedacosComuns, []);
+  igual('então o app diz por QUEM ele entrou', terceiro.ligadoPor?.nome, 'LUCAS PEREIRA DOMINGOS');
+  igual('e por qual palavra', terceiro.ligadoPor?.pedacos, ['domingos']);
+  igual('quem divide pedaço com quem fica não ganha elo', comprido.ligadoPor, null);
+
+  for (const id of ['v_md', 'v_ad', 'v_lp']) await store.vendedores.remover(id);
+  for (const x of (await store.nfs.listar()).filter((n) => ['v_md', 'v_ad', 'v_lp'].includes(n.vendedorId))) {
+    await store.nfs.remover(x.id);
+  }
+
+  const le = familiaBento.membros.find((m) => m.nome === 'PAULO BENTO');
   igual('dividir só um pedaço NÃO é quase certo', le.certeza, 'pedaco');
   igual('e o app diz qual pedaço se repete', le.pedacosComuns, ['bento']);
   igual('mostrando também quem está marcado como "não vende"', le.naoVende, true);
 
-  igual('a conta do que está em jogo é por família', eduardo.notasEmJogo, 8);
+  igual('a conta do que está em jogo é por família', familiaBento.notasEmJogo, 8);
   ok('e a pessoa sozinha não vira família',
     !familias.some((f) => [f.destino.id, ...f.membros.map((m) => m.id)].includes('v_mv')),
     JSON.stringify(familias));

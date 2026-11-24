@@ -1703,6 +1703,27 @@ export async function familiasDeNomes() {
       const dentro = [...x.pedacos].every((p) => destino.pedacos.has(p))
         || [...destino.pedacos].every((p) => x.pedacos.has(p));
       const comuns = [...x.pedacos].filter((p) => destino.pedacos.has(p));
+
+      /**
+       * QUEM ENTROU NA LISTA SEM DIVIDIR NADA COM QUEM FICA.
+       *
+       * A família se forma por corrente: A divide um pedaço com B, B divide
+       * outro com C, e os três caem juntos. Existe então membro que não tem UMA
+       * palavra em comum com o destino — ele entrou pelo elo do meio.
+       *
+       * Acontece no cadastro dela, com dois vendedores que dividem o MESMO
+       * SOBRENOME: "ALBERTO AMARAL DOMINGOS" aparece ao lado de "LUCAS PEREIRA"
+       * porque os dois passam por "LUCAS PEREIRA DOMINGOS". A tela dizia
+       * "só  se repete", com o nome do pedaço em branco — bem na linha em que
+       * ela precisa entender por que aquela pessoa está ali, para NÃO marcar.
+       *
+       * Agora o app diz o elo: com quem ele se parece, e por qual palavra.
+       */
+      const elo = comuns.length ? null : (ordenados
+        .filter((y) => y.v.id !== x.v.id && y.v.id !== destino.v.id)
+        .map((y) => ({ nome: y.v.nome, pedacos: [...x.pedacos].filter((p) => y.pedacos.has(p)) }))
+        .find((y) => y.pedacos.length) || null);
+
       return {
         id: x.v.id,
         nome: x.v.nome,
@@ -1714,6 +1735,8 @@ export async function familiasDeNomes() {
         /* contido = quase certo, vem marcado; só um pedaço = ela decide */
         certeza: dentro ? 'contido' : 'pedaco',
         pedacosComuns: comuns,
+        /* preenchido só quando não há NADA em comum com quem fica */
+        ligadoPor: elo,
       };
     });
     familias.push({

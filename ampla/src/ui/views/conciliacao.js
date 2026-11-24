@@ -1226,9 +1226,7 @@ function linhaDoNome(m, marcados, atualizar) {
       atualizar();
     },
   });
-  const porque = m.certeza === 'contido'
-    ? 'o nome inteiro aparece no outro'
-    : `só ${m.pedacosComuns.map((p) => p.toUpperCase()).join(' e ')} se repete`;
+  const porque = textoDaSemelhanca(m);
 
   return h('label.linha.linha--entre', { style: { padding: '8px 0', gap: '10px' } },
     caixa,
@@ -1238,6 +1236,26 @@ function linhaDoNome(m, marcados, atualizar) {
         `${m.notas} nota(s) · ${m.pedidos} pedido(s) · ${money(m.valor)}`),
       h('span.mini.muted', { style: { display: 'block' } }, porque)),
     m.naoVende ? selo('não vende', 'atencao') : null);
+}
+
+/**
+ * POR QUE ESTE NOME ESTÁ NESTA LISTA.
+ *
+ * A família se forma por corrente, então há membro que não divide UMA palavra
+ * com quem fica: ele entrou pelo elo do meio. A frase tem de dizer isso em vez
+ * de sair com o pedaço em branco — é a linha em que ela decide NÃO marcar.
+ */
+function textoDaSemelhanca(m) {
+  if (m.certeza === 'contido') return 'o nome inteiro aparece no outro';
+  if (m.pedacosComuns.length) {
+    return `só ${m.pedacosComuns.map((p) => p.toUpperCase()).join(' e ')} se repete`;
+  }
+  if (m.ligadoPor) {
+    return 'não tem nada em comum com quem fica — entrou por '
+      + `${m.ligadoPor.pedacos.map((p) => p.toUpperCase()).join(' e ')}, que divide com `
+      + m.ligadoPor.nome;
+  }
+  return 'não tem nada em comum com quem fica';
 }
 
 async function juntarFamilia(f, destinoId, marcados, nomeDoDestino) {
