@@ -500,7 +500,7 @@ export async function margem({ de, ate, empresa }) {
   /**
    * O FRETE DE CADA VENDEDOR, ao lado da margem dele.
    *
-   * "O Guilherme vende perto do custo" só é metade da história se ele cobra
+   * "O Alberto vende perto do custo" só é metade da história se ele cobra
    * frete. Material pesado sai com margem apertada e o resultado está no frete —
    * então os dois números ficam na mesma linha, e existe a soma dos dois.
    */
@@ -1125,7 +1125,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
   /**
    * NA PLANILHA DE ENTREGAS O VENDEDOR VEM PELO PRIMEIRO NOME.
    *
-   * Quem preenche o formulário escreve MARCELO; o cadastro diz MARCELO SANTANA.
+   * Quem preenche o formulário escreve LUCAS; o cadastro diz LUCAS PEREIRA.
    * Sem isto, as entregas dele caíam todas em "sem vendedor".
    *
    * Não é semelhança de texto: é primeiro nome que pertence a UM vendedor só.
@@ -1136,16 +1136,16 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
    * NA PLANILHA DE ENTREGAS O VENDEDOR VEM PELO NOME QUE A CASA USA — E NEM
    * SEMPRE É O PRIMEIRO.
    *
-   * "O que eu acho que é do Eduardo é que as notas estão como Carlos Eduardo e
-   *  na planilha ele deve estar Eduardo."
+   * "O que eu acho que é do Bento é que as notas estão como Antonio Bento e
+   *  na planilha ele deve estar Bento."
    *
    * Era isso: R$ 16.107,10 de entrega ficavam órfãos porque o app só olhava o
-   * PRIMEIRO nome, e quem preenche a planilha escreve EDUARDO — o segundo. A
+   * PRIMEIRO nome, e quem preenche a planilha escreve BENTO — o segundo. A
    * linha dele mostrava frete cobrado de R$ 15.349,88 e custo em branco.
    *
    * A regra continua sendo a mesma do resto do app, e é ela que torna isto
    * leitura e não adivinhação: o pedaço de nome tem de pertencer a UM vendedor
-   * só na base inteira. Dois Eduardos e o app não escolhe nenhum.
+   * só na base inteira. Dois Bentos e o app não escolhe nenhum.
    *
    * Partículas (de, da, dos) e pedaços de duas letras ficam de fora: não
    * identificam ninguém. E o que foi ligado assim aparece na tela — ligação que
@@ -1185,7 +1185,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
     /**
      * Só vira notícia o que o PRIMEIRO nome não teria resolvido sozinho.
      *
-     * "FRANCISCO → FRANCISCO CORREIA DA SILVA JUNIOR" é a regra de sempre, e
+     * "RODRIGO → RODRIGO MONTEIRO DA COSTA JUNIOR" é a regra de sempre, e
      * anunciar o óbvio junto com o que importa esconde o que importa.
      */
     const pedacos = pedacosDe(texto);
@@ -1247,7 +1247,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
   /**
    * O QUE O FRETE CUSTOU, da planilha dela.
    *
-   * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+   * "O Alberto tem um frete, mas aí o frete também a gente tem custo."
    *
    * O custo da frota é FIXO e mensal: salário de motorista não é de uma entrega,
    * é do mês. Por isso ele não é dividido por nota nem por vendedor — dividir
@@ -1272,7 +1272,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
   /**
    * O CUSTO DE FRETE DE CADA VENDEDOR, quando a planilha diz de quem é a venda.
    *
-   * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+   * "O Alberto tem um frete, mas aí o frete também a gente tem custo."
    *
    * A planilha de entregas traz o vendedor em cada linha. Então este número não
    * é rateio nenhum: é a soma do que as entregas DELE custaram. O rateio só
@@ -1284,7 +1284,7 @@ export async function frete({ de, ate, nfs: recebidas, nomeVendedor: nomes, empr
   /**
    * QUEM NÃO BATEU, E COM QUE NOME.
    *
-   * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+   * "Do Antonio Bento, tá aqui, custo zero, não tem custo nenhum. Queria
    *  entender o porquê tá acontecendo isso. Porque não tá parametrizando os
    *  custos dele."
    *

@@ -220,7 +220,7 @@ function efeitoDoCustoInformado(r) {
 /**
  * OS NOMES DA PLANILHA DE ENTREGAS QUE NÃO ACHARAM VENDEDOR.
  *
- * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+ * "Do Antonio Bento, tá aqui, custo zero, não tem custo nenhum. Queria
  *  entender o porquê."
  *
  * Mostrar só o zero era a tela dizendo "não custou" quando o que acontecia era
@@ -233,7 +233,7 @@ function quemNaoBateu(custo) {
   /**
    * O QUE O APP LIGOU SOZINHO, DITO EM VOZ ALTA.
    *
-   * Ligar "EDUARDO" a "CARLOS EDUARDO APARECIDO DO NASCIMENTO" é leitura, não
+   * Ligar "BENTO" a "ANTONIO BENTO DA COSTA FILHO" é leitura, não
    * adivinhação — o pedaço de nome pertence a um vendedor só na base inteira.
    * Mas é uma decisão do app sobre o dinheiro de alguém, e decisão calada é como
    * se perde a confiança numa conta que está certa.
@@ -868,7 +868,7 @@ export async function telaMargem({ query }) {
             }))),
 
         /**
-         * A conta que ela pediu, escrita por extenso. "O Guilherme tem um frete,
+         * A conta que ela pediu, escrita por extenso. "O Alberto tem um frete,
          * mas aí o frete também a gente tem custo."
          */
         r.frete.custo.temDado

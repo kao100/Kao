@@ -69,7 +69,7 @@ export const STORES = {
    * "Além do custo do material, tem o custo de frete também. Tanto com terceiro
    *  quanto com a minha frota própria. Minha frota própria eu pago o salário
    *  deles, é fixo. (…) É bom você considerar que a gente tem esse custo, para
-   *  às vezes pensar: ah, o Guilherme tem um frete, mas aí o frete também a
+   *  às vezes pensar: ah, o Alberto tem um frete, mas aí o frete também a
    *  gente tem custo."
    *
    * Vem da planilha do Google onde ela lança tudo no mês. Fica em base própria

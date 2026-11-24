@@ -198,7 +198,7 @@ function docMargem(m) {
 /**
  * FRETE — o cobrado e o que custou, lado a lado.
  *
- * "O Guilherme tem um frete, mas aí o frete também a gente tem custo."
+ * "O Alberto tem um frete, mas aí o frete também a gente tem custo."
  *
  * Os dois números vêm de lugares diferentes de propósito: o cobrado é da nota,
  * o custo é da planilha de entregas. Por isso a última linha é a conta que

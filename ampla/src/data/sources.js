@@ -102,7 +102,7 @@ export const FONTES = {
       /**
        * O VENDEDOR DA NOTA — a coluna existia no arquivo e o app a ignorava.
        *
-       * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo
+       * "O app tá com 341 pendências. Ele não tá identificando o Antonio Bento
        *  na nota fiscal."
        *
        * O construtor da nota sempre leu `vendedorNome`, mas nenhuma coluna
@@ -539,7 +539,7 @@ export const FONTES = {
    * nenhum dos relatórios do Gestão Click: mora na planilha do Google onde ela
    * lança salário de motorista, extras e o que paga a transportadora.
    *
-   * Sem isso, "o Guilherme cobrou R$ 8.676 de frete" parece resultado, e não é —
+   * Sem isso, "o Alberto cobrou R$ 8.676 de frete" parece resultado, e não é —
    * é receita bruta de uma operação que tem custo fixo e variável.
    *
    * As colunas são poucas de propósito: data, tipo, quem fez, quanto, e o que

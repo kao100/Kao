@@ -164,8 +164,8 @@ export const TIPOS_PENDENCIA = {
     titulo: 'Dois cadastros para a mesma pessoa?',
     icone: '👥',
     gravidade: 'alta',
-    explicacao: 'Um relatório traz o nome curto ("EDUARDO") e outro o nome completo ("CARLOS '
-      + 'EDUARDO APARECIDO DO NASCIMENTO"). O app NÃO junta por semelhança — ele mostra os dois e '
+    explicacao: 'Um relatório traz o nome curto ("BENTO") e outro o nome completo ("CARLOS '
+      + 'BENTO APARECIDO DO NASCIMENTO"). O app NÃO junta por semelhança — ele mostra os dois e '
       + 'pergunta. Confirmando, o nome completo vira apelido do mesmo vendedor e os números se '
       + 'somam daí em diante.',
   },
@@ -321,7 +321,7 @@ export async function recalcular() {
   /**
    * DEVOLUÇÃO: de quem era a venda que voltou.
    *
-   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   * "O Alberto fez uma venda mês passado e o cliente devolveu esse mês. Só que
    *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
    *  desse mês."
    *
@@ -1176,7 +1176,7 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   /**
    * QUEM EMITE A NOTA NÃO É QUEM VENDEU.
    *
-   * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas não
+   * "A Marina Alves não é vendedora. Às vezes ela emite algumas notas, mas não
    *  é vendedora. Deve ter emitido uma nota e acabou saindo o nome dela. Por
    *  isso precisa ter a possibilidade de vincular essa nota para o vendedor
    *  correto."
@@ -1194,7 +1194,7 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
    *
    * "Não precisa ir em ajustes, vendedores, editar o papel — isso é diferente
    *  para mim. A gente já pode ir para a segunda etapa: toda nota que sair no
-   *  nome da Maria Vitória vira pendência. Aí eu vou lá e ajusto. Mais simples."
+   *  nome da Marina Alves vira pendência. Aí eu vou lá e ajusto. Mais simples."
    *
    * O app não tem como saber sozinho quem vende e quem só emite nota, e adivinhar
    * seria mover comissão por conta própria. Então ele PERGUNTA, uma vez por nome,
@@ -1351,17 +1351,17 @@ async function gerarPendencias({ nfs, itens, titulos, pagamentos, movimentos, pr
   /**
    * DOIS CADASTROS PARA A MESMA PESSOA.
    *
-   * O relatório de comissão por venda traz "EDUARDO"; o de comissão por produto,
-   * "CARLOS EDUARDO APARECIDO DO NASCIMENTO". São dois vendedores no app, e o
+   * O relatório de comissão por venda traz "BENTO"; o de comissão por produto,
+   * "ANTONIO BENTO DA COSTA FILHO". São dois vendedores no app, e o
    * faturamento de um não soma no do outro.
    *
    * O app não junta sozinho — juntar por semelhança é exatamente o que o item 20
    * proíbe, e sobrenome em comum não prova nada. Mas ficar calado também não
-   * serve: ela veria dois Eduardos e não saberia por quê. Então ele mostra o par
+   * serve: ela veria dois Bentos e não saberia por quê. Então ele mostra o par
    * e pergunta, com a evidência à vista.
    *
    * O teste é estrito: o nome curto tem de aparecer INTEIRO, como palavra, dentro
-   * do nome comprido. "EDUARDO" dentro de "CARLOS EDUARDO APARECIDO" conta;
+   * do nome comprido. "BENTO" dentro de "ANTONIO BENTO DA COSTA" conta;
    * "ANA" dentro de "ANALICE" não.
    */
   for (const par of vendedoresParecidos(await store.vendedores.listar())) {
@@ -1591,9 +1591,9 @@ export function vendedoresParecidos(vendedores) {
 /**
  * UM NOME, UM VENDEDOR — resolver as variações em lote, e não uma a uma.
  *
- * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo 8 na
+ * "O app tá com 341 pendências. Ele não tá identificando o Antonio Bento 8 na
  *  nota fiscal. Eu não consigo linkar 341 coisas olhando uma por uma. Quero que
- *  ele linke todas as variações do Carlos Eduardo, e do Francisco."
+ *  ele linke todas as variações do Antonio Bento, e do Rodrigo."
  *
  * O que acontece na base dela: o nome que vem no arquivo é tratado como DADO —
  * se não existe vendedor com aquele nome, o app cria o cadastro. É a regra
@@ -1608,7 +1608,7 @@ export function vendedoresParecidos(vendedores) {
  * pessoa, em vez de uma por nota.
  *
  * E o que ela confirma fica: o nome que sai vira APELIDO do que fica, então o
- * próximo arquivo com "CARLOS EDUARDO 8" já cai no lugar certo sozinho, sem
+ * próximo arquivo com "ANTONIO BENTO 8" já cai no lugar certo sozinho, sem
  * pergunta nenhuma.
  */
 const PARTICULAS_DE_NOME = new Set([
@@ -1630,9 +1630,9 @@ export function pedacosDoNome(nome) {
  * A sugestão vem em dois níveis, e a diferença entre eles é toda a honestidade
  * desta tela:
  *
- *  • CONTIDO — todos os pedaços de um nome aparecem no outro ("CARLOS EDUARDO"
- *    dentro de "CARLOS EDUARDO 8"). É praticamente certo, e vem já marcado.
- *  • SÓ UM PEDAÇO — "LUIZ EDUARDO" e "CARLOS EDUARDO" dividem só o EDUARDO.
+ *  • CONTIDO — todos os pedaços de um nome aparecem no outro ("ANTONIO BENTO"
+ *    dentro de "ANTONIO BENTO 8"). É praticamente certo, e vem já marcado.
+ *  • SÓ UM PEDAÇO — "PAULO BENTO" e "ANTONIO BENTO" dividem só o BENTO.
  *    Pode ser a mesma pessoa e pode ser outra; vem DESMARCADO, com o pedaço
  *    repetido escrito do lado, para ela decidir olhando.
  */
@@ -1743,6 +1743,85 @@ export async function familiasDeNomes() {
  * de mil notas — e é justamente o caso dela, com 341 pendências em jogo. Então
  * as fusões acontecem todas e o recálculo vem UMA vez, no fim.
  */
+/**
+ * CADASTROS DE VENDEDOR QUE NÃO TÊM NADA ATRÁS.
+ *
+ * "Preciso que ele revise os vendedores também, porque tem um vendedor de um
+ *  real, vendedor sei lá Amazonas, e nenhum daquilo é venda."
+ *
+ * O leitor de PDF colava a coluna do vendedor na da quantidade e cada linha
+ * entregava um nome novo — "LUCAS PEREIRA 1.050,00". O conserto está no
+ * leitor, mas os cadastros que ele já criou continuam na base, e eles não somem
+ * sozinhos: reimportar o relatório tira as LINHAS deles, não o cadastro.
+ *
+ * Esta lista é o que sobra depois disso: cadastro sem UMA nota, UM pedido, UM
+ * título, UM item, UMA linha de comissão. Não é palpite sobre o nome ser
+ * estranho — é a ausência de qualquer venda atrás dele, que é um fato
+ * verificável. Quem tiver qualquer movimento não entra aqui de jeito nenhum,
+ * por mais esquisito que seja o nome.
+ */
+export async function vendedoresSemMovimento() {
+  const [vendedores, nfs, pedidos, titulos, itens, produtoVendido, comissoes, fretes] = await Promise.all([
+    store.vendedores.listar(), store.nfs.listar(), store.pedidos.listar(), store.receber.listar(),
+    store.nfItens.listar(), store.vendasProduto.listar(), store.comissoesRelatorio.listar(),
+    store.fretes.listar(),
+  ]);
+
+  const usados = new Map();
+  const marcar = (id, onde) => {
+    if (!id) return;
+    if (!usados.has(id)) usados.set(id, new Set());
+    usados.get(id).add(onde);
+  };
+  for (const x of nfs) marcar(x.vendedorId, 'notas');
+  for (const x of pedidos) marcar(x.vendedorId, 'pedidos');
+  for (const x of titulos) marcar(x.vendedorId, 'contas a receber');
+  for (const x of itens) marcar(x.vendedorId, 'itens de nota');
+  for (const x of produtoVendido) marcar(x.vendedorId, 'relatório por produto');
+  for (const x of comissoes) marcar(x.vendedorId, 'relatório de comissão');
+  for (const x of fretes) marcar(x.vendedorId, 'entregas');
+
+  /* o apelido de alguém não é um cadastro solto: ele já foi resolvido */
+  const apelidados = new Set();
+  for (const v of vendedores) for (const a of v.apelidos || []) apelidados.add(normalize(a));
+
+  return vendedores
+    .filter((v) => !usados.has(v.id) && !apelidados.has(normalize(v.nome)))
+    .map((v) => ({
+      id: v.id,
+      nome: v.nome,
+      criadoEm: v.criadoEm || null,
+      origem: v.origem || null,
+      /* o formato do defeito, para a tela poder dizer de onde veio */
+      pareceLeituraTorta: /\s\d{1,3}(\.\d{3})*,\d{2}$|\s\d+,\d{2}$/.test(v.nome),
+    }))
+    .sort((a, b) => Number(b.pareceLeituraTorta) - Number(a.pareceLeituraTorta)
+      || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Apaga os cadastros que ela confirmou estarem vazios. */
+export async function removerVendedores(ids, motivo) {
+  const semMovimento = new Set((await vendedoresSemMovimento()).map((v) => v.id));
+  const apagados = [];
+  for (const id of ids) {
+    /* recusa quem ganhou movimento entre a tela e o toque: apagar vendedor com
+       venda atrás é apagar faturamento sem dizer */
+    if (!semMovimento.has(id)) continue;
+    const v = await store.vendedores.obter(id);
+    if (!v) continue;
+    await store.vendedores.remover(id);
+    apagados.push(v.nome);
+  }
+  if (apagados.length) {
+    await store.registrar('vendedores_removidos', {
+      alvo: apagados.slice(0, 8).join(', '),
+      motivo: motivo || `${apagados.length} cadastro(s) sem nenhuma venda atrás`,
+    });
+    await recalcular();
+  }
+  return apagados;
+}
+
 export async function juntarNomes(ficaId, saiIds, motivo) {
   const fica = await store.vendedores.obter(ficaId);
   if (!fica) throw new Error('Vendedor não encontrado.');

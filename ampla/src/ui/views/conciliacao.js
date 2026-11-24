@@ -9,7 +9,7 @@ import * as store from '../../core/store.js';
 import {
   TIPOS_PENDENCIA, recalcular, definirVendedorDaNf, definirVendedorDoPedido, vendasSemVendedor,
   juntarVendedores, juntarTodosOsPares, vendedoresParecidos, cancelarNota,
-  familiasDeNomes, juntarNomes,
+  familiasDeNomes, juntarNomes, vendedoresSemMovimento, removerVendedores,
 } from '../../logic/link.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, kpi, chips, botao, aviso, selo, vazio } from '../components/ui.js';
@@ -382,7 +382,7 @@ async function resolverVendedor(p, { vendedores, nfs }) {
  * É VENDEDOR OU SÓ EMITE NOTA? Um toque, aqui mesmo.
  *
  * "Não precisa ir em ajustes, vendedores, editar o papel. A gente já pode ir
- *  para a segunda etapa: toda nota que sair no nome da Maria Vitória vira
+ *  para a segunda etapa: toda nota que sair no nome da Marina Alves vira
  *  pendência. Aí eu vou lá e ajusto."
  *
  * Dizer "não vende" não mexe em nota nenhuma: ele só liga a pendência, e cada
@@ -1062,22 +1062,28 @@ async function definirManual(nf, vendedores) {
  * A TELA QUE RESOLVE TREZENTAS E QUARENTA E UMA DE UMA VEZ.
  *
  * "Eu não consigo linkar 341 coisas olhando uma por uma. Quero que ele linke
- *  todas as variações do Carlos Eduardo, e do Francisco."
+ *  todas as variações do Antonio Bento, e do Rodrigo."
  *
  * A unidade de trabalho aqui não é a nota: é a PESSOA. O app agrupa os
  * cadastros que dividem um pedaço de nome, mostra quantas notas e quanto
  * dinheiro cada um carrega, e ela confirma a família inteira num toque.
  *
  * O que ele marca sozinho é só o que é quase certo — o nome inteiro de um
- * dentro do outro ("CARLOS EDUARDO" dentro de "CARLOS EDUARDO 8"). O que divide
- * apenas um pedaço ("LUIZ EDUARDO" e "CARLOS EDUARDO" dividem o EDUARDO) vem
+ * dentro do outro ("ANTONIO BENTO" dentro de "ANTONIO BENTO 8"). O que divide
+ * apenas um pedaço ("PAULO BENTO" e "ANTONIO BENTO" dividem o BENTO) vem
  * desmarcado, com o pedaço repetido escrito do lado. Marcar por semelhança
  * continua proibido; sugerir e deixar ela olhar, não.
  */
 export async function telaNomes() {
-  const familias = await familiasDeNomes();
+  const [familias, vazios] = await Promise.all([familiasDeNomes(), vendedoresSemMovimento()]);
   definirTitulo('Um nome, um vendedor',
     familias.length ? `${familias.length} pessoa(s) com nome repetido` : 'nada repetido');
+
+  if (!familias.length && vazios.length) {
+    return h('div.empilha', { style: { gap: '14px' } },
+      cardSemMovimento(vazios),
+      botao('Voltar', { bloco: true, onClick: () => navigate('/conciliacao') }));
+  }
 
   if (!familias.length) {
     return h('div.empilha', { style: { gap: '14px' } },
@@ -1108,7 +1114,60 @@ export async function telaNomes() {
       + 'confirmar fica guardado como apelido: o próximo arquivo com aquela grafia já cai no '
       + 'lugar certo sozinho.', 'info'),
 
-    ...familias.map((f) => cardFamilia(f)));
+    ...familias.map((f) => cardFamilia(f)),
+
+    vazios.length > 0 && cardSemMovimento(vazios));
+}
+
+/**
+ * OS CADASTROS QUE NÃO TÊM NADA ATRÁS.
+ *
+ * "Tem um vendedor de um real, vendedor sei lá Amazonas, e nenhum daquilo é
+ *  venda."
+ *
+ * Eram nomes fabricados pelo leitor de PDF, que colava a coluna do vendedor na
+ * da quantidade. O leitor já foi consertado, mas o cadastro que ele criou não
+ * some sozinho — reimportar o relatório tira as linhas, não o cadastro.
+ *
+ * O app não apaga por achar o nome estranho: apaga o que não tem UMA nota, UM
+ * pedido, UM título, UMA linha de comissão atrás. É fato verificável, está
+ * escrito na tela, e quem tiver qualquer movimento não aparece aqui.
+ */
+function cardSemMovimento(vazios) {
+  const tortos = vazios.filter((v) => v.pareceLeituraTorta);
+  const limpar = async () => {
+    const sim = await confirmar({
+      titulo: `Apagar ${vazios.length} cadastro(s)?`,
+      texto: `${vazios.slice(0, 10).map((v) => v.nome).join('\n')}`
+        + (vazios.length > 10 ? `\n… e mais ${vazios.length - 10}` : '')
+        + '\n\nNenhum deles tem nota, pedido, título ou linha de comissão atrás — '
+        + 'apagar não muda número nenhum em tela nenhuma. Se um nome voltar num '
+        + 'arquivo novo, o cadastro é criado de novo.',
+      confirmar: 'Apagar',
+      perigo: true,
+    });
+    if (!sim) return;
+    const apagados = await removerVendedores(vazios.map((v) => v.id), 'cadastro sem nenhuma venda');
+    await atualizarAlertas();
+    ok(`${apagados.length} cadastro(s) apagado(s).`);
+    refresh();
+  };
+
+  return card(`${vazios.length} cadastro(s) de vendedor sem nenhuma venda`,
+    botao('Apagar todos', { tipo: 'primario', pequeno: true, onClick: limpar }),
+    h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+      'Nenhum deles tem nota, pedido, título ou linha de comissão atrás. Apagar não muda '
+      + 'número nenhum — e se o nome voltar num arquivo, o cadastro é criado de novo.'),
+    tortos.length > 0 && aviso(`${tortos.length} deles têm um valor colado no fim do nome `
+      + '("NOME 1.050,00"). Isso era o leitor de PDF grudando a coluna do vendedor na da '
+      + 'quantidade — já está consertado. Reenvie o relatório de comissão por produto e '
+      + 'depois apague estes aqui.', 'info'),
+    h('div.empilha', { style: { gap: '2px', marginTop: '10px' } },
+      ...vazios.slice(0, 30).map((v) => h('div.linha.linha--entre', { style: { padding: '5px 0' } },
+        h('span.pequeno.crescer', { style: { minWidth: 0 } }, v.nome),
+        v.pareceLeituraTorta ? selo('leitura torta', 'atencao') : null))),
+    vazios.length > 30 && h('p.mini.muted', { style: { marginTop: '8px' } },
+      `e mais ${vazios.length - 30}.`));
 }
 
 function cardFamilia(f) {

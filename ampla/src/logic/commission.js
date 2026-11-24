@@ -269,7 +269,7 @@ export async function calcular(mes = monthKey(), { empresa } = {}) {
   /**
    * AS DEVOLUÇÕES DO MÊS, em lista própria.
    *
-   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   * "O Alberto fez uma venda mês passado e o cliente devolveu esse mês. Só que
    *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
    *  desse mês essas notas fiscais devolvidas."
    *

@@ -27,7 +27,7 @@ export async function hashFile(file) {
   return `${bytes.length.toString(36)}-${(h >>> 0).toString(36)}`;
 }
 
-/** 'Eduardo  SILVA ' -> 'eduardo silva' (para comparar nomes vindos de arquivos diferentes). */
+/** 'Bento  SILVA ' -> 'eduardo silva' (para comparar nomes vindos de arquivos diferentes). */
 export function normalize(str) {
   return String(str ?? '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')

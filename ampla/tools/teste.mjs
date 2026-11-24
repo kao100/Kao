@@ -1248,7 +1248,7 @@ console.log('\n▶ Frete cobrado dá o MESMO número na tabela e no cartão');
 console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero');
 {
   /**
-   * "Do Carlos Eduardo, tá aqui, custo zero, não tem custo nenhum. Queria
+   * "Do Antonio Bento, tá aqui, custo zero, não tem custo nenhum. Queria
    *  entender o porquê tá acontecendo isso. Porque não tá parametrizando os
    *  custos dele."
    *
@@ -1265,7 +1265,7 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
   for (const x of guardadas.nfs) await store.nfs.remover(x.id);
   for (const x of guardadas.itens) await store.nfItens.remover(x.id);
   for (const x of guardadas.fretes) await store.fretes.remover(x.id);
-  await store.vendedores.salvar({ id: 'vCE', nome: 'CARLOS EDUARDO APARECIDO' });
+  await store.vendedores.salvar({ id: 'vCE', nome: 'ANTONIO BENTO DA COSTA' });
 
   await store.nfs.salvar({
     id: 'nfce', numero: '4100', serie: '1', dataEmissao: '2026-10-10',
@@ -1286,24 +1286,24 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
   /**
    * O CASO DELA: a planilha escreve o SEGUNDO nome.
    *
-   * "O que eu acho que é do Eduardo é que as notas estão como Carlos Eduardo e
-   *  na planilha ele deve estar Eduardo."
+   * "O que eu acho que é do Bento é que as notas estão como Antonio Bento e
+   *  na planilha ele deve estar Bento."
    *
    * R$ 16.107,10 de entrega ficavam órfãos porque o app só olhava o primeiro
    * nome. O pedaço de nome vale desde que pertença a UM vendedor só.
    */
   await store.fretes.salvar({
     id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
-    valor: 700, vendedorNome: 'EDUARDO', mes: '2026-10',
+    valor: 700, vendedorNome: 'BENTO', mes: '2026-10',
   });
   const rE = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
   igual('o segundo nome acha o vendedor', rE.frete.custo.semVendedor, 0);
   igual('e o custo cai na linha certa',
-    rE.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO')?.custoReal, 700);
+    rE.frete.vendedores.find((v) => v.nome === 'ANTONIO BENTO DA COSTA')?.custoReal, 700);
   igual('a tela diz que ligou por pedaço de nome',
-    (rE.frete.custo.ligadosPorPedaco[0] || {}).escrito, 'EDUARDO');
+    (rE.frete.custo.ligadosPorPedaco[0] || {}).escrito, 'BENTO');
   igual('e a quem ligou',
-    (rE.frete.custo.ligadosPorPedaco[0] || {}).vendedor, 'CARLOS EDUARDO APARECIDO');
+    (rE.frete.custo.ligadosPorPedaco[0] || {}).vendedor, 'ANTONIO BENTO DA COSTA');
 
   /* partícula não identifica ninguém: "DO" não pode ligar a ninguém */
   await store.fretes.salvar({
@@ -1316,11 +1316,11 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
   /* escrito como no cadastro, bate — e some da lista */
   await store.fretes.salvar({
     id: 'frce', data: '2026-10-11', responsavel: 'TRANSPORTADORA',
-    valor: 700, vendedorNome: 'CARLOS EDUARDO APARECIDO', mes: '2026-10',
+    valor: 700, vendedorNome: 'ANTONIO BENTO DA COSTA', mes: '2026-10',
   });
   const r2 = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
   igual('com o nome do cadastro, a entrega acha o dono', r2.frete.custo.semVendedor, 0);
-  const linha = r2.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO');
+  const linha = r2.frete.vendedores.find((v) => v.nome === 'ANTONIO BENTO DA COSTA');
   igual('e o custo cai na linha dele', linha?.custoReal, 700);
   igual('com a sobra calculada', linha?.resultado, 300);
 
@@ -1368,7 +1368,7 @@ console.log('\n▶ Entrega sem dono aparece com nome, em vez de virar custo zero
     status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
   });
   const rF = await margemMod.margem({ de: '2026-10-01', ate: '2026-10-31' });
-  const ce = rF.frete.vendedores.find((v) => v.nome === 'CARLOS EDUARDO APARECIDO');
+  const ce = rF.frete.vendedores.find((v) => v.nome === 'ANTONIO BENTO DA COSTA');
   igual('o faturamento da linha conta TODAS as notas do vendedor', ce?.faturamento, 20000);
   ok('e o peso do frete é sobre esse faturamento',
     Math.abs(ce.peso - 5) < 0.01, String(ce?.peso));
@@ -2943,9 +2943,9 @@ console.log('\n▶ Os degraus do DRE são fixos; os grupos dentro deles são del
 console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
 {
   /**
-   * "O app tá com 341 pendências. Ele não tá identificando o Carlos Eduardo 8
+   * "O app tá com 341 pendências. Ele não tá identificando o Antonio Bento 8
    *  na nota fiscal. Eu não consigo linkar 341 coisas olhando uma por uma.
-   *  Quero que ele linke todas as variações do Carlos Eduardo, e do Francisco."
+   *  Quero que ele linke todas as variações do Antonio Bento, e do Rodrigo."
    *
    * O nome que vem no arquivo é tratado como DADO: nome novo, cadastro novo. É
    * a regra certa — ligar por semelhança é inventar vínculo. Só que cada
@@ -2967,12 +2967,12 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
   const vend = (id, nome, extra = {}) => store.vendedores.salvar({
     id, nome, apelidos: [], ativo: true, ...extra,
   });
-  await vend('v_ce', 'CARLOS EDUARDO', { confirmado: true });
-  await vend('v_ce8', 'CARLOS EDUARDO 8');
-  await vend('v_le', 'LUIZ EDUARDO', { naoVende: true, confirmado: true });
-  await vend('v_fr', 'FRANCISCO');
-  await vend('v_frs', 'FRANCISCO PEREIRA');
-  await vend('v_mv', 'MARIA VITORIA');
+  await vend('v_ce', 'ANTONIO BENTO', { confirmado: true });
+  await vend('v_ce8', 'ANTONIO BENTO 8');
+  await vend('v_le', 'PAULO BENTO', { naoVende: true, confirmado: true });
+  await vend('v_fr', 'RODRIGO');
+  await vend('v_frs', 'RODRIGO MONTEIRO');
+  await vend('v_mv', 'MARINA ALVES');
 
   let n = 0;
   /* a nota carrega o NOME, como vem no arquivo: é dele que o vínculo sai a cada
@@ -2988,12 +2988,12 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
       });
     }),
   );
-  await nota('v_ce', 'CARLOS EDUARDO', 10, 1000);
-  await nota('v_ce8', 'CARLOS EDUARDO 8', 5, 2000);
-  await nota('v_le', 'LUIZ EDUARDO', 3, 500);
-  await nota('v_fr', 'FRANCISCO', 2, 700);
-  await nota('v_frs', 'FRANCISCO PEREIRA', 4, 900);
-  await nota('v_mv', 'MARIA VITORIA', 1, 100);
+  await nota('v_ce', 'ANTONIO BENTO', 10, 1000);
+  await nota('v_ce8', 'ANTONIO BENTO 8', 5, 2000);
+  await nota('v_le', 'PAULO BENTO', 3, 500);
+  await nota('v_fr', 'RODRIGO', 2, 700);
+  await nota('v_frs', 'RODRIGO MONTEIRO', 4, 900);
+  await nota('v_mv', 'MARINA ALVES', 1, 100);
 
   const familias = await link.familiasDeNomes();
   igual('os nomes se juntam em duas pessoas, não em seis', familias.length, 2);
@@ -3001,15 +3001,15 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
   const eduardo = familias.find((f) => f.destino.id === 'v_ce');
   ok('quem fica é o cadastro confirmado com mais notas', !!eduardo, JSON.stringify(familias.map((f) => f.destino.nome)));
   igual('com os outros dois na família', eduardo.membros.map((m) => m.nome).sort(),
-    ['CARLOS EDUARDO 8', 'LUIZ EDUARDO']);
+    ['ANTONIO BENTO 8', 'PAULO BENTO']);
 
-  const ce8 = eduardo.membros.find((m) => m.nome === 'CARLOS EDUARDO 8');
+  const ce8 = eduardo.membros.find((m) => m.nome === 'ANTONIO BENTO 8');
   igual('o nome inteiro dentro do outro é quase certo', ce8.certeza, 'contido');
   igual('e traz as notas dele para ela ver', ce8.notas, 5);
 
-  const le = eduardo.membros.find((m) => m.nome === 'LUIZ EDUARDO');
+  const le = eduardo.membros.find((m) => m.nome === 'PAULO BENTO');
   igual('dividir só um pedaço NÃO é quase certo', le.certeza, 'pedaco');
-  igual('e o app diz qual pedaço se repete', le.pedacosComuns, ['eduardo']);
+  igual('e o app diz qual pedaço se repete', le.pedacosComuns, ['bento']);
   igual('mostrando também quem está marcado como "não vende"', le.naoVende, true);
 
   igual('a conta do que está em jogo é por família', eduardo.notasEmJogo, 8);
@@ -3022,7 +3022,7 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
   igual('as notas dos dois passam de uma vez', feito.notas, 8);
   const ce = await store.vendedores.obter('v_ce');
   igual('os nomes viram apelidos de quem ficou',
-    (ce.apelidos || []).sort(), ['CARLOS EDUARDO 8', 'LUIZ EDUARDO']);
+    (ce.apelidos || []).sort(), ['ANTONIO BENTO 8', 'PAULO BENTO']);
   igual('e os cadastros repetidos somem', await store.vendedores.obter('v_ce8'), undefined);
   igual('quem ela confirmou como vendedor volta a vender', ce.naoVende, false);
 
@@ -3035,12 +3035,12 @@ console.log('\n▶ Um nome, um vendedor: 341 pendências viram dois toques');
    * as mesmas trezentas e quarenta e uma de volta.
    */
   await importar('nfs', 'nfs-nome.csv', `Número da nota;Data;Razão social;Total;Situação;Vendedor
-7777;20/10/2026;CLIENTE NOVO;3.000,00;Autorizada;CARLOS EDUARDO 8`);
+7777;20/10/2026;CLIENTE NOVO;3.000,00;Autorizada;ANTONIO BENTO 8`);
   await link.recalcular();
   const nova = (await store.nfs.listar()).find((x) => x.numero === '7777');
   igual('a grafia antiga num arquivo novo já cai no cadastro certo', nova?.vendedorId, 'v_ce');
   igual('sem criar um cadastro repetido de novo',
-    (await store.vendedores.listar()).filter((v) => /EDUARDO/.test(v.nome)).length, 1);
+    (await store.vendedores.listar()).filter((v) => /BENTO/.test(v.nome)).length, 1);
 
   for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
   for (const x of await store.vendedores.listar()) await store.vendedores.remover(x.id);
@@ -3429,6 +3429,149 @@ console.log('\n▶ O total abre nas notas: quem é o "sem vendedor" e o que dá 
   for (const x of await store.pendencias.listar()) await store.pendencias.remover(x.id);
   for (const x of guardadas.nfs) await store.nfs.salvar(x);
   for (const x of guardadas.pendencias) await store.pendencias.salvar(x);
+  await link.recalcular();
+}
+
+console.log('\n▶ Coluna colada no PDF: um nome comprido não pode virar 139 vendedores');
+{
+  /**
+   * "Tá bugando principalmente quando eu ponho o relatório de comissão sobre
+   *  produto, porque tá criando um monte de vendedor."
+   *
+   * No relatório de comissão por produto dela, a coluna do VENDEDOR e a da
+   * QUANTIDADE não têm espaço branco entre si: o nome mais comprido
+   * ("RODRIGO MONTEIRO DA COSTA JUNIOR") vai até onde as quantidades de outras
+   * linhas já começaram. Medindo o documento inteiro, a cobertura entre as duas
+   * nunca cai a zero — o mínimo era 56 linhas de 899.
+   *
+   * O leitor procurava CORREDOR EM BRANCO. Sem corredor, as duas viravam uma
+   * coluna só e cada linha entregava "LUCAS PEREIRA 1.050,00" como nome de
+   * vendedor: 139 nomes diferentes, um por quantidade vendida, no relatório de
+   * um mês com SEIS vendedores.
+   *
+   * O que existe, e o app passou a procurar, é o VALE: um fundo muito mais
+   * baixo que os picos dos dois lados. Nenhuma coluna de verdade tem buraco no
+   * meio — texto centralizado faz barraca, alinhado à direita faz rampa. Só
+   * duas colunas encostadas fazem vale.
+   */
+  const linhas = [[[40, 'Produto'], [175, 'Vendedor'], [290, 'Quantidade'], [380, 'Valor total'], [460, 'Comissao']]];
+  /**
+   * A geometria é a do arquivo dela, e é ela que fecha o corredor: quem tem
+   * NOME CURTO vende em quantidade GRANDE (número largo, que começa cedo), e
+   * quem tem nome comprido vende pouco (número estreito, que começa tarde).
+   * Dentro de cada linha nada se toca; somando as linhas, não sobra uma faixa
+   * branca sequer entre as duas colunas.
+   */
+  for (let i = 0; i < 90; i += 1) {
+    linhas.push([[40, `PRODUTO ${i}`], [175, 'ANA LIMA'],
+      [290, '1.250.000,00'], [380, '1.000,00'], [460, '20,00']]);
+  }
+  for (let i = 0; i < 10; i += 1) {
+    linhas.push([[40, `PRODUTO L${i}`], [175, 'ROBERTO CARLOS DA SILVA JUNIOR'],
+      [325, '5,00'], [380, '2.000,00'], [460, '40,00']]);
+  }
+
+  const lido = await readFile(new File([pdfSimples(linhas)], 'comissao.pdf', { type: 'application/pdf' }));
+  const tabela = lido.planilhas[0].linhas;
+
+  igual('a tabela sai com as cinco colunas, não quatro', tabela[0].length, 5);
+  igual('o cabeçalho não vem grudado', tabela[0],
+    ['Produto', 'Vendedor', 'Quantidade', 'Valor total', 'Comissao']);
+
+  const curta = tabela.find((l) => l[1] === 'ANA LIMA');
+  ok('a linha do nome curto separa vendedor e quantidade', !!curta, JSON.stringify(tabela[1]));
+  igual('com a quantidade na coluna dela', curta[2], '1.250.000,00');
+
+  /* a linha que fechava o corredor é a que mais importa: ela não pode cair do
+     lado errado do corte */
+  const comprida = tabela.find((l) => l[1] === 'ROBERTO CARLOS DA SILVA JUNIOR');
+  ok('o nome comprido também fica inteiro na coluna dele', !!comprida,
+    JSON.stringify(tabela.filter((l) => /ROBERTO/.test(l.join(' '))).slice(0, 2)));
+  igual('e a quantidade dele não vai junto', comprida[2], '5,00');
+
+  ok('nenhuma célula fica com nome e número grudados',
+    !tabela.some((l) => l.some((c) => /[A-Z]\s+\d{1,3}(\.\d{3})*,\d{2}$/.test(String(c)))),
+    JSON.stringify(tabela.filter((l) => l.some((c) => /[A-Z]\s+\d+,\d{2}$/.test(String(c)))).slice(0, 2)));
+
+  /* e o que o app faria com isso: um vendedor por pessoa, não um por quantidade */
+  const nomes = new Set(tabela.slice(1).map((l) => l[1]));
+  igual('o relatório tem dois vendedores, e só dois', nomes.size, 2);
+}
+
+console.log('\n▶ Cadastro de vendedor sem nenhuma venda atrás pode ser apagado — e só ele');
+{
+  /**
+   * "Preciso que ele revise os vendedores também, porque tem um vendedor de um
+   *  real, vendedor sei lá Amazonas, e nenhum daquilo é venda."
+   *
+   * Eram nomes fabricados pelo leitor de PDF, que colava a coluna do vendedor
+   * na da quantidade. O leitor foi consertado, mas o cadastro que ele criou não
+   * some sozinho: reimportar o relatório tira as LINHAS, não o cadastro.
+   *
+   * O risco de limpar é apagar gente de verdade. Por isso a regra não é "o nome
+   * parece estranho" — é "não existe UMA nota, UM pedido, UM título, UMA linha
+   * de comissão atrás dele". Quem tem qualquer movimento não entra na lista, e
+   * a função recusa apagar mesmo recebendo o id.
+   */
+  const guardados = {
+    vendedores: await store.vendedores.listar(),
+    nfs: await store.nfs.listar(),
+    vp: await store.vendasProduto.listar(),
+  };
+  for (const x of guardados.vendedores) await store.vendedores.remover(x.id);
+  for (const x of guardados.nfs) await store.nfs.remover(x.id);
+  for (const x of guardados.vp) await store.vendasProduto.remover(x.id);
+
+  const vend = (id, nome, extra = {}) => store.vendedores.salvar({
+    id, nome, apelidos: [], ativo: true, ...extra,
+  });
+  await vend('vReal', 'LUCAS PEREIRA', { apelidos: ['LUCAS P'] });
+  await vend('vFantasma1', 'LUCAS PEREIRA 1.050,00');
+  await vend('vFantasma2', 'LUCAS PEREIRA 450,00');
+  await vend('vSemVenda', 'VENDEDOR NOVO SEM VENDA');
+  await vend('vComLinha', 'VENDEDOR COM LINHA DE PRODUTO');
+  await vend('vApelidado', 'LUCAS P');
+
+  await store.nfs.salvar({
+    id: 'nfsm_1', numero: '1', dataEmissao: '2027-05-10', mes: '2027-05', valorTotal: 1000,
+    clienteNome: 'CLIENTE', vendedorId: 'vReal', vendedorOrigem: 'manual',
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+  await store.vendasProduto.salvar({
+    id: 'vp_1', produtoId: 'p1', descricao: 'CIMENTO', data: '2027-05-10', mes: '2027-05',
+    vendedorId: 'vComLinha', quantidade: 1, valorTotal: 500, origemRelatorio: 'comissaoProduto',
+  });
+
+  const vazios = await link.vendedoresSemMovimento();
+  const nomes = vazios.map((v) => v.nome).sort();
+  igual('só entram os cadastros sem nada atrás', nomes,
+    ['LUCAS PEREIRA 1.050,00', 'LUCAS PEREIRA 450,00', 'VENDEDOR NOVO SEM VENDA']);
+  ok('quem tem nota não entra', !nomes.includes('LUCAS PEREIRA'), JSON.stringify(nomes));
+  ok('quem tem linha do relatório por produto também não',
+    !nomes.includes('VENDEDOR COM LINHA DE PRODUTO'), JSON.stringify(nomes));
+  ok('e apelido de alguém não é cadastro solto', !nomes.includes('LUCAS P'), JSON.stringify(nomes));
+
+  const tortos = vazios.filter((v) => v.pareceLeituraTorta).map((v) => v.nome).sort();
+  igual('o app reconhece a assinatura da coluna colada', tortos,
+    ['LUCAS PEREIRA 1.050,00', 'LUCAS PEREIRA 450,00']);
+  igual('e os põe na frente, que é por onde ela começa', vazios[0].pareceLeituraTorta, true);
+
+  /* apagar é dela, e só vale para quem está mesmo vazio */
+  const apagados = await link.removerVendedores(
+    ['vFantasma1', 'vFantasma2', 'vReal', 'vComLinha'], 'teste',
+  );
+  igual('apaga os vazios que ela mandou', apagados.sort(),
+    ['LUCAS PEREIRA 1.050,00', 'LUCAS PEREIRA 450,00']);
+  ok('e RECUSA apagar quem tem venda atrás, mesmo recebendo o id',
+    !!(await store.vendedores.obter('vReal')) && !!(await store.vendedores.obter('vComLinha')), '');
+  igual('a nota continua com dono', (await store.nfs.obter('nfsm_1')).vendedorId, 'vReal');
+
+  for (const x of await store.vendedores.listar()) await store.vendedores.remover(x.id);
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const x of await store.vendasProduto.listar()) await store.vendasProduto.remover(x.id);
+  for (const x of guardados.vendedores) await store.vendedores.salvar(x);
+  for (const x of guardados.nfs) await store.nfs.salvar(x);
+  for (const x of guardados.vp) await store.vendasProduto.salvar(x);
   await link.recalcular();
 }
 
@@ -4232,7 +4375,7 @@ console.log('\n▶ Contas a receber só com os "em aberto": o app avisa');
 console.log('\n▶ Devolução: tira do faturamento e abate a comissão de quem vendeu');
 {
   /**
-   * "O Guilherme fez uma venda mês passado e o cliente devolveu esse mês. Só que
+   * "O Alberto fez uma venda mês passado e o cliente devolveu esse mês. Só que
    *  eu já paguei a comissão do mês passado. Então eu preciso abater na comissão
    *  desse mês essas notas fiscais devolvidas."
    *
@@ -4807,12 +4950,12 @@ CAD02;PRODUTO UNIDADE TROCADA;280,00;25051000;10,00;-----;7,20`);
 console.log('\n▶ Mesmo vendedor com dois nomes: o app pergunta, não junta sozinho');
 {
   /**
-   * O relatório de comissão por venda traz "EDUARDO"; o de comissão por produto,
-   * "CARLOS EDUARDO APARECIDO DO NASCIMENTO". Juntar por semelhança é o que o
+   * O relatório de comissão por venda traz "BENTO"; o de comissão por produto,
+   * "ANTONIO BENTO DA COSTA FILHO". Juntar por semelhança é o que o
    * item 20 proíbe — então o app mostra o par e pergunta.
    */
-  const curto = await store.vendedores.salvar({ nome: 'EDUARDO', apelidos: [], ativo: true });
-  const longo = await store.vendedores.salvar({ nome: 'CARLOS EDUARDO APARECIDO DO NASCIMENTO', apelidos: [], ativo: true });
+  const curto = await store.vendedores.salvar({ nome: 'BENTO', apelidos: [], ativo: true });
+  const longo = await store.vendedores.salvar({ nome: 'ANTONIO BENTO DA COSTA FILHO', apelidos: [], ativo: true });
   const outro = await store.vendedores.salvar({ nome: 'ANALICE', apelidos: [], ativo: true });
   const ana = await store.vendedores.salvar({ nome: 'ANA', apelidos: [], ativo: true });
 
@@ -4833,7 +4976,7 @@ console.log('\n▶ Mesmo vendedor com dois nomes: o app pergunta, não junta soz
   const depois = await store.vendedores.listar();
   igual('o cadastro que saiu some', depois.filter((v) => v.id === longo.id).length, 0);
   ok('e o nome dele vira apelido do que ficou',
-    depois.find((v) => v.id === curto.id).apelidos.includes('CARLOS EDUARDO APARECIDO DO NASCIMENTO'), '');
+    depois.find((v) => v.id === curto.id).apelidos.includes('ANTONIO BENTO DA COSTA FILHO'), '');
 
   for (const v of [curto, outro, ana]) {
     const x = (await store.vendedores.listar()).find((y) => y.id === v.id);
@@ -5048,7 +5191,7 @@ console.log('\n▶ Custo do frete: o cobrado paga o pago?');
   /**
    * "Além do custo do material, tem o custo de frete também. Tanto com terceiro
    *  quanto com a minha frota própria. (…) É bom você considerar que a gente tem
-   *  esse custo, para às vezes pensar: ah, o Guilherme tem um frete, mas aí o
+   *  esse custo, para às vezes pensar: ah, o Alberto tem um frete, mas aí o
    *  frete também a gente tem custo."
    *
    * O custo da frota é FIXO e mensal: salário de motorista não é de uma entrega.
@@ -5100,14 +5243,14 @@ console.log('\n▶ Custo do frete: o cobrado paga o pago?');
    * só ordem de grandeza, sai de cena.
    */
   /* um vendedor com nome composto no cadastro, como no caso real */
-  await store.vendedores.salvar({ nome: 'Marcelo Santana', apelidos: [], ativo: true });
+  await store.vendedores.salvar({ nome: 'Lucas Pereira', apelidos: [], ativo: true });
   const FRV = 'Período;Nota fiscal ou pedido;Vendedor;Responsável pela entrega;Valor';
   await importar('fretes', 'frv.csv', `${FRV}
 MANHÃ;NF 9910;Alberto;Messias;135,00
 TARDE;PED 7001;Alberto;Elias;150,00
 MANHÃ;NOTA 9911;Beatriz;Moises;90,00
 TARDE;NF 9914;Alb;Elias;10,00
-MANHÃ;PED 7003;Marcelo;Geraldo;120,00
+MANHÃ;PED 7003;Lucas;Geraldo;120,00
 MANHÃ;PEDIDO No.7002;;Diego;200,00
 TARDE;NF 9912;Alberto;Val;0,00
 NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
@@ -5115,14 +5258,14 @@ NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
   const fv = await margemMod.frete({ de: '2026-12-01', ate: '2026-12-31' });
   igual('as oito entregas entraram', fv.custo.entregas, 8);
   igual('e o custo é a soma do que foi lançado', fv.custo.total, 705);
-  /* o formulário diz MARCELO, o cadastro diz MARCELO SANTANA: é a mesma pessoa */
-  const mar = fv.vendedores.find((v) => v.nome === 'Marcelo Santana');
+  /* o formulário diz LUCAS, o cadastro diz LUCAS PEREIRA: é a mesma pessoa */
+  const mar = fv.vendedores.find((v) => v.nome === 'Lucas Pereira');
   igual('o primeiro nome acha o vendedor de nome composto', (mar || {}).custoReal ?? 'não achou', 120);
   /* e ele entra na tabela mesmo sem ter cobrado frete em nota nenhuma */
   igual('quem tem custo de entrega e não cobrou frete aparece assim mesmo', (mar || {}).frete, 0);
   /**
    * O primeiro nome resolve, porque pertence a um vendedor só — é o caso real:
-   * o formulário diz MARCELO e o cadastro diz MARCELO SANTANA. "Alb" não é o
+   * o formulário diz LUCAS e o cadastro diz LUCAS PEREIRA. "Alb" não é o
    * primeiro nome de ninguém, então fica de fora em vez de ser adivinhado.
    */
   ok('primeiro nome parecido mas incompleto não vira vínculo',
@@ -5154,7 +5297,7 @@ NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
     (await store.fretes.listar()).filter((l) => l.mes === '2026-11').length, 4);
 
   // limpeza
-  for (const v of (await store.vendedores.listar()).filter((x) => x.nome === 'Marcelo Santana')) {
+  for (const v of (await store.vendedores.listar()).filter((x) => x.nome === 'Lucas Pereira')) {
     await store.vendedores.remover(v.id);
   }
   for (const l of (await store.fretes.listar())) await store.fretes.remover(l.id);
@@ -5168,7 +5311,7 @@ NOITE;NF 9913;Beatriz;Val;`, { mesReferencia: '2026-12-01' });
 console.log('\n▶ Quem emite nota não é, por isso, vendedor');
 {
   /**
-   * "A Maria Victoria não é vendedora. Às vezes ela emite algumas notas, mas não
+   * "A Marina Alves não é vendedora. Às vezes ela emite algumas notas, mas não
    *  é vendedora. Deve ter emitido uma nota e acabou saindo o nome dela. Por
    *  isso precisa ter a possibilidade de vincular essa nota para o vendedor
    *  correto."
@@ -5177,13 +5320,13 @@ console.log('\n▶ Quem emite nota não é, por isso, vendedor');
    * pessoa para outra por conta própria é exatamente o que ele não pode fazer.
    * Ele deixa a pendência com o botão de dizer de quem era.
    */
-  const emissora = await store.vendedores.salvar({ nome: 'Vitoria Emissora', ativo: true });
+  const emissora = await store.vendedores.salvar({ nome: 'Marina Emissora', ativo: true });
   const FX = 'Número da Nota;Data;Razão Social;CPF/CNPJ;Total;Situação;Natureza da operação';
   await importar('nfs', 'emis.csv', `${FX}
 9950;10/10/2026;Cliente da Obra Ltda;40404040000140;7.000,00;Autorizada;Venda de mercadoria`);
   /* o nome dela veio no arquivo, como acontece de verdade quando ela emite a nota */
   const nf = (await store.nfs.listar()).find((x) => x.numero === '9950');
-  await store.nfs.salvar({ ...nf, vendedorNome: 'Vitoria Emissora' });
+  await store.nfs.salvar({ ...nf, vendedorNome: 'Marina Emissora' });
   await link.recalcular();
 
   /**
@@ -5791,7 +5934,7 @@ console.log('\n▶ Três meses de frete também são três meses');
    */
   const PL = 'Motorista;Descrição;Valor;Vendedor';
   const planilha = (mes, valor) => importar('fretes', `fre-${mes || 'sem'}.csv`,
-    `${PL}\nVUC TESTE;ENTREGA TESTE MES;${valor};MARCELO`,
+    `${PL}\nVUC TESTE;ENTREGA TESTE MES;${valor};LUCAS`,
     mes ? { mesReferencia: `${mes}-01` } : {});
 
   const meus = async () => (await store.fretes.listar())

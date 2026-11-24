@@ -65,7 +65,7 @@ export async function telaAjustes() {
           'Nenhum vendedor ainda. Eles aparecem sozinhos quando você manda o relatório de '
           + 'comissão por venda — ou cadastre aqui, em "+ Novo", se quiser adiantar.')),
       aviso('Apelidos servem para o mesmo vendedor aparecer com nomes diferentes em arquivos diferentes '
-        + '(ex.: "Eduardo" e "EDU"). Sem apelido, o app trata como duas pessoas — ele não junta por semelhança.', 'info')),
+        + '(ex.: "Bento" e "EDU"). Sem apelido, o app trata como duas pessoas — ele não junta por semelhança.', 'info')),
 
     /**
      * As contas moram no Caixa, que é onde o saldo é informado. Ter cadastro de
@@ -372,7 +372,7 @@ async function editarVendedor(vendedor) {
         label: 'Como aparece nos arquivos',
         tipo: 'texto',
         valor: (vendedor?.apelidos || []).join(', '),
-        ajuda: 'Separe por vírgula. Ex.: EDU, Eduardo S.',
+        ajuda: 'Separe por vírgula. Ex.: EDU, Bento S.',
       },
       { chave: 'meta', label: 'Meta mensal', tipo: 'dinheiro', valor: vendedor?.meta ?? '' },
       {

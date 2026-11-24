@@ -3,7 +3,7 @@
  *
  * "No começo do ano eu passei toda a minha carteira para alguns vendedores e
  *  eles já tinham um faturamento deles e a carteira deles, e isso não deu certo.
- *  Eu vendia 800 mil, só eu. O Guilherme vendia 500, o Eduardo 500. Agora eles
+ *  Eu vendia 800 mil, só eu. O Alberto vendia 500, o Bento 500. Agora eles
  *  não estão atingindo nada, nem com um deles e nem com o meu. Então o que eu
  *  preciso saber? Quais são os clientes que compram, estão orçando, não estão
  *  fechando?"

@@ -533,7 +533,114 @@ function descobrirColunas(linhas) {
   // o que ficou de fora do corredor (a linha torta) entra na coluna mais perto
   faixas[0].inicio = Math.min(faixas[0].inicio, inicio);
   faixas[faixas.length - 1].fim = Math.max(faixas[faixas.length - 1].fim, fim);
-  return faixas;
+  return partirNosVales(faixas, corpo, cobertura, inicio, passo);
+}
+
+/**
+ * QUANDO NÃO HÁ CORREDOR NENHUM, MAS HÁ VALE.
+ *
+ * "Tá bugando principalmente quando eu ponho o relatório de comissão sobre
+ *  produto, porque tá criando um monte de vendedor."
+ *
+ * No relatório de comissão por produto a coluna do vendedor e a da quantidade
+ * NÃO têm espaço branco entre elas: "RODRIGO MONTEIRO DA COSTA JUNIOR" vai até
+ * x=401 e as quantidades de outras linhas começam antes disso. Medindo o
+ * documento inteiro, a cobertura entre as duas nunca cai a zero — o mínimo é 56
+ * linhas de 899. O corredor não existe, então as duas viravam uma coluna só, e
+ * cada linha entregava "LUCAS PEREIRA 1.050,00" como nome de vendedor. Cento
+ * e trinta e nove nomes diferentes, um por quantidade vendida.
+ *
+ * Mas o VALE existe, e é fundo: 56 entre um pico de 823 (o nome) e outro de 449
+ * (a quantidade). Nenhuma coluna de verdade tem um buraco desses no meio —
+ * texto centralizado faz uma barraca, texto alinhado à direita faz uma rampa.
+ * Só duas colunas encostadas fazem vale.
+ *
+ * O app não sai cortando por conta própria: ele só procura vale quando a conta
+ * não fecha. Quantas colunas a tabela tem é a própria tabela que diz — é a
+ * quantidade de pedaços de texto que a maioria das linhas tem. Enquanto os
+ * corredores acharem menos que isso, falta divisa, e ela está no vale mais
+ * fundo. Achando o número certo, ele para.
+ */
+function partirNosVales(faixas, corpo, cobertura, inicio, passo) {
+  const alvo = alvoDeColunas(corpo);
+  let atual = faixas;
+  while (alvo && atual.length < alvo) {
+    const corte = melhorVale(atual, cobertura, inicio, passo);
+    if (!corte) break;
+    const f = atual[corte.faixa];
+    atual = [
+      ...atual.slice(0, corte.faixa),
+      { inicio: f.inicio, fim: corte.x },
+      { inicio: corte.x, fim: f.fim },
+      ...atual.slice(corte.faixa + 1),
+    ];
+  }
+  return atual;
+}
+
+/**
+ * Quantas colunas a tabela tem, segundo ela mesma: o número de pedaços de texto
+ * que a maioria das linhas traz. Só vale quando é maioria larga — abaixo disso
+ * é ruído de relatório com resumo em cima e totais embaixo, e aí o app não
+ * inventa divisa nenhuma.
+ */
+function alvoDeColunas(corpo) {
+  const contagem = new Map();
+  for (const l of corpo) contagem.set(l.celulas.length, (contagem.get(l.celulas.length) || 0) + 1);
+  let alvo = 0;
+  let maior = 0;
+  for (const [n, quantas] of contagem) {
+    if (quantas > maior || (quantas === maior && n > alvo)) { maior = quantas; alvo = n; }
+  }
+  return maior >= corpo.length * 0.3 ? alvo : 0;
+}
+
+/** O vale mais fundo entre todas as faixas, ou nada quando nenhum é fundo o bastante. */
+function melhorVale(faixas, cobertura, inicio, passo) {
+  let melhor = null;
+  faixas.forEach((f, indice) => {
+    const de = Math.round((f.inicio - inicio) / passo);
+    const ate = Math.round((f.fim - inicio) / passo);
+    /* faixa curta demais não tem meio: cortar ali é partir uma palavra */
+    if (ate - de < 12) return;
+    /* a margem protege as bordas da própria faixa, onde a cobertura sempre cai */
+    const margem = Math.max(3, Math.round((ate - de) * 0.15));
+    let fundo = Infinity;
+    for (let k = de + margem; k <= ate - margem; k += 1) {
+      if (cobertura[k] < fundo) fundo = cobertura[k];
+    }
+    if (!Number.isFinite(fundo)) return;
+    /**
+     * O corte vai no MEIO do vale, não na primeira posição mais baixa.
+     *
+     * O fundo costuma ser um platô largo — todo o espaço entre o fim dos nomes
+     * curtos e o começo dos números. Cortando na beirada desse platô, o nome
+     * comprido (que é justamente quem chega mais perto da coluna seguinte) cai
+     * do lado errado e continua colado. No meio, os dois centros caem cada um
+     * no seu lado, que é o que aplicarGrade() olha.
+     */
+    let primeiro = -1;
+    let ultimo = -1;
+    for (let k = de + margem; k <= ate - margem; k += 1) {
+      if (cobertura[k] !== fundo) continue;
+      if (primeiro < 0) primeiro = k;
+      ultimo = k;
+    }
+    const onde = Math.round((primeiro + ultimo) / 2);
+    if (onde < 0) return;
+    let picoEsq = 0;
+    for (let k = de; k < onde; k += 1) picoEsq = Math.max(picoEsq, cobertura[k]);
+    let picoDir = 0;
+    for (let k = onde; k <= ate; k += 1) picoDir = Math.max(picoDir, cobertura[k]);
+    const pico = Math.min(picoEsq, picoDir);
+    /* um vale raso é variação de largura de texto dentro da MESMA coluna */
+    if (!pico || fundo >= pico * 0.35) return;
+    const profundidade = fundo / pico;
+    if (!melhor || profundidade < melhor.profundidade) {
+      melhor = { faixa: indice, x: inicio + onde * passo, profundidade };
+    }
+  });
+  return melhor;
 }
 
 /**
@@ -603,8 +710,8 @@ function montarMatriz(linhasVisuais) {
    * TABELA QUE MUDA DE LUGAR A CADA PÁGINA.
    *
    * Alguns relatórios dimensionam as colunas pelo conteúdo DAQUELA página: numa
-   * folha em que o vendedor se chama "MARCELO SANTANA" a coluna é estreita; na
-   * seguinte, "FRANCISCO CORREIA DA SILVA JUNIOR" empurra tudo 70 pontos para a
+   * folha em que o vendedor se chama "LUCAS PEREIRA" a coluna é estreita; na
+   * seguinte, "RODRIGO MONTEIRO DA COSTA JUNIOR" empurra tudo 70 pontos para a
    * direita. Com uma grade global só, a quantidade de uma página cai dentro da
    * coluna de valor da outra — foi o que colou "8.213,00 51.266,59" numa célula
    * só, em 852 das 1.177 linhas do relatório de comissão por produto.
@@ -663,7 +770,24 @@ function celulasColadas(matriz) {
       if (pedacos.length < 2) continue;
       let completos = 0;
       for (const p of pedacos) if (NUMERO_COMPLETO.test(p)) completos += 1;
-      if (completos >= 2) total += 1;
+      if (completos >= 2) { total += 1; continue; }
+      /**
+       * NEM TODA COLA É DE DOIS NÚMEROS.
+       *
+       * A medida só conhecia a assinatura "1.234,56 7.890,12" e por isso não
+       * via a cola que mais doeu: "LUCAS PEREIRA 1.050,00", a coluna do
+       * vendedor grudada na da quantidade. O app montava a tabela certa pela
+       * grade de página, comparava com a errada da grade global, media zero nas
+       * duas e ficava com a errada — e cada quantidade virava um vendedor novo.
+       *
+       * Texto seguido de um valor formatado no FIM da célula é a mesma coisa:
+       * nome numa coluna, número na outra. Um produto que termine em medida
+       * ("TABUA PINUS 30CM C/ 3,00 M") não cai aqui, porque o número não é a
+       * última palavra — e se caísse, cairia igual nas duas grades, que é o que
+       * importa numa medida feita para comparar as duas.
+       */
+      const ultimo = pedacos[pedacos.length - 1];
+      if (completos === 1 && NUMERO_COMPLETO.test(ultimo)) total += 1;
     }
   }
   return total;
@@ -714,18 +838,43 @@ function gradePorPagina(linhasVisuais, quantasGlobais) {
 function gradePelasLinhasInteiras(linhas, quantas) {
   const inteiras = linhas.filter((l) => l.celulas.length === quantas);
   if (inteiras.length < 3) return null;
-  const faixas = Array.from({ length: quantas }, () => ({ inicio: Infinity, fim: -Infinity }));
+
+  /**
+   * A GRADE SAI DOS CENTROS, NÃO DAS BORDAS.
+   *
+   * A primeira versão media a borda de cada célula e desistia quando duas
+   * faixas se encavalavam. Mas encavalar é o normal numa tabela apertada: na
+   * página em que o vendedor se chama "RODRIGO MONTEIRO DA COSTA JUNIOR" o
+   * nome termina depois de onde a quantidade de outra linha começa. A função
+   * devolvia null justamente nas páginas que mais precisavam dela, e as duas
+   * colunas voltavam coladas — "LUCAS PEREIRA 1.050,00" como nome de
+   * vendedor, um nome novo por quantidade vendida.
+   *
+   * O que não se encavala é o CENTRO: cada coluna centraliza o texto dela em
+   * torno do próprio eixo. E é pelo centro que aplicarGrade() decide em que
+   * coluna a célula cai — então a divisa certa é o meio do caminho entre o
+   * centro mais à direita de uma coluna e o mais à esquerda da seguinte.
+   */
+  const centros = Array.from({ length: quantas }, () => ({ min: Infinity, max: -Infinity }));
+  let menorX = Infinity;
+  let maiorX = -Infinity;
   for (const l of inteiras) {
     l.celulas.forEach((c, i) => {
-      faixas[i].inicio = Math.min(faixas[i].inicio, c.x);
-      faixas[i].fim = Math.max(faixas[i].fim, c.x + c.largura);
+      const meio = c.x + c.largura / 2;
+      centros[i].min = Math.min(centros[i].min, meio);
+      centros[i].max = Math.max(centros[i].max, meio);
+      menorX = Math.min(menorX, c.x);
+      maiorX = Math.max(maiorX, c.x + c.largura);
     });
   }
-  // faixas que se encavalam não são colunas: nesse caso não há o que aproveitar
-  for (let i = 1; i < faixas.length; i += 1) {
-    if (faixas[i].inicio <= faixas[i - 1].fim) return null;
+  /* centros que se misturam não são duas colunas, são uma só lida torto */
+  for (let i = 1; i < quantas; i += 1) {
+    if (centros[i].min <= centros[i - 1].max) return null;
   }
-  return faixas;
+  return centros.map((c, i) => ({
+    inicio: i === 0 ? menorX : (centros[i - 1].max + c.min) / 2,
+    fim: i === quantas - 1 ? maiorX : (c.max + centros[i + 1].min) / 2,
+  }));
 }
 
 /** Os pedaços de uma célula, de cima para baixo, colados na ordem certa. */
