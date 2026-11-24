@@ -1822,6 +1822,97 @@ export async function vendedoresSemMovimento() {
       || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+/**
+ * CADASTRO DE VENDEDOR QUE NÃO É GENTE.
+ *
+ * "Quero que tire a quantidade de números aleatórios que tem na aba vendedores
+ *  como se eles fossem vendedores."
+ *
+ * O leitor de PDF colava a coluna do vendedor na da quantidade, e de jeitos
+ * diferentes em páginas diferentes do mesmo arquivo: numas o nome saía com o
+ * número atrás ("NOME 1.050,00"), noutras sobrava só o número ("3.378,00").
+ * Os dois viraram cadastro de vendedor.
+ *
+ * O leitor já foi consertado, mas o cadastro que ele criou não some sozinho —
+ * e esses ainda têm as LINHAS do relatório velho penduradas, então não entram
+ * na lista de "sem movimento".
+ *
+ * A regra aqui não é "o nome parece estranho": é nome SEM UMA LETRA sequer, ou
+ * nome com um valor formatado colado no fim. Nenhuma pessoa se chama assim.
+ * Um número inteiro no fim não conta — "ANTONIO BENTO 8" é grafia de verdade
+ * que ela mandou juntar, não lixo de leitura.
+ */
+export function pareceNomeDeLeituraTorta(nome) {
+  const t = String(nome ?? '').trim();
+  if (!t) return true;
+  if (!/\p{L}/u.test(t)) return true;
+  return /\s\d{1,3}(\.\d{3})*,\d{2}$/.test(t) || /\s\d+,\d{2}$/.test(t);
+}
+
+/**
+ * Os cadastros que não são gente, com o que sairia junto de cada um.
+ *
+ * As linhas de relatório (comissão por produto, produtos vendidos) saem com
+ * eles: vieram da mesma leitura torta e reimportar o arquivo recria as certas.
+ * Nota, pedido, título e item de nota NÃO — se um desses aparecer aqui, é outro
+ * problema, e apagar seria sumir com dinheiro sem dizer.
+ */
+export async function vendedoresDeLeituraTorta() {
+  const [vendedores, nfs, pedidos, titulos, itens, produtoVendido, comissoes] = await Promise.all([
+    store.vendedores.listar(), store.nfs.listar(), store.pedidos.listar(), store.receber.listar(),
+    store.nfItens.listar(), store.vendasProduto.listar(), store.comissoesRelatorio.listar(),
+  ]);
+  const contar = (lista, id) => lista.filter((x) => x.vendedorId === id).length;
+
+  return vendedores
+    .filter((v) => pareceNomeDeLeituraTorta(v.nome))
+    .map((v) => {
+      const intocaveis = contar(nfs, v.id) + contar(pedidos, v.id)
+        + contar(titulos, v.id) + contar(itens, v.id);
+      return {
+        id: v.id,
+        nome: v.nome,
+        linhasDeRelatorio: contar(produtoVendido, v.id) + contar(comissoes, v.id),
+        /* nota, pedido, título ou item: o app não apaga, e diz por quê */
+        movimentoDeVerdade: intocaveis,
+        seguro: intocaveis === 0,
+      };
+    })
+    /* os que podem sair vêm primeiro: é o botão que ela vai apertar */
+    .sort((a, b) => Number(b.seguro) - Number(a.seguro) || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Apaga os cadastros de leitura torta e as linhas de relatório que vieram com eles. */
+export async function limparLeituraTorta(ids, motivo) {
+  const porId = new Map((await vendedoresDeLeituraTorta()).map((v) => [v.id, v]));
+  const apagados = [];
+  let linhas = 0;
+
+  for (const id of ids) {
+    const alvo = porId.get(id);
+    /* recusa quem tem nota, pedido, título ou item: ali tem dinheiro atrás */
+    if (!alvo || !alvo.seguro) continue;
+
+    for (const repo of [store.vendasProduto, store.comissoesRelatorio]) {
+      const dele = (await repo.listar()).filter((x) => x.vendedorId === id);
+      for (const x of dele) await repo.remover(x.id);
+      linhas += dele.length;
+    }
+    await store.vendedores.remover(id);
+    apagados.push(alvo.nome);
+  }
+
+  if (apagados.length) {
+    await store.registrar('vendedores_removidos', {
+      alvo: apagados.slice(0, 8).join(', '),
+      motivo: motivo || `${apagados.length} cadastro(s) que não são pessoas, `
+        + `${linhas} linha(s) de relatório junto`,
+    });
+    await recalcular();
+  }
+  return { apagados, linhas };
+}
+
 /** Apaga os cadastros que ela confirmou estarem vazios. */
 export async function removerVendedores(ids, motivo) {
   const semMovimento = new Set((await vendedoresSemMovimento()).map((v) => v.id));

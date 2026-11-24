@@ -7,7 +7,7 @@ import { h } from '../../core/dom.js';
 import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as db from '../../core/db.js';
-import { recalcular } from '../../logic/link.js';
+import { recalcular, vendedoresDeLeituraTorta, limparLeituraTorta } from '../../logic/link.js';
 import { VERSAO } from '../../core/versao.js';
 import { definirTitulo, atualizarAlertas } from '../shell.js';
 import { card, secao, botao, aviso, selo } from '../components/ui.js';
@@ -21,9 +21,10 @@ import { download } from '../../core/util.js';
 
 export async function telaAjustes() {
   await ligarNuvem();
-  const [cfg, vendedores, contas, auditoria, nuvemEstado] = await Promise.all([
+  const [cfg, vendedores, contas, auditoria, nuvemEstado, tortos] = await Promise.all([
     store.config(), store.vendedores.listar(), store.contas.listar(), store.auditoria.listar(),
     nuvem.estado().catch((e) => ({ ligado: false, erro: e.message })),
+    vendedoresDeLeituraTorta(),
   ]);
   definirTitulo('Ajustes');
 
@@ -45,6 +46,7 @@ export async function telaAjustes() {
             botao('Editar', { pequeno: true, onClick: () => editarMetaPadrao(cfg) })))))),
 
     secao('Vendedores', botao('+ Novo', { pequeno: true, onClick: () => editarVendedor(null) }),
+      tortos.length > 0 && cardLeituraTorta(tortos),
       card(null, null, vendedores.length
         ? h('div.lista', ...vendedores.map((v) => h('div.item',
           h('div.item__corpo',
@@ -359,6 +361,75 @@ async function editarUsuario(cfg) {
   await store.salvarConfig({ usuario: r.usuario });
   ok('Nome salvo.');
   refresh();
+}
+
+/**
+ * OS CADASTROS QUE NÃO SÃO PESSOAS.
+ *
+ * "Quero que tire a quantidade de números aleatórios que tem na aba vendedores
+ *  como se eles fossem vendedores, e ajuste só pra aqueles vendedores que eu
+ *  passei."
+ *
+ * O leitor de PDF colava a coluna do vendedor na da quantidade, e de jeitos
+ * diferentes em páginas diferentes do mesmo arquivo: numas sobrava o nome com o
+ * número atrás, noutras só o número. O leitor já foi consertado, mas o cadastro
+ * que ele criou não some sozinho, e estes ainda carregam as linhas do relatório
+ * velho — por isso não aparecem na lista de "sem movimento".
+ *
+ * O card vive AQUI, na lista de vendedores, que é onde ela vê o problema. E diz
+ * o que sai junto antes de sair: as linhas de relatório vão embora com eles,
+ * porque vieram da mesma leitura torta; nota, pedido e título nunca.
+ */
+function cardLeituraTorta(tortos) {
+  const seguros = tortos.filter((v) => v.seguro);
+  const presos = tortos.filter((v) => !v.seguro);
+  const linhas = seguros.reduce((a, v) => a + v.linhasDeRelatorio, 0);
+
+  const limpar = async () => {
+    const sim = await confirmar({
+      titulo: `Apagar ${seguros.length} cadastro(s)?`,
+      texto: `${seguros.slice(0, 12).map((v) => v.nome).join('\n')}`
+        + (seguros.length > 12 ? `\n… e mais ${seguros.length - 12}` : '')
+        + (linhas
+          ? `\n\nSaem junto ${linhas} linha(s) do relatório de comissão por produto que `
+            + 'estavam no nome deles — elas vieram da mesma leitura errada, e voltam certas '
+            + 'quando você reenviar o relatório.'
+          : '')
+        + '\n\nNenhuma nota fiscal, pedido ou título é tocado. O faturamento não muda.',
+      confirmar: 'Apagar',
+      perigo: true,
+    });
+    if (!sim) return;
+    const r = await limparLeituraTorta(seguros.map((v) => v.id), 'cadastro que não é pessoa');
+    await atualizarAlertas();
+    ok(`${r.apagados.length} cadastro(s) apagado(s)`
+      + (r.linhas ? ` · ${r.linhas} linha(s) de relatório` : '') + '.');
+    refresh();
+  };
+
+  return card(`${tortos.length} cadastro(s) que não são pessoas`,
+    seguros.length > 0
+      ? botao('Apagar todos', { tipo: 'primario', pequeno: true, onClick: limpar })
+      : null,
+    h('p.pequeno.muted', { style: { marginBottom: '10px' } },
+      'São nomes fabricados pelo leitor de PDF, que grudava a coluna do vendedor na da '
+      + 'quantidade: ou o nome com o valor atrás, ou só o valor. O leitor já foi consertado — '
+      + 'isto aqui é a limpeza do que ele deixou.'),
+    linhas > 0 && aviso(`Saem junto ${linhas} linha(s) do relatório de comissão por produto `
+      + 'que estavam no nome deles. Elas vieram da mesma leitura errada. Reenvie o relatório '
+      + 'depois de apagar: as linhas voltam, nos vendedores certos.', 'atencao'),
+    h('div.empilha', { style: { gap: '2px' } },
+      ...tortos.slice(0, 40).map((v) => h('div.linha.linha--entre', { style: { padding: '5px 0' } },
+        h('span.pequeno.crescer', { style: { minWidth: 0 } }, v.nome),
+        v.linhasDeRelatorio
+          ? h('span.mini.muted', `${v.linhasDeRelatorio} linha(s)`)
+          : null,
+        v.seguro ? null : selo('tem venda atrás', 'ruim')))),
+    tortos.length > 40 && h('p.mini.muted', { style: { marginTop: '8px' } },
+      `e mais ${tortos.length - 40}.`),
+    presos.length > 0 && h('p.mini.muted', { style: { marginTop: '8px' } },
+      `${presos.length} deles têm nota, pedido ou título atrás e NÃO serão apagados — `
+      + 'ali tem dinheiro, e some junto se o app apagar por conta própria.'));
 }
 
 async function editarVendedor(vendedor) {

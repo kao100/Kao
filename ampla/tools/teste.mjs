@@ -3608,6 +3608,99 @@ console.log('\n▶ Cadastro de vendedor sem nenhuma venda atrás pode ser apagad
   await link.recalcular();
 }
 
+console.log('\n▶ Número na lista de vendedores não é pessoa, e sai de lá');
+{
+  /**
+   * "Quero que tire a quantidade de números aleatórios que tem na aba
+   *  vendedores como se eles fossem vendedores, e ajuste só pra aqueles
+   *  vendedores que eu passei."
+   *
+   * O leitor de PDF colava a coluna do vendedor na da quantidade, e de jeitos
+   * diferentes em páginas diferentes do MESMO arquivo: numas sobrava o nome com
+   * o número atrás, noutras só o número. Os dois viraram cadastro.
+   *
+   * O leitor foi consertado, mas o cadastro não some sozinho — e estes ainda
+   * carregam as LINHAS do relatório velho, então não entram na lista de "sem
+   * movimento". Precisavam da própria regra: nome sem UMA letra, ou nome com
+   * valor formatado colado no fim.
+   */
+  igual('nome sem uma letra sequer não é pessoa',
+    ['1.050,00', '3.378,00', '65652.14', '450,00'].map(link.pareceNomeDeLeituraTorta),
+    [true, true, true, true]);
+  igual('nome com valor colado no fim também não',
+    link.pareceNomeDeLeituraTorta('LUCAS PEREIRA 1.050,00'), true);
+  igual('gente de verdade fica', ['LUCAS PEREIRA', 'ANTONIO BENTO DA COSTA FILHO']
+    .map(link.pareceNomeDeLeituraTorta), [false, false]);
+  igual('e número inteiro no fim NÃO é lixo: é grafia que ela mandou juntar',
+    link.pareceNomeDeLeituraTorta('ANTONIO BENTO 8'), false);
+
+  const guardados = {
+    vendedores: await store.vendedores.listar(),
+    nfs: await store.nfs.listar(),
+    vp: await store.vendasProduto.listar(),
+  };
+  for (const x of guardados.vendedores) await store.vendedores.remover(x.id);
+  for (const x of guardados.nfs) await store.nfs.remover(x.id);
+  for (const x of guardados.vp) await store.vendasProduto.remover(x.id);
+
+  const vend = (id, nome) => store.vendedores.salvar({ id, nome, apelidos: [], ativo: true });
+  await vend('vOk', 'LUCAS PEREIRA');
+  await vend('vNum1', '1.050,00');
+  await vend('vNum2', '450,00');
+  await vend('vColado', 'LUCAS PEREIRA 3.378,00');
+  await vend('vComNota', '999,00');
+
+  /* os de leitura torta carregam linhas do relatório, e é por isso que a outra
+     lista (sem movimento) não os pegava */
+  for (const [i, dono] of [['a', 'vNum1'], ['b', 'vNum1'], ['c', 'vColado']]) {
+    await store.vendasProduto.salvar({
+      id: `vpt_${i}`, produtoId: `p${i}`, descricao: 'CIMENTO', data: '2027-06-10', mes: '2027-06',
+      vendedorId: dono, quantidade: 1, valorTotal: 100, origemRelatorio: 'comissaoProduto',
+    });
+  }
+  /* e um com NOTA atrás: tem dinheiro, não pode ser apagado */
+  await store.nfs.salvar({
+    id: 'nft_1', numero: '1', dataEmissao: '2027-06-10', mes: '2027-06', valorTotal: 5000,
+    clienteNome: 'CLIENTE', vendedorId: 'vComNota', vendedorOrigem: 'manual',
+    status: 'autorizada', operacao: 'saida', devolucao: false, devolucaoDeCompra: false,
+  });
+
+  const tortos = await link.vendedoresDeLeituraTorta();
+  igual('a pessoa de verdade não entra na lista',
+    tortos.map((v) => v.nome).includes('LUCAS PEREIRA'), false);
+  igual('os quatro que não são gente entram', tortos.length, 4);
+  igual('os que podem sair vêm primeiro', tortos[0].seguro, true);
+
+  const comNota = tortos.find((v) => v.nome === '999,00');
+  igual('quem tem nota atrás é marcado como preso', comNota.seguro, false);
+  igual('dizendo quanto movimento de verdade tem', comNota.movimentoDeVerdade, 1);
+
+  const num1 = tortos.find((v) => v.nome === '1.050,00');
+  igual('e a tela sabe quantas linhas de relatório saem junto', num1.linhasDeRelatorio, 2);
+
+  /* limpar: leva as linhas de relatório, recusa quem tem nota */
+  const r = await link.limparLeituraTorta(
+    ['vNum1', 'vNum2', 'vColado', 'vComNota'], 'teste',
+  );
+  igual('apaga os três que podiam sair', r.apagados.sort(),
+    ['1.050,00', '450,00', 'LUCAS PEREIRA 3.378,00']);
+  igual('com as linhas de relatório que estavam no nome deles', r.linhas, 3);
+  ok('e RECUSA o que tem nota atrás, mesmo recebendo o id',
+    !!(await store.vendedores.obter('vComNota')), '');
+  igual('a nota continua lá, intacta', (await store.nfs.obter('nft_1')).valorTotal, 5000);
+  igual('a pessoa de verdade continua no cadastro',
+    (await store.vendedores.obter('vOk')).nome, 'LUCAS PEREIRA');
+  igual('e não sobrou linha órfã do relatório', (await store.vendasProduto.listar()).length, 0);
+
+  for (const x of await store.vendedores.listar()) await store.vendedores.remover(x.id);
+  for (const x of await store.nfs.listar()) await store.nfs.remover(x.id);
+  for (const x of await store.vendasProduto.listar()) await store.vendasProduto.remover(x.id);
+  for (const x of guardados.vendedores) await store.vendedores.salvar(x);
+  for (const x of guardados.nfs) await store.nfs.salvar(x);
+  for (const x of guardados.vp) await store.vendasProduto.salvar(x);
+  await link.recalcular();
+}
+
 console.log('\n▶ Pasta do mês');
 {
   const p = await dossie.pasta('2026-09');
