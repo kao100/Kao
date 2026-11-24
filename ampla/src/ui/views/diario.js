@@ -13,6 +13,7 @@ import * as diario from '../../logic/diario.js';
 import * as quotes from '../../logic/quotes.js';
 import * as store from '../../core/store.js';
 import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { filtroAvancado } from '../components/filtro.js';
 import { definirTitulo } from '../shell.js';
 import { kpi, card, botao, aviso, vazio, progresso, chips } from '../components/ui.js';
@@ -37,9 +38,10 @@ export async function telaDiario({ query }) {
   const data = filtro ? filtro.ate : (query.d || today());
   const de = filtro ? filtro.de : data;
 
-  const [r, vendedores] = await Promise.all([
+  const [r, vendedores, empresas] = await Promise.all([
     diario.relatorio(data, de),
     store.vendedores.listar(),
+    todasAsEmpresas(),
   ]);
   const recados = diario.recados(r);
   const orc = await quotes.resumo({ de: `${r.mes}-01`, ate: data }).catch(() => null);
@@ -67,6 +69,14 @@ export async function telaDiario({ query }) {
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
     seletorDia(data),
+
+    /**
+     * Faturamento é faturamento nos dois CNPJs, e a meta do mês é da casa
+     * inteira — então somar é o certo aqui. O que não é certo é ela ter que
+     * adivinhar se somou.
+     */
+    empresas.length > 1 && aviso(`Este relatório e a meta somam as ${empresas.length} empresas: `
+      + `${empresas.map((e) => e.nome).join(' e ')}.`, 'info'),
 
     h('div.grade.grade--2',
       kpi({

@@ -16,6 +16,13 @@
  * devoluções. Comprar 60% de uma receita que ainda vai pagar imposto não é a
  * mesma conta que comprar 60% do que sobrou.
  *
+ * E "a mesma do DRE" tem que ser verdade: só o CNPJ PRINCIPAL. As contas a
+ * pagar e os impostos chegam por arquivo e são só dele, então somar no
+ * denominador a venda lançada à mão no outro CNPJ afundaria o percentual sem
+ * que uma compra a mais tivesse sido feita — a meta ficaria mais fácil de
+ * cumprir por um motivo que não é compra. A tela já dizia isso em letra miúda;
+ * a conta não dizia.
+ *
  * O que conta como compra são os lançamentos do contas a pagar cujo plano de
  * contas ela marcou como COMPRA DE MERCADORIA, no DRE. Enquanto não marcar
  * nenhum, a tela diz que não sabe — e não mostra "zero comprado", que pareceria
@@ -25,7 +32,7 @@
 import * as store from '../core/store.js';
 import { cents, sum } from '../core/util.js';
 import { monthKey, monthStart, monthEnd, addMonths, weekStart, addDays, formatDate, today } from '../core/format.js';
-import { valeParaFaturamento, valorFaturado } from './revenue.js';
+import { valeParaFaturamento, valorFaturado, daEmpresa, EMPRESA_PRINCIPAL } from './revenue.js';
 import { lerClassificacao } from './dre.js';
 import { classe } from './abc.js';
 
@@ -82,7 +89,7 @@ export async function compras({ mes = monthKey(today()), meses = 6 } = {}) {
 
 function linhaDoMes(m, nfs, deDeducao, deMercadoria) {
   const doMes = nfs.filter((nf) => nf.dataEmissao && monthKey(nf.dataEmissao) === m
-    && valeParaFaturamento(nf));
+    && valeParaFaturamento(nf) && daEmpresa(nf, EMPRESA_PRINCIPAL));
   const faturamento = cents(sum(doMes, (nf) => valorFaturado(nf)));
   /* a devolução já saiu do faturamento acima; aqui faltam os impostos */
   const impostos = cents(sum(

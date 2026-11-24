@@ -15,6 +15,7 @@ import { navigate, refresh } from '../../core/router.js';
 import * as store from '../../core/store.js';
 import * as margemLogica from '../../logic/margem.js';
 import { lerFiltro, descrever } from '../../logic/filtro.js';
+import { todasAsEmpresas } from '../../logic/vendas.js';
 import { filtroAvancado, nadaNoRecorte } from '../components/filtro.js';
 import { abrirNota } from '../components/nota.js';
 import { definirTitulo } from '../shell.js';
@@ -391,9 +392,10 @@ function vezes(razao) {
 
 export async function telaMargem({ query }) {
   const filtro = lerFiltro(query);
-  const [r, vendedores] = await Promise.all([
+  const [r, vendedores, empresas] = await Promise.all([
     margemLogica.margem({ de: filtro.de, ate: filtro.ate }),
     store.vendedores.listar(),
+    todasAsEmpresas(),
   ]);
   definirTitulo('Margem e frete', descrever(filtro, { vendedores }));
 
@@ -438,6 +440,26 @@ export async function telaMargem({ query }) {
 
   return h('div.empilha', { style: { gap: '14px' } },
     painel,
+
+    /**
+     * DE QUAIS CNPJs É ESTA TELA — dito, não deixado para ela descobrir.
+     *
+     * "Esse faturamento que tem aqui, a margem, o custo, o frete: ele tem os
+     *  dois CNPJs?"
+     *
+     * Aqui tem os dois, porque a venda é venda nos dois. Mas custo e frete da
+     * venda lançada à mão só existem se ela tiver digitado, e a venda sem custo
+     * NÃO sai da base: ela entra na venda e não entra no custo. Isso derruba a
+     * margem, não a infla — o erro é para o lado seguro, e a cobertura de custo
+     * logo abaixo diz de quanto da venda o app conhece o custo.
+     *
+     * Dizer "fica fora da margem" seria mais bonito e seria mentira.
+     */
+    empresas.length > 1 && aviso(`A margem e o frete somam as ${empresas.length} empresas: `
+      + `${empresas.map((e) => e.nome).join(' e ')}. Atenção: venda lançada à mão sem custo `
+      + 'digitado entra na venda e não entra no custo, então a margem sai MENOR que a real — '
+      + 'veja a cobertura de custo abaixo. O DRE gerencial, o caixa e as compras continuam só do '
+      + 'CNPJ principal.', 'atencao'),
 
     /**
      * A BASE DO FATURAMENTO É A NOTA FISCAL. Isso vem dito antes de qualquer

@@ -3346,6 +3346,23 @@ console.log('\n▶ O outro CNPJ: entra no comercial e na comissão, fica fora do
   igual('o DRE é só do CNPJ principal', d.receita.bruta, 10000);
   igual('e o CMV também', d.cmv.valor, 6000);
 
+  /**
+   * E A META DE COMPRAS TAMBÉM NÃO, porque a tela já dizia que não.
+   *
+   * "Esse faturamento que tem aqui, a margem, o custo, o frete: ele tem os dois
+   *  CNPJs?"
+   *
+   * O aviso na tela de compras sempre disse "esta meta é sobre a receita de
+   * <principal>" — mas a conta somava as duas. Resultado: a venda lançada à mão
+   * inflava o denominador e o percentual de compra caía sem ninguém ter
+   * comprado menos. A meta ficava mais fácil por um motivo que não é compra.
+   */
+  const cp = await comprasLog.compras({ mes: '2027-03', meses: 1 });
+  igual('a base da meta de compras é só o CNPJ principal', cp.atual.faturamento, 10000);
+  igual('sem imposto lançado, a receita líquida é a mesma', cp.atual.receitaLiquida, 10000);
+  igual('e o outro CNPJ não entrou no denominador',
+    cp.atual.faturamento < (await revenue.resumo(faixa)).total, true);
+
   /* corrigir a venda não duplica nada */
   const sete = lista.find((x) => x.numero === '7');
   await vendasMan.salvarVenda({
